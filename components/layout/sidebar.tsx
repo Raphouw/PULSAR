@@ -69,7 +69,7 @@ const groups = [
       { href: '/dashboard', label: 'Dashboard', icon: Icons.Dashboard },
       { href: '/activities', label: 'Activités', icon: Icons.Activity },
       { href: '/calendar', label: 'Calendrier', icon: Icons.Calendar },
-      { href: '/entrainements', label: 'Entrainements ', icon: Icons.Training },
+      { href: '/trainings', label: 'Entrainements ', icon: Icons.Training },
     ]
   },
   {
@@ -77,10 +77,10 @@ const groups = [
     links: [
       { href: '/training-plan', label: "Plan d'entraînement", icon: Icons.TrainingPlan },
       { href: '/simulations', label: 'Simulations', icon: Icons.Simulation },
-      { href: '/comparaisons', label: 'Comparaisons', icon: Icons.Compare },
+      { href: '/comparisons', label: 'Comparaisons', icon: Icons.Compare },
       { href: '/routes', label: 'Itinéraires', icon: Icons.Route },
       { href: '/segments', label: 'Montées & Cols', icon: Icons.Segment },
-      { href: '/carte', label: 'Carte Globale', icon: Icons.Map },
+      { href: '/map', label: 'Carte Globale', icon: Icons.Map },
     ]
   },
   {

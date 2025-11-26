@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth";
-import { supabaseAdmin } from "../../../../lib/supabaseAdminClient.js";
+import { supabaseAdmin } from "../../../../lib/supabaseAdminClient"; // Removed .js
 import { calculateMaxAveragePower } from "../../../../lib/physics";
 import { ActivityStreams } from "../../../../types/next-auth";
 
@@ -70,12 +70,9 @@ const calculateActivityRecords = (
   activityId: number,
   activityDate: string
 ) => {
-  // 🔥 CORRECTION TYPE : On s'assure que c'est bien number[] et pas (number|null)[]
-  // On remplace les nulls par 0 pour ne pas casser les calculs
   const watts = (streams.watts || []).map(w => w ?? 0);
   const time = (streams.time || []).map(t => t ?? 0);
 
-  // Si pas de watts, inutile de calculer
   if (watts.length === 0 || time.length === 0) return [];
 
   const durations = [
@@ -97,7 +94,6 @@ const calculateActivityRecords = (
   const recordsToInsert: any[] = [];
 
   for (const dur of durations) {
-    // calculateMaxAveragePower accepte maintenant number[] propre
     const maxValue = calculateMaxAveragePower(watts, time, dur.s);
     
     if (maxValue !== null && maxValue > 0) {
@@ -132,10 +128,8 @@ export async function POST(req: Request) {
 
     const accessToken = await getValidStravaToken(userId);
 
-    // 4. APPEL À L'API STRAVA
     console.log(`[Strava Streams] Récupération des streams pour l'activité ${strava_id}...`);
     
-    // 🔥 AJOUT DE 'temp' DANS LA REQUÊTE
     const keys = "watts,heartrate,cadence,altitude,latlng,distance,time,temp";
     
     const stravaRes = await fetch(
@@ -151,17 +145,32 @@ export async function POST(req: Request) {
 
     const stravaStreams = await stravaRes.json();
 
-    // 5. FORMATAGE DES STREAMS
+    // 🔥 CORRECTION CRITIQUE : Parsing correct de la réponse Strava
+    // Strava peut renvoyer soit un objet { distance: { data: ... } } SI key_by_type=true
+    // SOIT un tableau [{ type: 'distance', data: ... }] selon les versions/paramètres.
+    // On blinde la récupération.
+
+    const getStreamData = (type: string) => {
+        // Cas 1: Objet direct (key_by_type=true)
+        if (stravaStreams[type]?.data) return stravaStreams[type].data;
+        
+        // Cas 2: Tableau d'objets (Fallback)
+        if (Array.isArray(stravaStreams)) {
+            const found = stravaStreams.find((s: any) => s.type === type);
+            return found?.data || [];
+        }
+        return [];
+    };
+
     const formattedStreams: ActivityStreams = {
-      time: stravaStreams.time?.data || [],
-      watts: stravaStreams.watts?.data || [],
-      heartrate: stravaStreams.heartrate?.data || [],
-      cadence: stravaStreams.cadence?.data || [],
-      altitude: stravaStreams.altitude?.data || [],
-      latlng: stravaStreams.latlng?.data || [],
-      distance: stravaStreams.distance?.data || [],
-      // 🔥 AJOUT DE LA TEMPÉRATURE
-      temp: stravaStreams.temp?.data || [], 
+      time: getStreamData('time'),
+      watts: getStreamData('watts'),
+      heartrate: getStreamData('heartrate'),
+      cadence: getStreamData('cadence'),
+      altitude: getStreamData('altitude'),
+      latlng: getStreamData('latlng'),
+      distance: getStreamData('distance'),
+      temp: getStreamData('temp'), 
     };
 
     // 6. SAUVEGARDE DES STREAMS DANS NOTRE BDD
@@ -188,7 +197,6 @@ export async function POST(req: Request) {
     );
 
     if (records.length > 0) {
-      // Nettoyage des anciens records pour cette activité
       await supabaseAdmin.from("records").delete().eq("activity_id", internalActivityId);
       
       const { error: recordsError } = await supabaseAdmin
@@ -202,7 +210,6 @@ export async function POST(req: Request) {
     
     console.log(`[Strava Streams] Analyse et sauvegarde terminées pour ${strava_id}.`);
     
-    // 8. RENVOYER LES STREAMS AU CLIENT
     return NextResponse.json({ success: true, streams: formattedStreams });
 
   } catch (err: any) {
