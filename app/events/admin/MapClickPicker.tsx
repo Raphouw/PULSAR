@@ -44,7 +44,7 @@ export default function MapClickPicker({ lat, lon, onMapClick }: MapClickPickerP
 
       // 1.2 Ajout de la couche de tuiles (Dark Matter - Thème Pulsar)
       L.tileLayer(
-        'https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png',
+        'https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png',
         { maxZoom: 19, subdomains: 'abcd' }
       ).addTo(mapRef.current);
 
