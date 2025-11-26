@@ -1,16 +1,23 @@
 // Fichier : lib/physics.ts
 import { ActivityStreams } from '../types/next-auth.d';
 
+// --- UTILITAIRE DE SÉCURITÉ (CRITIQUE) ---
+// Cela garantit qu'on manipule TOUJOURS un tableau
+const safeArray = <T,>(input: any): T[] => {
+  if (Array.isArray(input)) return input;
+  if (!input) return [];
+  if (typeof input === 'object') return Object.values(input);
+  return [];
+};
+
 // --- TYPES ---
 export type PowerRecordDetail = {
   seconds: number;
   label: string;
   watts: number;
   wkg: number;
-  powerKm: number; // Renommé pour être clair
+  powerKm: number;
   npVal?: number;
-  
-  // Données indépendantes FC
   hrAvgRecord: number;
   hrKm: number;
 };
@@ -35,15 +42,19 @@ export type DetectedClimb = {
 
 // --- FONCTIONS DE BASE ---
 export const findMaxValue = (data: (number | null)[] | undefined): number | null => {
-  if (!data) return null;
-  const valid = data.filter((n) => typeof n === 'number') as number[];
+  const safeData = safeArray<number | null>(data);
+  if (safeData.length === 0) return null;
+  
+  const valid = safeData.filter((n): n is number => typeof n === 'number' && !isNaN(n));
   if (valid.length === 0) return null;
   return Math.max(...valid);
 };
 
 export const calculateMedian = (values: number[]): number => {
-  if (values.length === 0) return 0;
-  const sorted = [...values].sort((a, b) => a - b);
+  const safeValues = safeArray<number>(values).filter(v => typeof v === 'number' && !isNaN(v));
+  if (safeValues.length === 0) return 0;
+  
+  const sorted = [...safeValues].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 };
@@ -59,11 +70,14 @@ export const calculateWork = (
 export const calculateElevationGainLoss = (
   altitudeStream: (number | null)[] | undefined
 ): { gain: number, loss: number } => {
-  if (!altitudeStream) return { gain: 0, loss: 0 };
+  const safeAlt = safeArray<number | null>(altitudeStream);
+  if (safeAlt.length === 0) return { gain: 0, loss: 0 };
+  
   let gain = 0;
   let loss = 0;
-  const altitude = altitudeStream.map(a => a ?? 0);
+  const altitude = safeAlt.map(a => Number(a ?? 0));
   const THRESHOLD = 0.1; 
+  
   for (let i = 1; i < altitude.length; i++) {
     const diff = altitude[i] - altitude[i-1];
     if (diff > THRESHOLD) gain += diff;
@@ -85,21 +99,24 @@ export const calculateCP_WPrime = (p3m: number, p12m: number) => {
   return { CP: Math.round(CP), WPrime: Math.round(WPrime) };
 };
 
-
-
 export function calculateStreamAverages(streams: any) {
   if (!streams) return { avgPowerNonZero: 0, avgCadenceNonZero: 0, percentMoving: 0 };
-  const watts = streams.watts || [];
-  const cadence = streams.cadence || [];
+  
+  // 🔥 CORRECTION ICI : On type explicitement <number>
+  const watts = safeArray<number>(streams.watts);
+  const cadence = safeArray<number>(streams.cadence);
 
-  const nonZeroWatts = watts.filter((w: any) => typeof w === 'number' && w > 0);
+  // 🔥 ET ICI : On force le cast "as number[]" pour rassurer le reduce
+  const nonZeroWatts = watts.filter(w => typeof w === 'number' && w > 0) as number[];
+  
   const avgPowerNonZero = nonZeroWatts.length > 0
-    ? Math.round(nonZeroWatts.reduce((a: number, b: number) => a + b, 0) / nonZeroWatts.length)
+    ? Math.round(nonZeroWatts.reduce((a, b) => a + b, 0) / nonZeroWatts.length)
     : 0;
 
-  const nonZeroCadence = cadence.filter((c: any) => typeof c === 'number' && c > 0);
+  const nonZeroCadence = cadence.filter(c => typeof c === 'number' && c > 0) as number[];
+  
   const avgCadenceNonZero = nonZeroCadence.length > 0
-    ? Math.round(nonZeroCadence.reduce((a: number, b: number) => a + b, 0) / nonZeroCadence.length)
+    ? Math.round(nonZeroCadence.reduce((a, b) => a + b, 0) / nonZeroCadence.length)
     : 0;
 
   const totalSamples = cadence.length;
@@ -108,23 +125,36 @@ export function calculateStreamAverages(streams: any) {
   return { avgPowerNonZero, avgCadenceNonZero, percentMoving };
 }
 
-export const calculateCardiacDrift = (watts: number[], hr: number[]) => {
-  if (!watts || !hr || watts.length !== hr.length || watts.length < 600) return null;
+export const calculateCardiacDrift = (wattsIn: number[], hrIn: number[]) => {
+  const watts = safeArray<number>(wattsIn);
+  const hr = safeArray<number>(hrIn);
+
+  if (watts.length !== hr.length || watts.length < 600) return null;
+  
   const half = Math.floor(watts.length / 2);
   const startOffset = Math.min(600, Math.floor(half/2)); 
-  const avgP1 = watts.slice(startOffset, half).reduce((a,b)=>a+b,0) / (half - startOffset);
-  const avgHR1 = hr.slice(startOffset, half).reduce((a,b)=>a+b,0) / (half - startOffset);
-  const avgP2 = watts.slice(half).reduce((a,b)=>a+b,0) / (watts.length - half);
-  const avgHR2 = hr.slice(half).reduce((a,b)=>a+b,0) / (hr.length - half);
+  
+  const avgP1 = watts.slice(startOffset, half).reduce((a,b)=>a+Number(b||0),0) / (half - startOffset);
+  const avgHR1 = hr.slice(startOffset, half).reduce((a,b)=>a+Number(b||0),0) / (half - startOffset);
+  
+  const avgP2 = watts.slice(half).reduce((a,b)=>a+Number(b||0),0) / (watts.length - half);
+  const avgHR2 = hr.slice(half).reduce((a,b)=>a+Number(b||0),0) / (hr.length - half);
+  
   const ef1 = avgP1 / avgHR1;
   const ef2 = avgP2 / avgHR2;
+  
   if (ef1 === 0) return 0;
   return ((ef1 - ef2) / ef1) * 100;
 };
 
 export const calculateTerrainStats = (streams: any): TerrainStats => {
   const empty = { dist:0, speed:0, time: 0 };
-  if (!streams?.distance || !streams?.altitude || !streams?.time) {
+  
+  const distArr = safeArray<number>(streams?.distance);
+  const altArr = safeArray<number>(streams?.altitude);
+  const timeArr = safeArray<number>(streams?.time);
+
+  if (distArr.length === 0 || altArr.length === 0 || timeArr.length === 0) {
     return { climb: empty, flat: empty, descent: empty };
   }
 
@@ -134,15 +164,15 @@ export const calculateTerrainStats = (streams: any): TerrainStats => {
     descent: { dist: 0, time: 0 }
   };
 
-  for (let i = 5; i < streams.distance.length; i++) {
-    const distSegment = (streams.distance[i] || 0) - (streams.distance[i-1] || 0);
-    const timeSegment = (streams.time[i] || 0) - (streams.time[i-1] || 0);
+  for (let i = 5; i < distArr.length; i++) {
+    const distSegment = Number(distArr[i] ?? 0) - Number(distArr[i-1] ?? 0);
+    const timeSegment = Number(timeArr[i] ?? 0) - Number(timeArr[i-1] ?? 0);
     
     const speedInst = timeSegment > 0 ? (distSegment / timeSegment) * 3.6 : 0;
     const isMoving = speedInst > 3.8;
 
-    const distSmooth = (streams.distance[i] || 0) - (streams.distance[i-5] || 0);
-    const eleSmooth = (streams.altitude[i] || 0) - (streams.altitude[i-5] || 0);
+    const distSmooth = Number(distArr[i] ?? 0) - Number(distArr[i-5] ?? 0);
+    const eleSmooth = Number(altArr[i] ?? 0) - Number(altArr[i-5] ?? 0);
     
     if (distSmooth > 0) {
       const grade = (eleSmooth / distSmooth) * 100;
@@ -169,18 +199,17 @@ export const calculateTerrainStats = (streams: any): TerrainStats => {
   };
 };
 
-export const NPformulaCoggan = (watts: number[]) => {
-    if(!watts || watts.length < 30) return 0; 
+export const NPformulaCoggan = (wattsIn: number[]) => {
+    const watts = safeArray<number>(wattsIn);
+    if(watts.length < 30) return 0; 
     const rolling30: number[] = [];
     
     let sum = 0;
-    // Init
-    for(let j=0; j<30; j++) sum += (watts[j] || 0);
+    for(let j=0; j<30; j++) sum += Number(watts[j] || 0);
     rolling30.push(Math.pow(sum/30, 4));
 
-    // Rolling
     for(let i=30; i<watts.length; i++) {
-        sum = sum - (watts[i-30]||0) + (watts[i]||0);
+        sum = sum - Number(watts[i-30]||0) + Number(watts[i]||0);
         rolling30.push(Math.pow(sum/30, 4));
     }
     
@@ -189,26 +218,26 @@ export const NPformulaCoggan = (watts: number[]) => {
     return Math.round(Math.pow(avgPow4, 0.25));
 };
 
-// --- RECHERCHE INDÉPENDANTE DU RECORD CARDIAQUE ---
 export const findBestHeartRateInterval = (
-    hr: number[], time: number[], distance: number[], durationSec: number
+    hrIn: number[], timeIn: number[], distanceIn: number[], durationSec: number
   ): { hrAvg: number, startKm: number } | null => {
     
-    if (!hr || hr.length < durationSec) return null;
+    const hr = safeArray<number>(hrIn);
+    const distance = safeArray<number>(distanceIn);
+
+    if (hr.length < durationSec) return null;
   
     let maxAvgHr = 0;
     let bestStartIndex = -1;
     const windowSize = durationSec; 
   
     let currentSum = 0;
-    // Initial window
-    for (let i = 0; i < windowSize; i++) currentSum += (hr[i] || 0);
+    for (let i = 0; i < windowSize; i++) currentSum += Number(hr[i] || 0);
     maxAvgHr = currentSum / windowSize;
     bestStartIndex = 0;
   
-    // Sliding window
     for (let i = windowSize; i < hr.length; i++) {
-      currentSum += (hr[i] || 0) - (hr[i - windowSize] || 0);
+      currentSum += Number(hr[i] || 0) - Number(hr[i - windowSize] || 0);
       const avg = currentSum / windowSize;
       if (avg > maxAvgHr) {
         maxAvgHr = avg;
@@ -218,7 +247,7 @@ export const findBestHeartRateInterval = (
   
     if (bestStartIndex === -1) return null;
   
-    const kmAtStart = distance.length > bestStartIndex ? distance[bestStartIndex] / 1000 : 0;
+    const kmAtStart = distance.length > bestStartIndex ? Number(distance[bestStartIndex]) / 1000 : 0;
     
     return {
         hrAvg: Math.round(maxAvgHr),
@@ -226,24 +255,27 @@ export const findBestHeartRateInterval = (
     };
 };
 
-// --- RECHERCHE RECORD PUISSANCE (MODIFIÉE POUR ÊTRE INDÉPENDANTE) ---
 export const findBestInterval = (
-  watts: number[], time: number[], distance: number[], hr: number[] | null, durationSec: number, userWeight: number
+  wattsIn: number[], timeIn: number[], distanceIn: number[], hrIn: number[] | null, durationSec: number, userWeight: number
 ): PowerRecordDetail | null => {
-  if (!watts || watts.length < durationSec) return null;
+  
+  const watts = safeArray<number>(wattsIn);
+  const distance = safeArray<number>(distanceIn);
+  const hr = hrIn ? safeArray<number>(hrIn) : [];
 
-  // 1. Calcul du Record de Puissance (Front Card)
+  if (watts.length < durationSec) return null;
+
   let maxAvgPower = 0;
   let bestStartIndex = -1;
   const windowSize = durationSec; 
 
   let currentSum = 0;
-  for (let i = 0; i < windowSize; i++) currentSum += (watts[i] || 0);
+  for (let i = 0; i < windowSize; i++) currentSum += Number(watts[i] || 0);
   maxAvgPower = currentSum / windowSize;
   bestStartIndex = 0;
 
   for (let i = windowSize; i < watts.length; i++) {
-    currentSum += (watts[i] || 0) - (watts[i - windowSize] || 0);
+    currentSum += Number(watts[i] || 0) - Number(watts[i - windowSize] || 0);
     const avg = currentSum / windowSize;
     if (avg > maxAvgPower) {
       maxAvgPower = avg;
@@ -253,19 +285,17 @@ export const findBestInterval = (
 
   if (bestStartIndex === -1) return null;
 
-  const powerKmAtStart = distance.length > bestStartIndex ? distance[bestStartIndex] / 1000 : 0;
+  const powerKmAtStart = distance.length > bestStartIndex ? Number(distance[bestStartIndex]) / 1000 : 0;
   
-  // Calcul NP sur le segment de puissance (Uniquement pertinent si > 30s)
   let segmentNP = 0;
   if (durationSec >= 30) {
       const wattSlice = watts.slice(bestStartIndex, bestStartIndex + windowSize);
       segmentNP = NPformulaCoggan(wattSlice);
   }
 
-  // 2. Calcul du Record Cardiaque INDÉPENDANT (Back Card)
   let hrRecordData = { hrAvg: 0, startKm: 0 };
-  if (hr && hr.length > 0) {
-      const bestHr = findBestHeartRateInterval(hr, time, distance, durationSec);
+  if (hr.length > 0) {
+      const bestHr = findBestHeartRateInterval(hr, safeArray(timeIn), distance, durationSec);
       if (bestHr) {
           hrRecordData = bestHr;
       }
@@ -280,24 +310,24 @@ export const findBestInterval = (
     label: label,
     watts: Math.round(maxAvgPower),
     wkg: parseFloat((maxAvgPower / (userWeight || 75)).toFixed(2)),
-    powerKm: parseFloat(powerKmAtStart.toFixed(1)), // KM du record Watt
+    powerKm: parseFloat(powerKmAtStart.toFixed(1)),
     npVal: segmentNP > 0 ? segmentNP : undefined,
-    
-    // Données indépendantes pour le verso
     hrAvgRecord: hrRecordData.hrAvg,
     hrKm: hrRecordData.startKm
   };
 };
 
 export const calculateStressBalance = (dailyTSS: { date: string; tss: number }[]) => {
-  if (!dailyTSS.length) return [];
+  const safeDaily = safeArray(dailyTSS);
+  if (!safeDaily.length) return [];
 
   let ctl = 0; 
   let atl = 0; 
   
-  const result = dailyTSS.map(day => {
-    ctl = ctl + (day.tss - ctl) / 42;
-    atl = atl + (day.tss - atl) / 7;
+  const result = safeDaily.map((day: any) => {
+    const val = Number(day.tss || 0);
+    ctl = ctl + (val - ctl) / 42;
+    atl = atl + (val - atl) / 7;
     const tsb = ctl - atl; 
 
     return {
@@ -317,11 +347,11 @@ export const calculateMaxAveragePower = (watts: number[], time: number[], durati
 };
 
 export const detectClimbs = (streams: ActivityStreams, minDistanceMetres = 500, minGradientPercent = 2.5): DetectedClimb[] => {
-  if (!streams?.distance || !streams?.altitude) return [];
-  const distance = streams.distance.map((d) => (d ?? 0));
-  const altitude = streams.altitude.map((a) => (a ?? 0));
-  const watts = (streams.watts ?? []).map((w) => (w ?? 0));
-  const time = streams.time.map((t) => (t ?? 0));
+  const distance = safeArray<number>(streams?.distance).map(d => Number(d ?? 0));
+  const altitude = safeArray<number>(streams?.altitude).map(a => Number(a ?? 0));
+  const watts = safeArray<number>(streams?.watts).map(w => Number(w ?? 0));
+  const time = safeArray<number>(streams?.time).map(t => Number(t ?? 0));
+  
   const n = distance.length;
   if (n < 100) return [];
 

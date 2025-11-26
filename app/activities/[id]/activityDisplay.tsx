@@ -625,8 +625,11 @@ function useAdvancedStats(activity: Activity, streams: ActivityStreams | null) {
     // --- 3. PRÉPARATION ET NETTOYAGE DES STREAMS (BLINDAGE) ---
 
     // Utilitaire local pour filtrer uniquement les nombres
-    const filterNonNulls = (arr: any) => safeArray<number>(arr).filter((n): n is number => typeof n === 'number' && !isNaN(n));
-    
+const filterNonNulls = (arr: any) => {
+        const safe = safeArray(arr);
+        if (!Array.isArray(safe)) return []; // Double check
+        return safe.filter((n): n is number => typeof n === 'number' && !isNaN(n));
+    };    
     // Nettoyage des streams critiques (suppression des nulls)
     const cleanWatts = filterNonNulls(streams.watts);
     const cleanAlt = filterNonNulls(streams.altitude);
@@ -692,7 +695,8 @@ function useAdvancedStats(activity: Activity, streams: ActivityStreams | null) {
     const percentPedaling = cleanCad.length > 0 ? (pedalingSamples / cleanCad.length) * 100 : 0;
     const cadAvg = cleanCad.length > 0 ? cleanCad.reduce((a,b)=>a+b,0)/cleanCad.length : 0;
     const cadMax = rpmMax || 0;
-    const cadMedian = calculateMedian(cleanCad.filter(c=>c>0));
+    const safeCad = Array.isArray(cleanCad) ? cleanCad : [];
+const cadMedian = calculateMedian(safeCad.filter(c => c > 0));
 
     // --- 5. COURBE DE PUISSANCE ET RECORDS ---
     const intervals = generatePowerIntervals(activity.duration_s);
