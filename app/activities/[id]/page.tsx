@@ -6,7 +6,8 @@ import { authOptions } from "../../../lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import ActivityDisplay from "./activityDisplay";
-import { ActivityStreams } from "../../../types/next-auth.d";
+// ✅ CORRECTION IMPORT : On retire le ".d" et on utilise "import type"
+import type { ActivityStreams } from "../../../types/next-auth"; 
 import { AlertTriangle, ArrowLeft, Lock } from 'lucide-react';
 
 export type Activity = {
@@ -28,12 +29,17 @@ export type Activity = {
   streams_data: ActivityStreams | null;
   user_weight: number | null;
   user_ftp: number | null;
-  user_id: string | number; // Ajouté pour la vérification
+  user_id: string | number;
 };
 
-export default async function ActivityPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = await params;
-  const activityId = resolvedParams.id;
+// ✅ CORRECTION NEXT.JS 15 : Params est une Promise
+export default async function ActivityPage({ 
+  params 
+}: { 
+  params: Promise<{ id: string }> 
+}) {
+  const { id } = await params; // ✅ On await proprement
+  const activityId = id;
 
   // 1. AUTHENTIFICATION
   const session = await getServerSession(authOptions);
@@ -42,14 +48,14 @@ export default async function ActivityPage({ params }: { params: Promise<{ id: s
   }
   const viewerId = session.user.id;
 
-  // 2. RÉCUPÉRATION DE L'ACTIVITÉ (+ infos user pour le calcul physique)
+  // 2. RÉCUPÉRATION DE L'ACTIVITÉ
   const { data: activity, error } = await supabaseAdmin
     .from("activities")
     .select(`*, users ( weight, ftp )`)
     .eq("id", activityId)
     .maybeSingle();
 
-  // 3. GESTION ERREUR / 404 (Ton design original)
+  // 3. GESTION ERREUR / 404
   if (error || !activity) {
     return (
         <div style={{ minHeight: '100vh', background: '#050505', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
@@ -63,18 +69,17 @@ export default async function ActivityPage({ params }: { params: Promise<{ id: s
     );
   }
 
-  // 4. 🛡️ SÉCURITÉ (LE GARDEN)
+  // 4. 🛡️ SÉCURITÉ
   const isOwner = String(activity.user_id) === String(viewerId);
   let hasAccess = isOwner;
 
-  // Si pas propriétaire, on vérifie l'amitié
   if (!isOwner) {
     const { data: relation } = await supabaseAdmin
         .from('friends')
         .select('status')
-        .eq('user_id', viewerId) // C'est MOI qui regarde
-        .eq('friend_id', activity.user_id) // C'est LUI l'auteur
-        .eq('status', 'following') // Je dois le suivre
+        .eq('user_id', viewerId)
+        .eq('friend_id', activity.user_id)
+        .eq('status', 'following')
         .maybeSingle();
     
     if (relation) {
@@ -82,7 +87,7 @@ export default async function ActivityPage({ params }: { params: Promise<{ id: s
     }
   }
 
-  // 5. BLOCAGE SI PAS D'ACCÈS
+  // 5. BLOCAGE
   if (!hasAccess) {
     return (
         <div style={{ 
@@ -109,21 +114,20 @@ export default async function ActivityPage({ params }: { params: Promise<{ id: s
     );
   }
 
-  // 6. FORMATAGE DES DONNÉES (Ton code original préservé)
-  // @ts-ignore
-  const userData: any = activity.users;
-  // @ts-ignore
-  const user_weight = userData?.weight ?? 75; 
-  // @ts-ignore
-  const user_ftp = userData?.ftp ?? 200; 
-  // @ts-ignore
-  delete activity.users; 
+  // 6. FORMATAGE DES DONNÉES (Nettoyage des ts-ignore)
+  // On type le retour de la jointure users proprement
+  const userRelation = activity.users as unknown as { weight: number | null, ftp: number | null } | null;
+  const user_weight = userRelation?.weight ?? 75; 
+  const user_ftp = userRelation?.ftp ?? 200; 
+
+  // On crée une copie propre sans la propriété 'users'
+  const { users, ...activityWithoutUsers } = activity;
 
   const formattedActivity: Activity = {
-    ...activity,
+    ...activityWithoutUsers,
     user_weight,
     user_ftp
-  };
+  } as Activity;
 
   return <ActivityDisplay activity={formattedActivity} />;
 }
