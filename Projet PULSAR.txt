@@ -1,0 +1,355 @@
+Projet PULSAR :
+
+Utilisation de React & Next.js mais pas de HTML & JS classique
+Virtual DOM | Rendu sélectif
+Données dynamiques via hooks/fetch
+Sécurité/Login : JWT & OAuth
+Desing réactif : Intégré (Tailwind)
+Maintenable
+
+Leaflet : React-leaflet
+Recharts ET/OU Plotly.js
+Back end & API : Node.js & Express
+BDD : PostreSQL (Supabase ou Render)
+Supabase Auth ou Auth.js (NextAuth)
+Stockage : Supabase storage
+Déploiment : Vercel + Render + Supabase
+
+
+
+Ideés : 
+
+Application web qui a comme Fonctionnalités : 
+
+* On arrive sur l'application et on a un dashboard 
+   Ce dashboard à comme bouton/Interface : 
+
+	- Bandeau au dessus "Bienvenue {user} sur {nom de l'appli} | {X} activités chargées : {Y} k, {Y1} m d+, {Y2}h etc" 
+	- Profil
+	- Bouton Connexion/Déconnexion
+	- Menu déroulant ou non sur le haut ou sur la gauche : 
+
+		* Activités
+		* Simulations
+		* Entrainements
+		* Calendrier d'entrainements
+		* Comparaisons
+		* Données de profil
+		* Amis
+		* Segment
+		* Itinéraires
+		* Carte
+		* (Algo / Vulgarisation) avec data cachées relatives à chaque profil
+			* FTP | W' | Temps avant dérive cardiaque | VO2max | Cda | poids : vélo - humain) | Rendement méca | Seuil Lactate | CP60-20-5 avec historique
+			* Pmax 5s/10s/1min avec historique + power curve | FC max | FC repos | TTE (temps sans se fatiguer à @FTP) | Temps de récup | TSS/IF/NP 
+			* Fatigue estimée (a faire un algo pour cela)
+			
+
+
+	- Des cards avec le training load des 7 derniers jours, le nombre d'activités, la distance, le d+ et le temps total avec entre parenthèse un +x% par rapport a la 	  semaine précédente
+	- Un graphique de training load sur 7 jours
+	- CP curve
+	- Les activités récentes
+	- Petit rapport du mois (depuis le début du mois)
+	- Rapport 90 jours
+	
+
+
+Détails de chaque onglet :
+
+* Activités :
+	- Flux de nos activités
+	- Searchbar tout en haut pour filtrer PLUS menu de filtrage a coté de la searchbar (a droite) 
+	- Affichage de la carte, statistiques de bases si on ne clique pas sur la carte : km, d+, vit moy, puis moy, FC moy, cad moy
+   	- Affichage en GRID pour en avoir 3 sur la même ligne
+	- Trier par : Longueur + ou -, d+ + ou -, date récent/Ancien, Pmoy + ou -, NPmoy + ou -
+	- Possibilité de cliquer sur les activité pour avoir son analyse : 
+		
+		* Statistique de base SANS LA CARTE (Card du projet SIMUGP) 
+			* Bandeau : Distance - d+ - temps déplacement sans pause - km/h sans pause
+			* card1 : Chrono & Terrain : Temps total - Temps de pause - Vit moy totale - Vit max - Alt + - alt - - d+ - d-
+			* card2 : Puissance & charge : Pmoy (Pmoy nz) - PN - Pmax - W/kg (humain) - W/kg NP - IF - TSS - Travail - Efficacité - Kcal/h moy		
+			* card3 : Pédalage & Cardio : RPM moy (RPM nz) - RPM max - barre de comparaison roue libre/pédalage (%) - FC moy - FC max - FC min (post 1 min) - Derive cardiaque si trouvée 
+			* Records de puissance sortie + a quel km il a été fait : Courbe ou card : 1sec - 5sec - 30sec - 1m - 5m - 10m - 20m - 30m - 45m - 1h - 2h - 3h - 5h
+			* Power curve sortie : 
+
+
+		* Onglet carte avec d'un coté les segments auto détectés Et de l'autre le mode segment global AVEC possibilité de mettre la heatmap puissance/FC/vit lissée 5sec
+			* Profil altimétrique en superposition avec vitesse et watt lissés et BPM potentiellement (configurable) + crosshair dessus qui montre les stats (+ pente locale)
+			* Segment : 
+				- Si cela vient d'une simulation avec les mêmes stats de distance/d+ : Prendre les mêmes 
+				- Option de base : Détection automatique des segments (pas en avoir trop) ET des montées
+				- pouvoir basculer sur segments globaux
+				- Quoi qu'il arrive afficher segment découpés sur CARTE + outline orange si segment global parcouru 
+				- Pouvoir cliquer sur les montées pour en avoir le profil
+				- Tableau résumant : ID seg - Dist - pente - d+ - Vitmoy - pmoy - temps - kcal
+		Niveau UI : 
+			* Carte majorité de l'écran
+			* Tableau de la carte
+			* Profil altimétrique clickable (pour les montées + crosshair) au dessu du tablea/au dessous de la carte 
+			* Bandeau a gauche pour certains paramètres (potentiellement changer la détection des segments et des cols = recalcul dynamique a chaque chgmnt)
+			* Bandeau en haut du menu globale du site
+
+
+
+* Simulations :
+
+
+		* Même idée que pour voir les activités niveau IU mais peut être avec une couleur principale différente 
+		* Carte principale en haut a droite sur la majorité de l'écran
+		* Bandeau de paramètres + près config disponible (Intensité = Plusieurs types d'intensité | Gros cols | Petites montées | Plat | Sortie Z2 (filtre cumulable))
+		* Paramètres globales pour la segmentation & détection de col
+		* Paramètre de simulation : Poids humain/vélo | Mode puissance cible (+ puissance moy ciblée) & Mode vitesse cible (+ moyenne ciblée)
+		* Lancer la simulation => changement des valeurs des segments dans le tableau
+		* UTILISATION DE L'ALGORITHME QUI REPARTI BIEN LA PUISSANCE, QUI PREND EN COMPTE TOUT POUR POUVOIR SIMULER COMME DANS LA VRAIE VIE
+		* Sauvegarde de la config (JSON => BDD)
+		* Et impression étiquette gestion de course format ceintre
+		* Option pour faire un profil type TDF aussi	
+		* Possibilité de toucher à chaque segment au niveau pmoy visée => recalcule de la vitesse/temps/kcal segment => recalcul temps/puissance/vit/kcal estimée global
+		
+
+
+* Entrainements :
+
+		* Ici on a un constructeur d'entrainement
+		* On peut donc charger un GPX (uniquement le tracé)
+		* Callé nos blocs d'entrainement avec en collaboration la simulation : On dit je veux 10 min a 300W = > nouveau segment => affichage map sur la longueur estimée => Ajout dans le tableau (qui est vide de base)
+		* Profil altimétrique aussi avec le même design que pour la simu et les activités MAIS avec couleur principales différente et bandeau avec d'autre paramètres (ceux pour construire l'entrainement)
+		* profil altimétrique 
+		
+
+
+* Calendrier d'entrainements :
+
+	* Calendrier simple avec UI en hexagone en fct de la distance d'entrainement etc
+	* Calendrier sur plusieurs années
+	* Option de défilement rapide
+
+
+* Comparaisons : 
+
+		* Ici on arrive sur une map vide
+		* On nous demande de prendre dans notre bibliothèque une simulation et de venir la comparer par rapport à une sortie réelle (La même) => A détecter automatiquement avec certaine tolérance (Comparer dist, d+, start & end points) 
+		* Cela compare segment par segment en prenant les segments simulés et en comparant sur ces segments la Pmoy segment avec la Pmoy réelle et pareil pour la vitesse (Possibilité d'inclure l'écart type ou de prendre la PN)
+		* On fait un rapport avec une certaine tolérance avec décroissance linéaire au dessus d'un seuil (+-10% = 100/100 puis décroissance jusqu'à 50% ou 150%) puis on pondère la puissance et la vitesse => note sur 100 /segment
+		* Cela renvoie donc une note de gestion d'effort par rapport à l'effort prévu (/!\ AVOIR UN SIMULATEUR REALISTIQUE POUR QUE CELA MARCHE BIEN. i.e prendre en compte le type de séance etc pour pouvoir bien simuler)
+		* Pouvoir stocker la comparaison 
+		* Graphique de l'évolution de la note au fur et a mesure de la sortie pour savoir où est ce qu'on a flancher par rapport à ce qui était prévu
+		* Evolution sur un même parcours 		
+
+* Données de profil :
+
+		* Interface assez simple avec les informations principales modulables pour certaines : nom, prénom, connecté a Strava ou non, @mail, mdp, changer de mdp, FTP, poids âge, date d'inscription.
+		* Mettre une photo de profil
+		* customiser son application
+		* Abonnement si il y en a un
+
+* Amis :
+
+		* Une searchbar simple pour trouver les profils des amis
+		* Si on est dans cette section, on voit par défaut les rides de ses amis, ses simulations effectués, ses évolutions etc au fur et a mesure et pour chaque ami
+		* Système de scroll quasi infini ici
+		
+
+
+* Segment/col :
+		
+		* Une map globale où sont répertoriés les segments certifié par les admins (moi) basé sur certains critères pour ne pas en avoir 150.000 créé par n'importe qui
+		* Une map avec tous les cols répertoriés (à implémenter au fur et a mesure)
+		* Possibilité d'avoir un graphique détaillé de la montée a la climbfinder
+		* Possibilité de voir ses efforts sur ces cols/segments en particulier
+
+* Itinéraires :
+
+		* Voir ces itinéraires/parcours enregistrés avec quelques détails clefs 	
+		* Ce sont ces parcours qui vont être utilisés pour la simulation & comparaison
+		* Interface classique comme pour les activités sous forme de grid 3 colonnes
+
+* Carte : 
+
+		* Heatmap globale avec potentiellement des carrés à la statshunter
+		* Visualiser tous les cols qu'on a déjà grimpé etc
+
+
+Idées quelconques :
+
+
+	FRISE CHRONOLOGIQUE AVEC NOS VELOS, QUELQUES STATS SUR LE VELO ET PETU ETRE UNE IMAGE (place holder en fonction du modele (aero, montagne etc)ET de la couleur)
+	
+
+
+	INTEGRER DE LA RANKED (A LA APEXP POUR LES RANGS) XP etc (CLAN/FAMILLE/CLUB)
+	HALL DES LEGENDES (RINA/RECORD)
+	CALENDRIER : 
+
+	"succès" => cosmétique de retournement de cartes (100/200/300 activités etc )
+	Se baser sur le TSS pour faire des animations différentes sur la carte de charge totale
+	Des particules autour de la souris sur les mois où on a bien travaillé 
+	
+
+
+	TTE : Chercher sur toutes les activités le temps le plus élevé à @FTP et faire de même pour les 90 derniers jours
+
+	Sur les itinéraires, mettre un petit graphique interactif du meilleur braquet à avoir 
+
+	Rajouter stats sortie : 
+		* Graphique de cadence, température en superposition avec le profil altimétrique
+		* Evolution de la vit moy/puissance moyenne en fonction du temps/déniv
+		* Une certaine détection automatique des "zones de puissance" comme sur interval ICU 
+			-> si on a fait un sprint de 15sec, celui ci doit ressortir
+			-> 1h en zone 2, celle ci doit ressortir
+			=> Classer chaque seconde dans des zones comme si c'était un "entrainement structuré" MAIS en aval de la sortie 
+		* Conseil automatique sur le dashboard en fonction de la date de la dernière sortie 
+		* OPEN météo pour avoir un apercu de la météo a l'emplacement géolocalisé ET pour les évent 
+
+		* Evenements : - détecter automatiquement SI un utilisateur a fait un évenement (GPX) et rajotuer son score dans une partie "Mon résultat"
+					   - Voir son historique des résultats
+					   - Partie événements futurs (=> GROS BANDEAU EN HAUT Sur les événements a venir dans la semaine)/événements en cours (avec un petit logo "live" etc) /évenement passé
+MODELES PHYSIQUES :
+
+Chose a intégrer dans le calcul : 
+
+	- La fatigue de l'utilisateur (i.e durée depuis la fin de ses dernières sorties etc, attribuer un score de fatigue à chaque sortie qui sera réduit heure par heure linéairement suivant la sortie) si fatigue => Malus sur tous les segments
+	- Le W' de l'utilisateur => Baisser automatiquement sa capacité a fournir des watts au bout de X heure en fonction de son W' estimé et des watts qu'il devrait fournir de base sur la simulation => un premier calcul sans W' pour estimer les kcal consommé puis un deuxieme calcul avec baisse significative des watts une fois que W'>kcal consommé
+	- Cda configurable (slider entre 0.25 & 0.4 par pas de 0.01)
+	- P aéro (1/2*(​ρCd​Av^3)) & Pgrav (mgvsin(θ)) & Proll(mgCrr​v)
+	- Lisser entre chaque segment, il ne faut pas qu'on considère que chaque début de segment soit considéré comme à l'arrêt
+	- prendre en compte le vent ?? Comment sans API ? Fixer une valeur fixe ? une direction fixe ? => compensation des erreurs ?
+	- Densité de l'air avec l'altitude 
+	- Inclure steady/accélération
+	- Drafting/peloton
+
+
+Détails pour chaque catégorie : 
+
+	* Chaque sortie =>  TSS (=(durée de la séance en secondes x NP x IF )/(FTP x 3600) x 100) | Faire un système simple. Si sortie entre 0 et 100 TSS => 10 TS = 2h de récup. Si sortie au dessus => 10 TS = 3h de récup
+			    En fonction de l'état de fatigue, on applique un coefficient qui va se répercuter sur tous les watts de tous les segments. Récup optimale (<20TSS restants) = 1 | Récup partielle (21<TSS restants<50) = 0.9 | Récup minimale = 0.8 (51<TSS restants)
+	
+	* W' de l'utilisateur : => ALLER CHERCHER CP12 ET CP3 sur les 90 derniers jours PUIS calcule directe de W'. Ensuite avoir un graphique lors de la simulation de W' théorique avec les meilleurs moments de récupération si W'<0 (ne pas faire aller W'<-5000. Utiliser la relation lorsque P<CP pour récupération : (CP-P)*tau
+
+
+	* Cda de base a 0.3
+
+	* Modèle de physique basique du vélo : Les Incontournables i.e Ptotal = Paéro + Pgrave + Proul + Paccel + Pdrivetrain = (Faéro + Fgrave + Froul + Faccel) * v/0.97 (pour le rendement méca du vélo)
+
+	* Vitesse de début du nouveau segment = vitesse fin du dernier segment = V0 du nouveau segment OU lisser pour affichage MAIS ne pas prendre la vitesse initial pour les calculs
+
+	* Modèle simple : Densité(h) ≈ 1,225 - (0,00009417 * h) Où h est l'altitude en mètres. (Linéaire = suffisant ici, erreur de 4% max ce qui peut compenser les incertitudes liées à la T°)
+
+	* Modèle Steady suffira largement
+
+	* Plusieurs mode disponible : 
+		
+		* Peloton : facteur de 70/75%
+		* Sortie de groupe : Facteur de réduction globale a 80%
+		* Sortie a deux : 50/50 avec un facteur une fois a 105% une fois a 90%
+		* Solo : 100% | Aucun facteur de réduction
+		* Solo mais susceptible de croiser un peu de monde : 98%
+
+	* Faire en sorte que fatigue et drafting ne s'additionne pas (S'il y a fatigue => pas de drafting car watts déja réduit par le modele, si pas de fatigue => drafting)
+
+
+
+
+| Variable                               | Description                                      | Type                   |
+| -------------------------------------- | ------------------------------------------------ | ---------------------- |
+| (C_{d}A)                               | Coeff. traînée × surface frontale                | Configurable (slider)  |
+| (C_{rr})                               | Coeff. de roulement                              | Fixe par type de route |
+| (ρ)                                    | Densité air (fonction de l’altitude/température) | Dynamique              |
+| (m)                                    | Masse totale (cycliste + vélo)                   | Profil user            |
+| (η)                                    | Rendement transmission                           | Fixe (0.97)            |
+| (v_{vent})                             | Vent relatif                                     | Optionnel              |
+| (θ)                                    | Inclinaison (depuis GPX)                         | Dynamique              |
+| (v(t))                                 | Vitesse instantanée                              | Dynamique              |
+| (W′), **fatigue**, **TTE**, **VO₂max** | Pour moduler la puissance effective              | Physiologique          |
+
+
+
+
+
+
+
+
+
+* Voici les palettes de couleurs pour les différents thèmes : 
+
+Principal : 
+
+| Élément             | Couleur   | Utilisation                                        |
+| ------------------- | --------- | -------------------------------------------------- |
+| **Primary**         | `#E63946` | Accent principal (boutons, sliders, highlights)    |
+| **Secondary**       | `#1D3557` | Couleur structure (barre de menu, titres)          |
+| **Background**      | `#F1FAEE` | Fond clair/gris sportif                            |
+| **Card / Surface**  | `#A8DADC` | Fonds des cartes / panels / zones                  |
+| **Text primaire**   | `#0B090A` | Texte principal, contrasté                         |
+| **Text secondaire** | `#3A3A3A` | Sous-titres, infos                                 |
+| **Accent**          | `#F77F00` | Pour zones critiques (effort max, segments chauds) |
+
+
+
+Clair :
+
+| Élément                  | Couleur                                     | Utilisation                         |
+| ------------------------ | ------------------------------------------- | ----------------------------------- |
+| **Primary**              | `#0077B6`                                   | Boutons / éléments actifs           |
+| **Secondary**            | `#90E0EF`                                   | Surbrillance / hover                |
+| **Background**           | `#FFFFFF`                                   | Fond                                |
+| **Card / Surface**       | `#F8F9FA`                                   | Panneaux / cartes                   |
+| **Text primaire**        | `#1E1E1E`                                   | Texte standard                      |
+| **Accent**               | `#FF6B00`                                   | Détails importants / call-to-action |
+| **Line / Segment color** | `#00B4D8` → `#FF9F1C` (dégradé d’intensité) |                                     |
+
+
+Sombre :
+
+| Élément              | Couleur               | Utilisation                          |
+| -------------------- | --------------------- | ------------------------------------ |
+| **Primary**          | `#FF3C00`             | Accent de puissance (zones d’effort) |
+| **Secondary**        | `#1E1E2E`             | Fond principal                       |
+| **Background**       | `#0E0E14`             | Fond global                          |
+| **Card / Surface**   | `#2B2B3A`             | Panneaux / popups / graphiques       |
+| **Text primaire**    | `#F1F1F1`             | Texte                                |
+| **Text secondaire**  | `#A0A0A0`             | Sous-titres / labels                 |
+| **Accent**           | `#FFD166`             | Détails positifs / zones claires     |
+| **Segment gradient** | `#00FF87` → `#FF0077` | Dégradé intensité puissance          |
+
+
+CSS :
+:root {
+  /* Mode normal */
+  --primary: #E63946;
+  --secondary: #1D3557;
+  --background: #F1FAEE;
+  --surface: #A8DADC;
+  --text: #0B090A;
+  --accent: #F77F00;
+}
+
+[data-theme="light"] {
+  --primary: #0077B6;
+  --secondary: #90E0EF;
+  --background: #FFFFFF;
+  --surface: #F8F9FA;
+  --text: #1E1E1E;
+  --accent: #FF6B00;
+}
+
+[data-theme="dark"] {
+  --primary: #FF3C00;
+  --secondary: #1E1E2E;
+  --background: #0E0E14;
+  --surface: #2B2B3A;
+  --text: #F1F1F1;
+  --accent: #FFD166;
+}
+
+
+
+
+//POUR VIDER TOUTES LES TABLES ET RESTART LES id
+TRUNCATE TABLE public.users, public.activities, public.segments, public.simulations, public.friends, public.training_load, public.routes, public.records, public.activity_segments RESTART IDENTITY;
+
+
+METEO SEGMENTS 
+
+

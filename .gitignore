@@ -1,0 +1,28 @@
+# Le dossier lourd des dépendances (JAMAIS sur git)
+node_modules
+/node_modules
+
+# Les builds de Next.js
+/.next/
+/out/
+/build
+
+# Les secrets (CRITIQUE : C'est ça qui protège tes clés)
+.env
+.env*.local
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Fichiers systèmes inutiles
+.DS_Store
+*.pem
+
+# Logs d'erreurs
+npm-debug.log*
+yarn-debug.log*
+ts-debug.log*
+
+# Vercel
+.vercel

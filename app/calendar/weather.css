@@ -1,0 +1,106 @@
+/* --- MOTEUR MÉTÉO (COUCHES) --- */
+.weather-container {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  z-index: -1; /* Derrière le contenu du site */
+  pointer-events: none;
+  overflow: hidden;
+  transition: all 2s ease;
+}
+
+/* 1. FOND CIEL */
+.layer-sky { position: absolute; inset: 0; transition: opacity 3s ease; z-index: 1; }
+/* ... (Tes dégradés sky-dawn, sky-noon etc. restent identiques, je ne les remets pas pour gagner de la place, garde ceux d'avant) ... */
+/* Rappel des classes ciel pour être sûr : */
+.sky-deep-night { background: linear-gradient(to bottom, #020111 0%, #191621 100%); }
+.sky-dawn { background: linear-gradient(to bottom, #1e3c72 0%, #2a5298 60%, #ff9a9e 100%); }
+.sky-morning { background: linear-gradient(to bottom, #4facfe 0%, #00f2fe 100%); }
+.sky-noon { background: linear-gradient(to bottom, #2980b9 0%, #6dd5fa 100%); }
+.sky-golden { background: linear-gradient(to bottom, #f12711 0%, #f5af19 100%); }
+.sky-dusk { background: linear-gradient(to bottom, #2c3e50 0%, #fd746c 100%); }
+.sky-storm { background: linear-gradient(to bottom, #232526 0%, #414345 100%); }
+.sky-gray { background: linear-gradient(to bottom, #3e5151 0%, #decba4 100%); }
+
+
+/* 2. ASTRES (Derrière les nuages) */
+.layer-celestial { position: absolute; inset: 0; transition: transform 5s linear; z-index: 2; }
+.celestial-sun {
+  width: 150px; height: 150px;
+  background: radial-gradient(circle, #fff 20%, #ffd700 50%, transparent 70%);
+  border-radius: 50%; position: absolute;
+  box-shadow: 0 0 40px #ffd700, 0 0 80px #ff8c00;
+  filter: blur(5px); transition: all 2s;
+}
+.celestial-moon {
+  width: 100px; height: 100px;
+  background: radial-gradient(circle, #fff 10%, #ddd 90%);
+  border-radius: 50%; position: absolute;
+  box-shadow: 0 0 20px #fff;
+}
+
+
+/* 3. NUAGES FLOTTANTS (Derrière la pluie) */
+.layer-clouds { position: absolute; inset: 0; transition: opacity 2s; z-index: 3; }
+
+.clouds-light { 
+  position: absolute; inset: 0;
+  background: url('https://assets.codepen.io/123/clouds-texture.png'); 
+  background-size: cover; opacity: 0.4;
+  animation: drift 120s linear infinite;
+}
+.cloud-shape {
+  position: absolute; background: #fff; border-radius: 50px;
+  opacity: 0.8; filter: blur(25px);
+  animation: float-cloud linear infinite;
+}
+.cloud-dark { background: #334; opacity: 0.95; }
+
+
+/* 4. COUVERTURE TOTALE (OVERCAST) - NOUVEAU ! */
+/* C'est ça qui va assombrir le ciel quand il pleut */
+.layer-overcast {
+  position: absolute; inset: 0;
+  background: linear-gradient(to bottom, rgba(30, 40, 50, 0.8), rgba(60, 70, 80, 0.5));
+  z-index: 4; /* Juste devant les astres et petits nuages */
+  opacity: 0; transition: opacity 2s ease;
+}
+.layer-overcast.active { opacity: 1; }
+
+
+/* 5. PRÉCIPITATIONS (Devant les nuages) */
+.layer-precip { position: absolute; inset: 0; pointer-events: none; z-index: 5; }
+
+.rain {
+  background: linear-gradient(to bottom, transparent 0%, rgba(200, 220, 255, 0.6) 50%, transparent 100%);
+  width: 2px; height: 120px; /* Gouttes plus longues */
+  position: absolute;
+  animation: rain-drop 0.4s linear infinite;
+}
+.snow {
+  width: 5px; height: 5px; background: #fff; border-radius: 50%; position: absolute;
+  animation: snow-fall linear infinite; filter: blur(2px);
+}
+
+
+/* 6. BROUILLARD (TOUT DEVANT) - CORRIGÉ */
+.layer-fog {
+  position: absolute; inset: 0; /* Plein écran maintenant */
+  background: linear-gradient(to top, rgba(200, 210, 220, 0.6) 0%, rgba(200, 210, 220, 0.1) 60%, transparent 100%);
+  filter: blur(40px);
+  z-index: 10; /* Devant la pluie pour l'effet de profondeur */
+  opacity: 0; transition: opacity 3s;
+  pointer-events: none;
+}
+.layer-fog.active {
+  opacity: 1;
+  animation: fog-pulse 8s infinite alternate;
+}
+
+
+/* ANIMATIONS */
+@keyframes drift { from { background-position: 0 0; } to { background-position: 100% 0; } }
+@keyframes float-cloud { from { transform: translateX(-300px); } to { transform: translateX(120vw); } }
+@keyframes rain-drop { 0% { transform: translateY(-120px); } 100% { transform: translateY(110vh); } }
+@keyframes snow-fall { 0% { transform: translateY(-10vh) translateX(0); } 100% { transform: translateY(110vh) translateX(20px); } }
+@keyframes fog-pulse { 0% { opacity: 0.6; transform: scale(1); } 100% { opacity: 0.8; transform: scale(1.05); } }
+@keyframes flash { 0%, 100% { opacity: 0; } 5% { opacity: 0.8; } 10% { opacity: 0; } }
+.lightning-flash { position: absolute; inset: 0; background: #fff; z-index: 20; opacity: 0; animation: flash 4s infinite; }
