@@ -102,11 +102,9 @@ export const calculateCP_WPrime = (p3m: number, p12m: number) => {
 export function calculateStreamAverages(streams: any) {
   if (!streams) return { avgPowerNonZero: 0, avgCadenceNonZero: 0, percentMoving: 0 };
   
-  // 🔥 CORRECTION ICI : On type explicitement <number>
   const watts = safeArray<number>(streams.watts);
   const cadence = safeArray<number>(streams.cadence);
 
-  // 🔥 ET ICI : On force le cast "as number[]" pour rassurer le reduce
   const nonZeroWatts = watts.filter(w => typeof w === 'number' && w > 0) as number[];
   
   const avgPowerNonZero = nonZeroWatts.length > 0
@@ -341,7 +339,8 @@ export const calculateStressBalance = (dailyTSS: { date: string; tss: number }[]
   return result;
 };
 
-export const calculateMaxAveragePower = (watts: number[], time: number[], duration: number) => {
+// 🔥 FONCTION RÉINTRODUITE POUR L'API D'IMPORT
+export const calculateMaxAveragePower  = (watts: number[], time: number[], duration: number) => {
     const res = findBestInterval(watts, time, [], null, duration, 75);
     return res ? res.watts : null;
 };
