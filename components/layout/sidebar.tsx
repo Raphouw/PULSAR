@@ -3,8 +3,9 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { Menu, X } from 'lucide-react'; // 🔥 Nouveaux imports pour le bouton mobile
 
 // --- ICÔNES SVG PRO (Inchangées) ---
 const Icons = {
@@ -61,7 +62,7 @@ const Icons = {
   ),
 };
 
-// Organisation des liens
+// Organisation des liens (Inchangée)
 const groups = [
   {
     title: "Performance",
@@ -99,115 +100,187 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
-  // 🔥 VÉRIFICATION DU LOCK (Basé sur la session)
-  // Si onboarding_completed est FALSE, on verrouille.
   const isLocked = session?.user?.onboarding_completed === false;
 
+  // 🔥 FIX: Fermer le menu mobile automatiquement quand on change de page
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
+
   return (
-    <nav 
-        // 🔥 APPLICATION DU STYLE DE VERROUILLAGE
+    <>
+      {/* --- CSS POUR LE MOBILE (Media Queries) --- */}
+      <style jsx global>{`
+        /* Par défaut : Desktop (Sidebar visible) */
+        .sidebar-container {
+          transform: translateX(0);
+          width: var(--sidebar-width, 250px);
+        }
+        .mobile-toggle-btn {
+          display: none;
+        }
+        .mobile-overlay {
+          display: none;
+        }
+
+        /* Mobile & Tablette (< 768px) */
+        @media (max-width: 768px) {
+          .sidebar-container {
+            transform: translateX(-100%); /* Caché par défaut */
+            width: 280px; /* Largeur fixe correcte pour mobile */
+            box-shadow: 5px 0 15px rgba(0,0,0,0.5);
+          }
+          .sidebar-container.open {
+            transform: translateX(0); /* Visible quand open */
+          }
+          .mobile-toggle-btn {
+            display: flex;
+            position: fixed;
+            top: 15px;
+            left: 15px;
+            z-index: 100;
+            background: rgba(20, 20, 30, 0.8);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.1);
+            color: #fff;
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+          }
+          .mobile-overlay {
+            display: block;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(3px);
+            z-index: 45; /* Juste sous la sidebar (z-50) */
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+          }
+          .mobile-overlay.visible {
+            opacity: 1;
+            pointer-events: auto;
+          }
+        }
+      `}</style>
+
+      {/* BOUTON HAMBURGER MOBILE */}
+      <button 
+        className="mobile-toggle-btn" 
+        onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+      >
+        {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+      </button>
+
+      {/* OVERLAY FONCÉ (Pour fermer en cliquant à côté) */}
+      <div 
+        className={`mobile-overlay ${isMobileMenuOpen ? 'visible' : ''}`} 
+        onClick={() => setIsMobileMenuOpen(false)}
+      />
+
+      {/* NAV PRINCIPALE */}
+      <nav 
+        className={`sidebar-container ${isMobileMenuOpen ? 'open' : ''}`}
         style={{
             ...navStyle,
             ...(isLocked ? {
-                opacity: 0.3,           // Rendre transparent/grisé
-                pointerEvents: 'none',  // Empêcher tout clic
-                filter: 'grayscale(100%)', // Optionnel : Tout en gris
-                transition: 'all 0.5s ease' // Transition douce
+                opacity: 0.3,
+                pointerEvents: 'none',
+                filter: 'grayscale(100%)',
+                transition: 'all 0.5s ease'
             } : {})
         }}
-    >
-      {/* LOGO ÉLABORÉ */}
-      <div style={headerStyle}>
-        <div style={logoWrapperStyle}>
-           <div style={logoGlowStyle} />
-           
-           <span style={logoTextStyle}>PULSAR</span>
-           
-        </div>
-        <div style={versionStyle}>DEV</div>
-      </div>
-
-      {/* LISTE DES LIENS */}
-      <div style={scrollAreaStyle}>
-        {groups.map((group, index) => (
-          <div key={index} style={groupContainerStyle}>
-            <div style={groupHeaderStyle}>
-               <span style={groupTitleStyle}>{group.title}</span>
-               <div style={groupLineStyle}></div>
-            </div>
-            
-            <ul style={ulStyle}>
-              {group.links.map((link) => {
-                const isActive = pathname?.startsWith(link.href) ?? false;
-                const isHovered = hoveredLink === link.href;
-
-                return (
-                  <li key={link.href} style={{ marginBottom: '2px' }}>
-                    <Link
-                      href={link.href}
-                      style={getLinkStyle(isActive, isHovered)}
-                      onMouseEnter={() => setHoveredLink(link.href)}
-                      onMouseLeave={() => setHoveredLink(null)}
-                    >
-                      {/* Indicateur actif */}
-                      {isActive && <div style={activeIndicatorStyle} />}
-                      
-                      {/* Icône */}
-                      <span style={{ 
-                        marginRight: '12px', 
-                        display: 'flex', 
-                        color: isActive ? '#d04fd7' : 'var(--text-secondary)',
-                        transition: 'color 0.2s'
-                      }}>
-                        {link.icon}
-                      </span>
-                      
-                      {/* Texte */}
-                      <span style={{ fontWeight: isActive ? 600 : 400 }}>
-                        {link.label}
-                      </span>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
+      >
+        {/* LOGO */}
+        <div style={headerStyle}>
+          <div style={logoWrapperStyle}>
+             <div style={logoGlowStyle} />
+             <span style={logoTextStyle}>PULSAR</span>
           </div>
-        ))}
-      </div>
+          <div style={versionStyle}>DEV</div>
+        </div>
 
-      {/* PIED DE PAGE (USER) */}
-      {session?.user && (
-        <div style={footerStyle}>
-          <div style={avatarPlaceholderStyle}>
+        {/* LISTE DES LIENS */}
+        <div style={scrollAreaStyle}>
+          {groups.map((group, index) => (
+            <div key={index} style={groupContainerStyle}>
+              <div style={groupHeaderStyle}>
+                 <span style={groupTitleStyle}>{group.title}</span>
+                 <div style={groupLineStyle}></div>
+              </div>
               
-             0{session.user.name?.charAt(0) || 'U'}
-          </div>
-          <div style={{ overflow: 'hidden' }}>
-            <div style={userNameStyle}>{session.user.name}</div>
-            <div style={userRoleStyle}>Athlète</div>
-          </div>
+              <ul style={ulStyle}>
+                {group.links.map((link) => {
+                  const isActive = pathname?.startsWith(link.href) ?? false;
+                  const isHovered = hoveredLink === link.href;
+
+                  return (
+                    <li key={link.href} style={{ marginBottom: '2px' }}>
+                      <Link
+                        href={link.href}
+                        style={getLinkStyle(isActive, isHovered)}
+                        onMouseEnter={() => setHoveredLink(link.href)}
+                        onMouseLeave={() => setHoveredLink(null)}
+                      >
+                        {isActive && <div style={activeIndicatorStyle} />}
+                        
+                        <span style={{ 
+                          marginRight: '12px', 
+                          display: 'flex', 
+                          color: isActive ? '#d04fd7' : 'var(--text-secondary)',
+                          transition: 'color 0.2s'
+                        }}>
+                          {link.icon}
+                        </span>
+                        
+                        <span style={{ fontWeight: isActive ? 600 : 400 }}>
+                          {link.label}
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
         </div>
-      )}
-    </nav>
+
+        {/* PIED DE PAGE (USER) */}
+        {session?.user && (
+          <div style={footerStyle}>
+            <div style={avatarPlaceholderStyle}>
+               0{session.user.name?.charAt(0) || 'U'}
+            </div>
+            <div style={{ overflow: 'hidden' }}>
+              <div style={userNameStyle}>{session.user.name}</div>
+              <div style={userRoleStyle}>Athlète</div>
+            </div>
+          </div>
+        )}
+      </nav>
+    </>
   );
 }
 
-// --- STYLES PRO (Inchangés) ---
+// --- STYLES PRO (Inchangés sauf navStyle qui est maintenant géré en partie par la classe CSS) ---
 
 const navStyle: React.CSSProperties = {
-  width: 'var(--sidebar-width)',
   height: '100vh',
   position: 'fixed',
   top: 0,
   left: 0,
-  background: 'var(--background)',
+  background: 'var(--background)', // Assure-toi que var(--background) est défini (ex: #050505)
   borderRight: '1px solid var(--secondary)',
   display: 'flex',
   flexDirection: 'column',
   zIndex: 50,
+  transition: 'transform 0.3s ease, width 0.3s ease', // Animation fluide
 };
 
+// ... (Le reste des styles reste identique à ton fichier original) ...
 const headerStyle: React.CSSProperties = {
   padding: '2rem 1.5rem 1rem 1.5rem',
   display: 'flex',
