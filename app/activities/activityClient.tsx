@@ -304,6 +304,9 @@ export default function ActivityClient({
     
     // Tri
     filtered = filtered.sort((a, b) => {
+      const dateA = new Date(a.start_time).getTime();
+      const dateB = new Date(b.start_time).getTime();
+
       switch (sortOrder) {
         case 'dist_desc':
           return (b.distance_km ?? 0) - (a.distance_km ?? 0);
@@ -313,25 +316,23 @@ export default function ActivityClient({
           return (b.elevation_gain_m ?? 0) - (a.elevation_gain_m ?? 0);
         case 'elev_asc':
           return (a.elevation_gain_m ?? 0) - (b.elevation_gain_m ?? 0);
-        case 'date_asc':
-
+        
         case 'pmoy_desc':
           return (b.avg_power_w ?? 0) - (a.avg_power_w ?? 0);
         case 'pmoy_asc':
           return (a.avg_power_w ?? 0) - (b.avg_power_w ?? 0);
-        {/* 🔥 LOGIQUE NPmoy DESC/ASC (NP n'est pas dans l'interface ActivityCardData fournie, mais on suppose qu'il est récupéré du backend) */}
+        
         case 'npmoy_desc':
-          // NOTE: np_w doit être inclus dans ActivityCardData pour que cela fonctionne. J'assume une structure ActivityCardData avec np_w: number | null
-          // Puisque je n'ai pas le fichier de type, je dois supposer que NP existe dans l'objet 'activity'.
-          return (b as any).np_w ? (b as any).np_w - ((a as any).np_w ?? 0) : 0;
+          return ((b as any).np_w ?? 0) - ((a as any).np_w ?? 0);
         case 'npmoy_asc':
-          return (a as any).np_w ? (a as any).np_w - ((b as any).np_w ?? 0) : 0;
-        case 'date_asc':
-          return new Date(a.start_time).getTime() - new Date(b.start_time).getTime();
+          return ((a as any).np_w ?? 0) - ((b as any).np_w ?? 0);
+        
+        case 'date_asc': // 🔥 CORRECTION ICI
+          return dateA - dateB; // Du plus petit (ancien) au plus grand (récent)
+        
         case 'date_desc':
-
         default:
-          return new Date(b.start_time).getTime() - new Date(a.start_time).getTime();
+          return dateB - dateA; // Du plus grand (récent) au plus petit (ancien)
       }
     });
 
