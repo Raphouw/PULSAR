@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation';
 import { 
   Activity as ActivityIcon, Calendar, Clock, MapPin, Zap, Heart, Gauge, 
   TrendingUp, Mountain, ArrowLeft, Share2, Layers, HelpCircle, Repeat,
-  Thermometer, Wind, Navigation,
+  Thermometer
 } from 'lucide-react';
 import { 
   ComposedChart, Area, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
@@ -29,6 +29,16 @@ import {
   findBestInterval,
 } from '../../../lib/physics';
 
+// --- UTILITAIRE DE SÉCURITÉ (CRITIQUE) ---
+// Transforme n'importe quoi en tableau valide pour éviter le crash .filter is not a function
+const safeArray = <T,>(input: any): T[] => {
+  if (Array.isArray(input)) return input;
+  if (!input) return [];
+  // Si c'est un objet qui ressemble à un tableau (ex: {0: val, 1: val}), on tente de le convertir
+  if (typeof input === 'object') return Object.values(input);
+  return [];
+};
+
 // --- STYLES GLOBAUX ---
 const loadingContainerStyle: React.CSSProperties = {
   height: '100%', width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', 
@@ -49,9 +59,12 @@ const MiniMap = dynamic(() => import('../../../components/ui/miniMap'), {
 // --- HELPERS ---
 const extractClimbStreams = (climb: DetectedClimb, streams: ActivityStreams): ActivityStreams => {
     const { startIndex, endIndex } = climb;
-    const sliceStream = <T,>(stream: (T | null)[] | undefined): (T | null)[] => {
-        return stream ? stream.slice(startIndex, endIndex + 1) : [];
+    
+    // 🔥 CORRECTION TYPE : On précise <T | null>
+    const sliceStream = <T,>(stream: any): (T | null)[] => {
+        return safeArray<T | null>(stream).slice(startIndex, endIndex + 1);
     };
+    
     return {
         time: sliceStream(streams.time),
         distance: sliceStream(streams.distance),
@@ -72,16 +85,20 @@ const formatTime = (seconds: number) => {
 const formatDuration = (seconds: number) => {
     if (seconds < 3600) {
         const m = Math.floor(seconds / 60);
-        const s = seconds % 60;
+        const s = Math.round(seconds % 60);
         return `${m}:${s.toString().padStart(2, '0')}`;
     }
     return formatTime(seconds);
 }
 
 const formatDate = (isoString: string) => {
-    return new Date(isoString).toLocaleDateString('fr-FR', {
-        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
-    }).toUpperCase();
+    try {
+        return new Date(isoString).toLocaleDateString('fr-FR', {
+            weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+        }).toUpperCase();
+    } catch (e) {
+        return isoString;
+    }
 };
 
 const formatNumber = (num: number | null | undefined, unit: string, decimals: number = 0) => 
@@ -178,11 +195,11 @@ const DetailRow = ({ label, value, color = "#fff", subValue }: any) => (
 const RatioBar = ({ labelLeft, labelRight, valueLeft, color }: any) => (
     <div style={{marginTop: '8px'}}>
         <div style={{display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: '#888', marginBottom: '3px'}}>
-            <span>{labelLeft} <strong style={{color:'#fff'}}>{valueLeft.toFixed(0)}%</strong></span>
-            <span>{labelRight} <strong style={{color:'#fff'}}>{(100 - valueLeft).toFixed(0)}%</strong></span>
+            <span>{labelLeft} <strong style={{color:'#fff'}}>{(valueLeft || 0).toFixed(0)}%</strong></span>
+            <span>{labelRight} <strong style={{color:'#fff'}}>{(100 - (valueLeft || 0)).toFixed(0)}%</strong></span>
         </div>
         <div style={{height: '4px', width: '100%', background: 'rgba(255,255,255,0.1)', borderRadius: '2px', overflow: 'hidden'}}>
-            <div style={{height: '100%', width: `${valueLeft}%`, background: color, borderRadius: '2px'}} />
+            <div style={{height: '100%', width: `${valueLeft || 0}%`, background: color, borderRadius: '2px'}} />
         </div>
     </div>
 );
@@ -283,31 +300,6 @@ const RecordFlipCard = ({ record, forceFlipState }: { record: any, forceFlipStat
     );
 };
 
-const calculateSpeedFromDistTime = (s: any, i: number, prevI: number) => {
-    if (prevI < 0 || !s.distance || !s.time) return 0;
-    const d = (s.distance[i] || 0) - (s.distance[prevI] || 0);
-    const t = (s.time[i] || 0) - (s.time[prevI] || 0);
-    if (t <= 0) return 0;
-    const v = (d / t) * 3.6;
-    return v > 120 ? 0 : parseFloat(v.toFixed(1));
-}
-
-const getSmoothedData = (data: (number | null)[] | undefined, windowSize: number) => {
-    const smoothed: number[] = [];
-    if (!data) return [];
-    
-    // Remplacer les nulls par 0 pour le calcul de la moyenne mobile
-    const cleanData = data.map(v => v ?? 0);
-
-    for (let i = 0; i < cleanData.length; i++) {
-        const start = Math.max(0, i - windowSize + 1);
-        const window = cleanData.slice(start, i + 1);
-        const sum = window.reduce((a, b) => a + b, 0);
-        smoothed.push(sum / window.length);
-    }
-    return smoothed;
-};
-
 const METRICS_CONFIG = {
     watts: { id: 'watts', label: 'Puissance', color: '#d04fd7', unit: 'W', icon: Zap, axisId: 'wattsAxis' },
     speed: { id: 'speed', label: 'Vitesse', color: '#00f3ff', unit: 'km/h', icon: ActivityIcon, axisId: 'speedAxis' },
@@ -324,38 +316,55 @@ const InteractiveAnalysisChart = ({ streams }: { streams: ActivityStreams }) => 
     });
     const [xAxisMode, setXAxisMode] = useState<'distance' | 'time'>('distance');
 
+    // Fonction de calcul de vitesse sécurisée
+    const calculateSpeedFromDistTime = useCallback((s: any, i: number, prevI: number) => {
+        // 🔥 CORRECTION TYPE : On force le type <number> pour que TypeScript accepte les maths
+        const distArr = safeArray<number>(s.distance);
+        const timeArr = safeArray<number>(s.time);
+        
+        if (prevI < 0 || !distArr[i] || !timeArr[i]) return 0;
+        
+        const d = Number(distArr[i] ?? 0) - Number(distArr[prevI] ?? 0);
+        const t = Number(timeArr[i] ?? 0) - Number(timeArr[prevI] ?? 0);
+        
+        if (t <= 0) return 0;
+        const v = (d / t) * 3.6;
+        return v > 120 ? 0 : parseFloat(v.toFixed(1));
+    }, []);
+
     const streamData = useMemo(() => {
-        if (!streams?.time) return [];
-        const len = streams.time.length;
+        const timeStream = safeArray(streams?.time);
+        if (timeStream.length === 0) return [];
+
+        const len = timeStream.length;
         const step = len > 3000 ? Math.ceil(len / 2000) : 1; // Subsampling
         const data: any[] = [];
+        
+        // Sécurisation des autres streams avec typage explicite <number>
+        const distStream = safeArray<number>(streams.distance);
+        const wattsStream = safeArray<number>(streams.watts);
+        const hrStream = safeArray<number>(streams.heartrate);
+        const cadenceStream = safeArray<number>(streams.cadence);
+        const altStream = safeArray<number>(streams.altitude);
+        const tempStream = safeArray<number>((streams as any).temp);
         
         for (let i = 0; i < len; i += step) {
             const speedKmh = streams.latlng ? calculateSpeedFromDistTime(streams, i, i-step) : 0;
             
             data.push({
                 index: i,
-                dist: streams.distance ? parseFloat(((streams.distance[i] || 0) / 1000).toFixed(2)) : 0,
-                time: streams.time[i] || 0,
-                watts: streams.watts ? (streams.watts[i] || 0) : null,
-                hr: streams.heartrate ? (streams.heartrate[i] || 0) : null,
-                cadence: streams.cadence ? (streams.cadence[i] || 0) : null,
-                altitude: streams.altitude ? (streams.altitude[i] || 0) : null,
-                temp: (streams as any).temp ? ((streams as any).temp[i] || 0) : null,
+                dist: distStream[i] ? parseFloat(((distStream[i] || 0) / 1000).toFixed(2)) : 0,
+                time: timeStream[i] || 0,
+                watts: wattsStream[i] ?? null,
+                hr: hrStream[i] ?? null,
+                cadence: cadenceStream[i] ?? null,
+                altitude: altStream[i] ?? null,
+                temp: tempStream[i] ?? null,
                 speed: speedKmh
             });
         }
         return data;
-    }, [streams]);
-
-    function calculateSpeedFromDistTime(s: any, i: number, prevI: number) {
-        if (prevI < 0 || !s.distance || !s.time) return 0;
-        const d = (s.distance[i] || 0) - (s.distance[prevI] || 0);
-        const t = (s.time[i] || 0) - (s.time[prevI] || 0);
-        if (t <= 0) return 0;
-        const v = (d / t) * 3.6;
-        return v > 120 ? 0 : parseFloat(v.toFixed(1));
-    }
+    }, [streams, calculateSpeedFromDistTime]);
 
     const toggleMetric = (key: string) => setActiveMetrics(prev => ({ ...prev, [key]: !prev[key] }));
 
@@ -372,7 +381,10 @@ const InteractiveAnalysisChart = ({ streams }: { streams: ActivityStreams }) => 
 
                 <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                     {Object.entries(METRICS_CONFIG).map(([key, conf]) => {
-                        const hasData = key === 'speed' ? true : (streams as any)[key === 'hr' ? 'heartrate' : key];
+                        // Vérification sécurisée de l'existence des données
+                        const streamKey = key === 'hr' ? 'heartrate' : key;
+                        const hasData = key === 'speed' ? true : safeArray((streams as any)[streamKey]).length > 0;
+                        
                         if (!hasData) return null;
 
                         const isActive = activeMetrics[key];
@@ -426,33 +438,17 @@ const InteractiveAnalysisChart = ({ streams }: { streams: ActivityStreams }) => 
     );
 };
 
-const calculateCumulativeAverage = (data: (number | null)[] | undefined) => {
-    if (!data || data.length === 0) return [];
-    
-    const averages: number[] = [];
-    let cumulativeSum = 0;
-    
-    for (let i = 0; i < data.length; i++) {
-        const value = data[i] ?? 0;
-        cumulativeSum += value;
-        
-        // Moyenne = Somme Cumulative / Nombre de points (i + 1)
-        averages.push(cumulativeSum / (i + 1));
-    }
-    return averages;
-};
-
-
 const EvolutionAverageChart = ({ streams }: { streams: ActivityStreams }) => {
     
-    const calculateCumulativeAverage = (data: (number | null)[] | undefined) => {
-        if (!data || data.length === 0) return [];
+    const calculateCumulativeAverage = (data: any[]) => {
+        const safeData = safeArray<number>(data);
+        if (safeData.length === 0) return [];
         
         const averages: number[] = [];
         let cumulativeSum = 0;
         
-        for (let i = 0; i < data.length; i++) {
-            const value = data[i] ?? 0;
+        for (let i = 0; i < safeData.length; i++) {
+            const value = Number(safeData[i] ?? 0);
             cumulativeSum += value;
             averages.push(cumulativeSum / (i + 1));
         }
@@ -462,8 +458,10 @@ const EvolutionAverageChart = ({ streams }: { streams: ActivityStreams }) => {
     const START_DISCARD_POINTS = 100; 
 
     const cumulativeData = useMemo(() => {
-        if (!streams?.time) return [];
-        const len = streams.time.length;
+        const timeStream = safeArray(streams?.time);
+        if (timeStream.length === 0) return [];
+        
+        const len = timeStream.length;
         const step = len > 3000 ? Math.ceil(len / 2000) : 1; 
 
         // Initialisation et Subsampling
@@ -474,14 +472,22 @@ const EvolutionAverageChart = ({ streams }: { streams: ActivityStreams }) => {
         const sampledDist: number[] = [];
         const sampledSpeed: number[] = []; 
         
+        // 🔥 CORRECTION TYPE : Typage strict <number> pour permettre les maths
+        const wattsStream = safeArray<number>(streams.watts);
+        const hrStream = safeArray<number>(streams.heartrate);
+        const cadenceStream = safeArray<number>(streams.cadence);
+        const altStream = safeArray<number>(streams.altitude);
+        const distStream = safeArray<number>(streams.distance);
+        
         for (let i = 0; i < len; i += step) {
-             sampledWatts.push(streams.watts?.[i] ?? 0);
-             sampledHr.push(streams.heartrate?.[i] ?? 0);
-             sampledCadence.push(streams.cadence?.[i] ?? 0);
-             sampledAltitudeRaw.push(streams.altitude?.[i] ?? 0); 
+             sampledWatts.push(wattsStream[i] ?? 0);
+             sampledHr.push(hrStream[i] ?? 0);
+             sampledCadence.push(cadenceStream[i] ?? 0);
+             sampledAltitudeRaw.push(altStream[i] ?? 0); 
              
-             const elapsedDist = (streams.distance?.[i] || 0);
-             const elapsedTime = (streams.time?.[i] || 0);
+             // 🔥 L'ARME ATOMIQUE : Number() sur les valeurs extraites
+             const elapsedDist = Number(distStream[i] ?? 0);
+             const elapsedTime = Number(timeStream[i] ?? 0);
 
              sampledDist.push(elapsedDist);
              const avgSpeed = elapsedTime > 0 ? (elapsedDist / elapsedTime) * 3.6 : 0;
@@ -510,15 +516,16 @@ const EvolutionAverageChart = ({ streams }: { streams: ActivityStreams }) => {
     }, [streams]);
 
 
-    // --- CALCULATION DES DOMAINES INDIVIDUELS (FIX 1) ---
-    // Nous calculons un domaine unique pour CHAQUE métrique pour maximiser l'amplitude.
+    // --- CALCULATION DES DOMAINES INDIVIDUELS ---
     const getMetricDomain = (key: 'watts' | 'hr' | 'cadence' | 'speed', padding: number = 0.05) => {
         const values = cumulativeData.map(d => d[key] || 0);
+        if (values.length === 0) return ['auto', 'auto'];
+
         const max = Math.max(...values);
-        const min = Math.min(...values.filter(v => v > 0)); // Ignore 0 si présent
+        const minValues = values.filter(v => v > 0);
+        const min = minValues.length > 0 ? Math.min(...minValues) : 0;
         const range = max - min;
 
-        // Si la plage est trop petite (presque plat), on garde un buffer fixe
         if (range < 5) return [min * 0.9, max * 1.1]; 
 
         return [
@@ -546,34 +553,26 @@ const EvolutionAverageChart = ({ streams }: { streams: ActivityStreams }) => {
                         {/* AXE Y (Gauche): Altitude (Context) */}
                         <YAxis yAxisId="altAxis" orientation="left" stroke="#f59e0b" fontSize={10} domain={['auto', 'auto']} />
                         
-                        {/* 1. AXE WATTS (Droite 1) - Masqué, utilise le domaine d'amplitude maximale */}
+                        {/* Axes masqués */}
                         <YAxis yAxisId="wattsAxis" orientation="right" stroke="#d04fd7" domain={wattDomain} hide={true} />
-                        
-                        {/* 2. AXE HR (Droite 2) - Masqué, utilise le domaine d'amplitude maximale */}
                         <YAxis yAxisId="hrAxis" orientation="right" stroke="#ef4444" domain={hrDomain} hide={true} />
-
-                        {/* 3. AXE CADENCE (Droite 3) - Masqué, utilise le domaine d'amplitude maximale */}
                         <YAxis yAxisId="cadenceAxis" orientation="right" stroke="#10b981" domain={cadenceDomain} hide={true} />
-
-                        {/* 4. AXE VITESSE (Droite 4) - Masqué, utilise le domaine d'amplitude maximale */}
                         <YAxis yAxisId="speedAxis" orientation="right" stroke="#00f3ff" domain={speedDomain} hide={true} />
-
 
                         <Tooltip 
                             contentStyle={{ backgroundColor: 'rgba(10,10,15,0.95)', border: '1px solid #333', borderRadius: '8px', fontSize: '0.8rem' }}
                             labelFormatter={(val) => `Corrélation à ${val} km`}
                             formatter={(value: number, name: string) => {
-                                const conf = (METRICS_CONFIG as any)[Object.keys(METRICS_CONFIG).find(k => (METRICS_CONFIG as any)[k].label === name)!];
+                                const metricKey = Object.keys(METRICS_CONFIG).find(k => (METRICS_CONFIG as any)[k].label === name);
+                                const conf = metricKey ? (METRICS_CONFIG as any)[metricKey] : null;
                                 return [<span key={name} style={{ color: conf?.color || '#fff', fontWeight: 700 }}>{formatNumber(value, conf?.unit, 1)}</span>, name];
                             }}
                         />
 
-                        {/* L'ordre de superposition compte : Lignes par dessus Area */}
-                        
                         {/* 1. Altitude (AREA) - Contexte */}
                         <Area type="linear" dataKey="altitude" yAxisId="altAxis" name="Altitude" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.15} strokeWidth={1} />
                         
-                        {/* 2. Performance (LINES) - Chaque ligne a son propre axe pour maximiser son propre domaine de variation */}
+                        {/* 2. Performance (LINES) */}
                         <Line type="monotone" dataKey="watts" yAxisId="wattsAxis" name="Puissance" stroke="#d04fd7" strokeWidth={2} dot={false} />
                         <Line type="monotone" dataKey="hr" yAxisId="hrAxis" name="Cardio" stroke="#ef4444" strokeWidth={2} dot={false} />
                         <Line type="monotone" dataKey="cadence" yAxisId="cadenceAxis" name="Cadence" stroke="#10b981" strokeWidth={2} dot={false} />
@@ -587,18 +586,16 @@ const EvolutionAverageChart = ({ streams }: { streams: ActivityStreams }) => {
 };
 
 function useAdvancedStats(activity: Activity, streams: ActivityStreams | null) {
-  // L'utilisation de useMemo optimise les calculs lourds, ne les exécutant qu'en cas de changement de 'streams' ou 'activity'.
   return useMemo(() => {
-    // --- 1. CALCULS BASÉS SUR LES MÉTADONNÉES (Disponibles même sans streams détaillés) ---
-
+    // --- 1. CALCULS BASÉS SUR LES MÉTADONNÉES ---
     const workKj = calculateWork(activity.avg_power_w, activity.duration_s);
     
-    // Calcul des calories (Priorité: kJ calculé via capteur > Calories Strava)
+    // Calcul des calories
     const calories = workKj 
-        ? Math.round(workKj / 1.00416) // Application du ratio théorique 1.00416 (Efficacité 24%)
+        ? Math.round(workKj / 1.00416) 
         : (activity.calories_kcal || 0);
         
-    // Calcul de l'efficacité (ou valeur théorique si données aberrantes)
+    // Calcul de l'efficacité
     let efficiency = 0;
     if (activity.calories_kcal && workKj) {
         efficiency = (workKj / 4.184) / activity.calories_kcal * 100;
@@ -616,7 +613,6 @@ function useAdvancedStats(activity: Activity, streams: ActivityStreams | null) {
 
     // --- 2. GESTION DE L'ABSENCE DE STREAMS ---
     if (!streams) {
-      // Retourne les valeurs de base si les streams ne sont pas encore chargés
       return { 
           workKj, scoreTSS, intensityFactor, wKg, wKgNp, ftpCurrent, np: npRaw, calories, efficiency,
           climbs: [], pMax: null, fcMax: null, fcMoy: null, avgPowerNZ: null, gain: 0, loss: 0, altMax: null, altMin: null, rpmMax: null, powerCurve: [], 
@@ -626,9 +622,10 @@ function useAdvancedStats(activity: Activity, streams: ActivityStreams | null) {
       };
     }
 
-    // --- 3. PRÉPARATION ET NETTOYAGE DES STREAMS ---
+    // --- 3. PRÉPARATION ET NETTOYAGE DES STREAMS (BLINDAGE) ---
 
-    const filterNonNulls = (arr: (number | null)[] | undefined) => (arr || []).filter((n): n is number => n !== null);
+    // Utilitaire local pour filtrer uniquement les nombres
+    const filterNonNulls = (arr: any) => safeArray<number>(arr).filter((n): n is number => typeof n === 'number' && !isNaN(n));
     
     // Nettoyage des streams critiques (suppression des nulls)
     const cleanWatts = filterNonNulls(streams.watts);
@@ -638,7 +635,7 @@ function useAdvancedStats(activity: Activity, streams: ActivityStreams | null) {
     const cleanTime = filterNonNulls(streams.time);
     const cleanDist = filterNonNulls(streams.distance);
 
-    // --- 4. CALCULS AVANCÉS GLOBALES (Nécessitant les streams) ---
+    // --- 4. CALCULS AVANCÉS GLOBALES ---
     
     // Maxima et Minima
     const hrAvg = activity.avg_heartrate || (cleanHR.length > 0 ? Math.round(cleanHR.reduce((a, b) => a + b, 0) / cleanHR.length) : 0);
@@ -651,6 +648,8 @@ function useAdvancedStats(activity: Activity, streams: ActivityStreams | null) {
     // Métriques physiologiques et de terrain
     const drift = calculateCardiacDrift(cleanWatts, cleanHR);
     const { gain, loss } = calculateElevationGainLoss(cleanAlt);
+    
+    // Pour terrain et averages, on passe l'objet streams complet mais sécurisé dans les fonctions helper
     const terrain = calculateTerrainStats(streams as ActivityStreams);
     const { avgPowerNonZero, avgCadenceNonZero } = calculateStreamAverages(streams as ActivityStreams);
     const bpmPerWatt = (activity.avg_power_w && hrAvg) ? (hrAvg / activity.avg_power_w).toFixed(2) : '-';
@@ -660,7 +659,7 @@ function useAdvancedStats(activity: Activity, streams: ActivityStreams | null) {
     const pauseTime = Math.max(0, totalTime - activity.duration_s);
     const vMoyTotale = totalTime > 0 ? (activity.distance_km / (totalTime / 3600)) : 0;
     
-    // Calcul de la vitesse moyenne NZ (moving time) et max lissée
+    // Calcul de la vitesse moyenne NZ
     let movingDist = 0;
     let movingTime = 0;
     for(let i=1; i<cleanDist.length; i++) {
@@ -668,7 +667,7 @@ function useAdvancedStats(activity: Activity, streams: ActivityStreams | null) {
         const t = cleanTime[i] - cleanTime[i-1];
         if(t > 0) {
             const speed = (d/t)*3.6;
-            if(speed > 2) { // Seuil de mouvement de 2 km/h
+            if(speed > 2) { 
                 movingDist += d;
                 movingTime += t;
             }
@@ -678,20 +677,20 @@ function useAdvancedStats(activity: Activity, streams: ActivityStreams | null) {
     const vMoyElapsed = vMoyTotale; 
     
     let vMaxSmooth = 0;
-    if (cleanDist.length > 5) {
+    if (cleanDist.length > 5 && cleanTime.length > 5) {
         for(let i=5; i<cleanDist.length; i++) {
              const d = cleanDist[i] - cleanDist[i-5];
              const t = cleanTime[i] - cleanTime[i-5];
              if(t>0) {
                  const s = (d/t)*3.6;
-                 if(s > vMaxSmooth && s < 130) vMaxSmooth = s; // Limite arbitraire
+                 if(s > vMaxSmooth && s < 130) vMaxSmooth = s; 
              }
         }
     } else { vMaxSmooth = activity.max_speed_kmh; }
 
     const pedalingSamples = cleanCad.filter(c => c > 0).length;
     const percentPedaling = cleanCad.length > 0 ? (pedalingSamples / cleanCad.length) * 100 : 0;
-    const cadAvg = cleanCad.reduce((a,b)=>a+b,0)/cleanCad.length || 0;
+    const cadAvg = cleanCad.length > 0 ? cleanCad.reduce((a,b)=>a+b,0)/cleanCad.length : 0;
     const cadMax = rpmMax || 0;
     const cadMedian = calculateMedian(cleanCad.filter(c=>c>0));
 
@@ -700,25 +699,23 @@ function useAdvancedStats(activity: Activity, streams: ActivityStreams | null) {
     const powerCurve = intervals.map(interval => {
         if (cleanTime.length > 0 && cleanTime[cleanTime.length-1] < interval.sec) return null;
         
-        // Appel à la fonction qui calcule les records de puissance ET les records cardiaques indépendants
+        // Find best interval blindé
         const res = findBestInterval(cleanWatts, cleanTime, cleanDist, cleanHR, interval.sec, activity.user_weight || 75);
         
         if (!res) return null;
 
-        // Mapping des résultats pour le composant FlipCard
         return { 
             ...interval, 
             watts: res.watts,
             wkg: res.wkg,
-            powerKm: res.powerKm, // KM du record Puissance
-            npVal: Math.round(res.watts * 1.05), // Estimation NP (ou NP réelle si calculée)
-            hrAvgRecord: res.hrAvgRecord, // Valeur record Cardiaque (indépendante)
-            hrKm: res.hrKm // KM du record Cardiaque (indépendant)
+            powerKm: res.powerKm, 
+            npVal: Math.round(res.watts * 1.05), 
+            hrAvgRecord: res.hrAvgRecord, 
+            hrKm: res.hrKm 
         };
-    }).filter(p => p !== null);
+    }).filter((p): p is NonNullable<typeof p> => p !== null);
     
-    // 🔥 AJUSTEMENT: Utilisation d'un seuil plus élevé pour l'affichage narratif
-    const climbs = detectClimbs(streams as ActivityStreams, 800, 3.0); // 3.0% de pente min pour la narration
+    const climbs = detectClimbs(streams as ActivityStreams, 800, 3.0); 
 
     // --- 6. RETOUR CONSOLIDÉ ---
     return {
@@ -732,8 +729,6 @@ function useAdvancedStats(activity: Activity, streams: ActivityStreams | null) {
     };
   }, [streams, activity]);
 }
-
-
 
 
 // --- HOOK CALCULS AVANCÉS ---
@@ -1005,7 +1000,6 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
                         {!narrativeLoading && narrative && (
                             <div 
                                 style={styles.narrativeContent}
-                                // 🔥 CORRECTION MAJEURE : Utiliser dangerouslySetInnerHTML pour rendre le HTML/CSS inline
                                 dangerouslySetInnerHTML={{ __html: narrative }}
                             />
                         )}
@@ -1030,21 +1024,30 @@ const AltitudePerformanceChart = ({ streams }: { streams: ActivityStreams }) => 
     const BIN_SIZE = 50; 
 
     const chartData = useMemo(() => {
-        if (!streams.altitude || streams.altitude.length === 0) return [];
+        const altStream = safeArray<number>(streams.altitude);
+        if (altStream.length === 0) return [];
         
-        const validAltitudes = streams.altitude.filter(a => a !== null) as number[];
+        // Filtrer les altitudes valides
+        const validAltitudes = altStream.filter(a => typeof a === 'number');
+        if (validAltitudes.length === 0) return [];
+
         const minAlt = Math.min(...validAltitudes);
         const maxAlt = Math.max(...validAltitudes);
         
         // Définition des buckets (key: MinAlt)
         const bins = new Map<number, { count: number; totalWatts: number; totalSpeed: number; totalHr: number; totalCadence: number; }>();
         
+        // Accès sécurisé aux streams avec typage strict <number>
+        const wattsStream = safeArray<number>(streams.watts);
+        const hrStream = safeArray<number>(streams.heartrate);
+        const cadenceStream = safeArray<number>(streams.cadence);
+
         // Initialisation et Agrégation des données
-        for (let i = 0; i < streams.altitude.length; i++) {
-            const alt = streams.altitude[i] || 0;
-            const watts = streams.watts?.[i] || 0;
-            const hr = streams.heartrate?.[i] || 0;
-            const cadence = streams.cadence?.[i] || 0;
+        for (let i = 0; i < altStream.length; i++) {
+            const alt = altStream[i] || 0;
+            const watts = wattsStream[i] ?? 0;
+            const hr = hrStream[i] ?? 0;
+            const cadence = cadenceStream[i] ?? 0;
             
             // Calcul de la clé du bin
             const binKey = Math.floor(alt / BIN_SIZE) * BIN_SIZE;
@@ -1065,7 +1068,6 @@ const AltitudePerformanceChart = ({ streams }: { streams: ActivityStreams }) => 
         
         for (let alt = Math.floor(minAlt / BIN_SIZE) * BIN_SIZE; alt <= Math.ceil(maxAlt / BIN_SIZE) * BIN_SIZE; alt += BIN_SIZE) {
             const bin = bins.get(alt);
-            // Le point X est le début de la tranche, c'est plus clair pour les Barres
             const midPoint = alt; 
             
             if (bin && bin.count > 0) {
@@ -1135,8 +1137,8 @@ const AltitudePerformanceChart = ({ streams }: { streams: ActivityStreams }) => 
                             contentStyle={{ backgroundColor: 'rgba(10,10,15,0.95)', border: '1px solid #333', borderRadius: '8px', fontSize: '0.8rem' }}
                             labelFormatter={(val) => `Tranche : ${val}m – ${val + BIN_SIZE}m`}
                             formatter={(value: number, name: string) => {
-                                const conf = (METRICS_CONFIG as any)[Object.keys(METRICS_CONFIG).find(k => (METRICS_CONFIG as any)[k].label === name)!];
-                                return [<span key={name} style={{ color: conf?.color || '#fff', fontWeight: 700 }}>{Math.round(value)} {conf?.unit}</span>, name];
+                                const metricKey = Object.keys(METRICS_CONFIG).find(k => (METRICS_CONFIG as any)[k].label === name);
+                                return [<span key={name} style={{ color: '#fff', fontWeight: 700 }}>{Math.round(value)}</span>, name];
                             }}
                         />
 
@@ -1157,9 +1159,6 @@ const AltitudePerformanceChart = ({ streams }: { streams: ActivityStreams }) => 
         </div>
     );
 };
-
-// --- MAIN COMPONENT ---
-
 
 // --- STYLES ---
 const styles: Record<string, React.CSSProperties> = {
@@ -1206,7 +1205,4 @@ const styles: Record<string, React.CSSProperties> = {
     loadingNarrative: { textAlign: 'center', padding: '3rem', color: '#d04fd7', fontSize: '1.1rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem' },
     spinner: { width: '20px', height: '20px', borderRadius: '50%', border: '3px solid rgba(208, 79, 215, 0.3)', borderTopColor: '#d04fd7', animation: 'spin 1s linear infinite' },
     emptyNarrative: { textAlign: 'center', padding: '3rem', color: '#ef4444', fontSize: '1rem', border: '1px dashed #ef4444', borderRadius: '12px' }
-    
-
-
 };
