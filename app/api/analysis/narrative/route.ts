@@ -5,7 +5,7 @@ import { generateActivityNarrative } from '../../../../lib/analysis/narrativeEng
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth'; 
 
-// Définir la structure de la réponse (pour éviter les erreurs d'inconnus)
+// Définir la structure de la réponse
 interface NarrativeRequest {
   activityId: number;
 }
@@ -13,7 +13,7 @@ interface NarrativeRequest {
 // Handler POST pour générer la narration
 export async function POST(request: Request) {
   
-  // Sécurité : Vérifier la session utilisateur (crucial pour l'accès aux données privées)
+  // Sécurité : Vérifier la session utilisateur
   const session = await getServerSession(authOptions);
   if (!session || !session.user || !session.user.id) {
     return NextResponse.json({ error: 'UNAUTHORIZED_ACCESS' }, { status: 401 });
@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Activity ID manquant.' }, { status: 400 });
     }
 
-    // 1. Récupérer l'activité, les streams et le profil utilisateur
+    // 1. Récupérer l'activité
     const { data: activityData, error: activityError } = await supabaseAdmin
       .from('activities')
       .select(`streams_data, user_id, users ( ftp, weight, max_heart_rate )`)
@@ -40,40 +40,40 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'Activité non trouvée ou erreur BDD.' }, { status: 404 });
     }
 
-    // 1.1 Sécurité : Vérifier que l'activité appartient à l'utilisateur
+    // 1.1 Sécurité : Vérifier l'appartenance
     if (activityData.user_id?.toString() !== userId) {
         return NextResponse.json({ error: 'Activité non associée à cet utilisateur.' }, { status: 403 });
     }
     
-    // 1.2 Vérifier les streams (sans quoi la narration est inutile)
+    // 1.2 Vérifier les streams
     if (!activityData.streams_data) {
          return NextResponse.json({ narrative: "Données de flux (streams) absentes. Impossible de générer le récit narratif." }, { status: 200 });
     }
 
+    // 🔥 CORRECTION TYPESCRIPT RADICALE
+    // On force le type 'any' ici pour dire à TS : "Laisse-moi gérer la structure, je sais ce que je fais".
+    // Cela évite l'erreur "Conversion of type array to object".
     // @ts-ignore
-    const rawUsersData = activityData.users; // Renommage pour plus de clarté
+    const rawUsersData: any = activityData.users; 
     
-    // Définir le type de l'objet utilisateur que nous attendons (sans la nullité initiale)
     type UserProfileData = { ftp: number | null; weight: number | null; max_heart_rate: number | null };
-
     let cleanUserProfile: UserProfileData | null = null;
     
-    // 🔥 CORRECTION: Extraire l'objet utilisateur en gérant le cas du tableau
-    if (Array.isArray(rawUsersData) && rawUsersData.length > 0) {
-        // C'est un tableau : prendre le premier élément et l'affiner (assertion implicite)
-        cleanUserProfile = rawUsersData[0] as UserProfileData;
-    } else if (rawUsersData && typeof rawUsersData === 'object') {
-        // C'est déjà l'objet (si Supabase a aplati la réponse)
+    // Logique robuste : Tableau OU Objet unique
+    if (Array.isArray(rawUsersData)) {
+        if (rawUsersData.length > 0) {
+            cleanUserProfile = rawUsersData[0] as UserProfileData;
+        }
+    } else if (rawUsersData) {
+        // Ici, on est sûr que ce n'est pas un tableau grâce au 'if' précédent
         cleanUserProfile = rawUsersData as UserProfileData;
     }
     
-    // Assurez-vous que userProfile est bien un objet après l'opération (pour le type check)
     const profile = {
         ftp: cleanUserProfile?.ftp || 250,
         weight: cleanUserProfile?.weight || 75,
         maxHr: cleanUserProfile?.max_heart_rate || 190,
     };
-
 
     // 2. Exécuter le moteur narratif
     const narrative = generateActivityNarrative(activityData.streams_data as any, profile);
