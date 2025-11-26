@@ -812,33 +812,6 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
                         <div>
                             <button onClick={() => router.push('/activities')} style={styles.backButton}><ArrowLeft size={16} /> RETOUR</button>
                             <h1 style={styles.title}>{activity.name}</h1>
-                            <button 
-    onClick={async () => {
-        if(!confirm("Voulez-vous forcer la re-synchronisation de cette activité ?")) return;
-        try {
-            const res = await fetch('/api/strava/streams', { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ strava_id: activity.strava_id }) 
-            });
-            if(res.ok) {
-                alert("Réparation terminée ! La page va se recharger.");
-                window.location.reload();
-            } else {
-                alert("Erreur lors de la réparation.");
-            }
-        } catch(e) { console.error(e); alert("Erreur réseau."); }
-    }}
-    style={{
-        fontSize: '0.7rem', background: '#ef4444', color: 'white', border: 'none', 
-        padding: '4px 8px', borderRadius: '4px', cursor: 'pointer', marginTop: '5px'
-    }}
->
-    🛠️ RÉPARER DONNÉES
-</button>   
-
-
-
                             <div style={{display: 'flex', gap: '15px', color: '#ccc', fontSize: '0.9rem', fontWeight: 500}}>
                                 <span style={{display:'flex', alignItems:'center', gap:'6px'}}><Calendar size={14} color="#d04fd7"/> {formatDate(activity.start_time)}</span>
                                 <span style={{display:'flex', alignItems:'center', gap:'6px'}}><Clock size={14} color="#00f3ff"/> {formatTime(activity.duration_s)}</span>
