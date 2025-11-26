@@ -1,58 +1,91 @@
-// app/api/sync-stream/route.ts
-import { NextResponse } from 'next/server';
+// Fichier : app/api/sync-stream/route.ts
+import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "../../../lib/auth"; // Ton fichier auth
+import { authOptions } from "../../../lib/auth";
 import { supabaseAdmin } from "../../../lib/supabaseAdminClient";
 
 export async function POST(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-  const body = await req.json();
-  const { activityId, stravaId } = body;
-
-  if (!activityId || !stravaId) return NextResponse.json({ error: 'Missing ID' }, { status: 400 });
-
   try {
-    // 1. On récupère le Token Strava de l'user (Géré par NextAuth généralement)
-    // Note: Assure-toi d'avoir accès au accessToken Strava ici.
-    // Si tu le stockes en BDD lors du login, récupère-le ici.
-    // Pour l'exemple, supposons qu'il est dans la session ou récupéré via user_id
-    const { data: userData } = await supabaseAdmin
-        .from('users') // Ou ta table qui stocke les tokens
-        .select('strava_access_token')
-        .eq('id', session.user.id)
-        .single();
-        
-    const token = userData?.strava_access_token; // À adapter selon ton stockage
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    if (!token) return NextResponse.json({ error: 'No Token' }, { status: 401 });
+    const { activityId, stravaId } = await req.json();
+    
+    // 1. Récupérer le Token (Même logique que l'autre fichier)
+    const { data: user } = await supabaseAdmin
+      .from("users")
+      .select("strava_access_token, strava_refresh_token, strava_token_expires_at")
+      .eq("id", session.user.id)
+      .single();
 
-    // 2. Appel Strava (On ne prend que latlng pour l'instant pour économiser la payload)
-    const response = await fetch(`https://www.strava.com/api/v3/activities/${stravaId}/streams?keys=latlng,altitude,heartrate,watts,temp&key_by_type=true`, {      headers: { Authorization: `Bearer ${token}` }
-    });
+    if (!user) throw new Error("User not found");
+    
+    // (Logique de refresh token simplifiée ici, idéalement factorisée)
+    let accessToken = user.strava_access_token;
+    if (new Date().getTime() > new Date(user.strava_token_expires_at).getTime()) {
+        const tokenRes = await fetch("https://www.strava.com/oauth/token", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                client_id: process.env.STRAVA_CLIENT_ID,
+                client_secret: process.env.STRAVA_CLIENT_SECRET,
+                grant_type: "refresh_token",
+                refresh_token: user.strava_refresh_token,
+            }),
+        });
+        const tokens = await tokenRes.json();
+        if (tokens.access_token) {
+            accessToken = tokens.access_token;
+            await supabaseAdmin.from("users").update({
+                strava_access_token: tokens.access_token,
+                strava_refresh_token: tokens.refresh_token,
+                strava_token_expires_at: new Date(tokens.expires_at * 1000).toISOString()
+            }).eq("id", session.user.id);
+        }
+    }
 
-    if (!response.ok) throw new Error('Strava Error');
+    // 2. Appel Strava
+    // On demande explicitement key_by_type=true pour éviter les tableaux mélangés
+    const res = await fetch(
+      `https://www.strava.com/api/v3/activities/${stravaId}/streams?keys=time,distance,altitude,latlng,watts,heartrate,cadence,temp&key_by_type=true`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
 
-    const streamData = await response.json();
+    if (!res.ok) throw new Error("Failed to fetch streams from Strava");
+    
+    const stravaStreams = await res.json();
 
-    // 3. Sauvegarde en BDD (On remplit la colonne vide)
-    const { error: updateError } = await supabaseAdmin
-      .from('activities')
-      .update({ 
-        streams_data: streamData, // On sauvegarde tout le JSON
-        // Optionnel : On peut aussi extraire et sauver start_lat/lon en dur pour aller plus vite la prochaine fois
-      })
-      .eq('id', activityId);
+    // 🔥 LE FIX EST ICI : Parsing Sécurisé (comme dans l'autre fichier)
+    const getStreamData = (type: string) => {
+        if (stravaStreams[type]?.data) return stravaStreams[type].data;
+        if (Array.isArray(stravaStreams)) {
+            const found = stravaStreams.find((s: any) => s.type === type);
+            return found?.data || [];
+        }
+        return [];
+    };
 
-    if (updateError) throw updateError;
+    const streams = {
+        time: getStreamData('time'),
+        distance: getStreamData('distance'),
+        altitude: getStreamData('altitude'),
+        latlng: getStreamData('latlng'),
+        watts: getStreamData('watts'),
+        heartrate: getStreamData('heartrate'),
+        cadence: getStreamData('cadence'),
+        temp: getStreamData('temp'),
+    };
 
-    return NextResponse.json({ success: true, streams: streamData });
+    // 3. Sauvegarde (Update sans écraser les autres champs)
+    await supabaseAdmin
+        .from('activities')
+        .update({ streams_data: streams })
+        .eq('id', activityId);
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, streams });
 
-  } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: 'Sync Failed' }, { status: 500 });
+  } catch (error: any) {
+    console.error("[Sync Stream] Error:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
