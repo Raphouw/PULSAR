@@ -564,6 +564,18 @@ const saveLoadoutToDB = async () => {
       }
   }, [activeHoverEffect, activeFlipEffect, activeCardEffect, activePassiveEffect, activeClickEffect, activeTodayEffect]);
 
+
+    useEffect(() => {
+    // 1. On cache la scrollbar quand on arrive sur le calendrier
+    document.body.style.overflow = "hidden";
+
+    // 2. NETTOYAGE : On remet la scrollbar quand on quitte la page
+    return () => {
+      document.body.style.overflow = ""; // Ou "auto"
+    };
+  }, []);
+
+
 useEffect(() => {
     // Liste des classes possibles pour nettoyage
     const weatherClasses = ["bg-phase-night", "bg-phase-dawn", "bg-phase-day", "bg-phase-dusk"];
