@@ -20,6 +20,7 @@ export async function POST(req: Request) {
   const age = Number(formData.get('age'));
   const gender = formData.get('gender') as string;
   const weight = Number(formData.get('weight'));
+  const height = Number(formData.get('height'));
   const max_heart_rate = Number(formData.get('max_heart_rate'));
   const resting_heart_rate = Number(formData.get('resting_heart_rate'));
   const ftp = Number(formData.get('ftp'));
@@ -31,6 +32,7 @@ export async function POST(req: Request) {
 
   // --- VALIDATION SÉCURITÉ ---
   if (age < 10 || age > 100) return err("Âge invalide");
+  if (height < 80 || height > 220) return err("Taille invalide");
   if (weight < 40 || weight > 150) return err("Poids invalide");
   if (max_heart_rate < 100 || max_heart_rate > 250) return err("FC Max invalide");
   if (resting_heart_rate < 30 || resting_heart_rate > 120) return err("FC Repos invalide");
@@ -72,7 +74,7 @@ export async function POST(req: Request) {
 
   // --- MISE À JOUR BDD ---
   const updatePayload: any = {
-    age, gender, weight,
+    age, gender, weight, height,
     max_heart_rate, resting_heart_rate,
     ftp, vo2max,
     onboarding_completed: true

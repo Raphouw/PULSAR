@@ -102,6 +102,7 @@ export default function OnboardingClient({ user }: { user: any }) {
     age: user.age || '',
     gender: user.gender || 'Homme',
     weight: user.weight || '',
+    height: user.height || '',
     max_heart_rate: user.max_heart_rate || '',
     resting_heart_rate: user.resting_heart_rate || '',
     ftp: user.ftp || '',
@@ -123,6 +124,7 @@ export default function OnboardingClient({ user }: { user: any }) {
   const validateForm = () => {
     if (!formData.age || formData.age < 10) return "Âge invalide.";
     if (!formData.weight || formData.weight < 40) return "Poids invalide.";
+    if (!formData.height || formData.height < 80 || formData.height > 220) return "taille invalide.";
     if (!formData.max_heart_rate || formData.max_heart_rate < 100) return "FC Max invalide.";
     if (!formData.resting_heart_rate || formData.resting_heart_rate < 30) return "FC Repos invalide.";
     if (Number(formData.resting_heart_rate) >= Number(formData.max_heart_rate)) return "FC Repos doit être < FC Max.";
@@ -219,6 +221,8 @@ export default function OnboardingClient({ user }: { user: any }) {
             <OnboardingInput label="Âge" value={formData.age} unit="ans" placeholder="30" min={10} max={100} required onChange={(v:any) => updateField('age', v)} />
             <OnboardingSelect label="Genre" value={formData.gender} options={['Homme', 'Femme', 'Autre']} onChange={(v:any) => updateField('gender', v)} />
             <OnboardingInput label="Poids" value={formData.weight} unit="kg" color="#10b981" placeholder="70" min={40} max={150} required onChange={(v:any) => updateField('weight', v)} />
+            <OnboardingInput label="Taille" value={formData.height} unit="cm" color="#10b0b9ff" placeholder="175" min={80} max={220} required onChange={(v:any) => updateField('height', v)} />
+
          </div>
       </div>
 

@@ -440,17 +440,28 @@ const InteractiveAnalysisChart = ({ streams }: { streams: ActivityStreams }) => 
 
 const EvolutionAverageChart = ({ streams }: { streams: ActivityStreams }) => {
     
-    const calculateCumulativeAverage = (data: any[]) => {
+    // ⚡ MODIFICATION : Ajout du paramètre ignoreZeros
+    const calculateCumulativeAverage = (data: number[], ignoreZeros: boolean = false) => {
         const safeData = safeArray<number>(data);
         if (safeData.length === 0) return [];
         
         const averages: number[] = [];
         let cumulativeSum = 0;
+        let count = 0; // On utilise un compteur manuel pour gérer l'exclusion
         
         for (let i = 0; i < safeData.length; i++) {
             const value = Number(safeData[i] ?? 0);
-            cumulativeSum += value;
-            averages.push(cumulativeSum / (i + 1));
+            
+            // Si on ignore les zéros et que la valeur est 0 (ou très proche)
+            if (ignoreZeros && value <= 0.1) {
+                // On garde la moyenne précédente sans impacter le diviseur (count)
+                // Si c'est le tout début, on met 0
+                averages.push(count > 0 ? cumulativeSum / count : 0);
+            } else {
+                cumulativeSum += value;
+                count++;
+                averages.push(cumulativeSum / count);
+            }
         }
         return averages;
     };
@@ -458,21 +469,21 @@ const EvolutionAverageChart = ({ streams }: { streams: ActivityStreams }) => {
     const START_DISCARD_POINTS = 100; 
 
     const cumulativeData = useMemo(() => {
-        const timeStream = safeArray(streams?.time);
+        const timeStream = safeArray<number>(streams?.time);
         if (timeStream.length === 0) return [];
         
         const len = timeStream.length;
         const step = len > 3000 ? Math.ceil(len / 2000) : 1; 
 
-        // Initialisation et Subsampling
+        // Initialisation des tableaux
         const sampledWatts: number[] = [];
         const sampledHr: number[] = [];
         const sampledCadence: number[] = [];
         const sampledAltitudeRaw: number[] = [];
         const sampledDist: number[] = [];
-        const sampledSpeed: number[] = []; 
+        const sampledInstSpeed: number[] = []; // On stocke la vitesse instantanée ici
         
-        // 🔥 CORRECTION TYPE : Typage strict <number> pour permettre les maths
+        // Streams typés
         const wattsStream = safeArray<number>(streams.watts);
         const hrStream = safeArray<number>(streams.heartrate);
         const cadenceStream = safeArray<number>(streams.cadence);
@@ -485,19 +496,30 @@ const EvolutionAverageChart = ({ streams }: { streams: ActivityStreams }) => {
              sampledCadence.push(cadenceStream[i] ?? 0);
              sampledAltitudeRaw.push(altStream[i] ?? 0); 
              
-             // 🔥 L'ARME ATOMIQUE : Number() sur les valeurs extraites
-             const elapsedDist = Number(distStream[i] ?? 0);
-             const elapsedTime = Number(timeStream[i] ?? 0);
+             const currentDist = Number(distStream[i] ?? 0);
+             const currentTime = Number(timeStream[i] ?? 0);
+             sampledDist.push(currentDist);
 
-             sampledDist.push(elapsedDist);
-             const avgSpeed = elapsedTime > 0 ? (elapsedDist / elapsedTime) * 3.6 : 0;
-             sampledSpeed.push(avgSpeed);
+             // ⚡ CALCUL VITESSE INSTANTANÉE (Delta) pour le lissage
+             // On regarde le point précédent (i - step) pour avoir un delta cohérent
+             const prevDist = i >= step ? Number(distStream[i - step] ?? 0) : 0;
+             const prevTime = i >= step ? Number(timeStream[i - step] ?? 0) : 0;
+             
+             const deltaDist = currentDist - prevDist;
+             const deltaTime = currentTime - prevTime;
+
+             // Calcul km/h instantané sur le segment
+             const instSpeed = deltaTime > 0 ? (deltaDist / deltaTime) * 3.6 : 0;
+             sampledInstSpeed.push(instSpeed);
         }
         
         // Calculs Cumulatifs
-        const cumulativeWatts = calculateCumulativeAverage(sampledWatts);
+        const cumulativeWatts = calculateCumulativeAverage(sampledWatts, true); // On peut aussi ignorer les 0 watts si voulu (roue libre)
         const cumulativeHr = calculateCumulativeAverage(sampledHr);
-        const cumulativeCadence = calculateCumulativeAverage(sampledCadence);
+        const cumulativeCadence = calculateCumulativeAverage(sampledCadence, true); // Ignorer les 0 cadence est souvent pertinent
+
+        // ⚡ C'est ICI qu'on ignore les zéros pour la vitesse
+        const cumulativeSpeed = calculateCumulativeAverage(sampledInstSpeed, true);
 
         const data: any[] = [];
         for (let i = 0; i < cumulativeWatts.length; i++) {
@@ -507,7 +529,8 @@ const EvolutionAverageChart = ({ streams }: { streams: ActivityStreams }) => {
                 hr: cumulativeHr[i] ?? null,
                 cadence: cumulativeCadence[i] ?? null,
                 altitude: sampledAltitudeRaw[i] ?? null,
-                speed: sampledSpeed[i] ?? 0,
+                // On utilise la nouvelle moyenne cumulative calculée
+                speed: cumulativeSpeed[i] ?? 0, 
             });
         }
         

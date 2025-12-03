@@ -61,8 +61,6 @@ export async function POST(req: Request) {
         .select()
         .single();
 
-// ... (Reste du code inchangé) ...
-
     if (eventError) throw new Error(`Erreur Event: ${eventError.message}`);
 
     const eventId = event.id;

@@ -11,10 +11,10 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { weight, ftp, max_heart_rate, resting_heart_rate } = body;
+    const { weight, height, ftp, max_heart_rate, resting_heart_rate } = body;
 
     // Validation simple
-    if (!weight || !ftp) {
+    if (!weight || !ftp || !height) {
       return NextResponse.json({ error: "Poids et FTP sont requis" }, { status: 400 });
     }
 
@@ -22,6 +22,7 @@ export async function POST(req: Request) {
       .from("users")
       .update({
         weight: parseFloat(weight),
+        height: parseFloat(height),
         ftp: parseInt(ftp),
         max_heart_rate: parseInt(max_heart_rate) || null,
         resting_heart_rate: parseInt(resting_heart_rate) || null,

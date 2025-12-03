@@ -62,7 +62,7 @@ const credentialsProvider = CredentialsProvider({
     // 🔥 MODIF : On sélectionne onboarding_completed
     const { data: user, error } = await supabase
       .from("users")
-      .select("id, name, email, password_hash, strava_id, onboarding_completed") 
+      .select("id, name, email, password_hash, strava_id, onboarding_completed")
       .eq("email", credentials.email)
       .single();
 
@@ -104,7 +104,7 @@ export const authOptions: NextAuthOptions = {
     // CALLBACK JWT
     // -----------------------------------------------------------------
     async jwt({ token, user, account, profile, trigger, session }) {
-      
+
       // 🔥 MODIF : Gestion de la mise à jour manuelle (post-onboarding)
       if (trigger === "update" && session?.onboarding_completed !== undefined) {
         token.onboarding_completed = session.onboarding_completed;
@@ -117,7 +117,7 @@ export const authOptions: NextAuthOptions = {
         token.email = user.email;
         token.name = user.name;
         // 🔥 MODIF
-        token.onboarding_completed = user.onboarding_completed; 
+        token.onboarding_completed = user.onboarding_completed;
         return token;
       }
 
@@ -138,90 +138,87 @@ export const authOptions: NextAuthOptions = {
         let isOnboardingCompleted = false; // Par défaut pour Strava
 
         try {
-            // A. On cherche d'abord par STRAVA ID
+          // A. On cherche d'abord par STRAVA ID
+          // 🔥 MODIF : Ajout de onboarding_completed dans le select
+          let { data: existingUser, error: searchError } = await supabase
+            .from("users")
+            .select("id, email, strava_id, onboarding_completed")
+            .eq("strava_id", account.providerAccountId)
+            .single();
+
+          if (searchError && searchError.code !== 'PGRST116') {
+            console.error(">>> [JWT] Erreur recherche par ID:", searchError);
+          }
+
+          // B. Si pas trouvé par ID, on essaie par EMAIL
+          if (!existingUser && profile.email) {
             // 🔥 MODIF : Ajout de onboarding_completed dans le select
-            let { data: existingUser, error: searchError } = await supabase
+            const { data: emailUser, error: emailError } = await supabase
               .from("users")
               .select("id, email, strava_id, onboarding_completed")
-              .eq("strava_id", account.providerAccountId)
+              .eq("email", profile.email)
               .single();
-            
-            if (searchError && searchError.code !== 'PGRST116') {
-                console.error(">>> [JWT] Erreur recherche par ID:", searchError);
+
+            if (emailUser && !emailUser.strava_id) {
+              existingUser = emailUser;
+              console.log(">>> [JWT] Fusion détectée avec compte email existant.");
+            }
+          }
+
+          if (existingUser) {
+            // --- MISE À JOUR UTILISATEUR EXISTANT ---
+            userId = existingUser.id.toString();
+            isOnboardingCompleted = existingUser.onboarding_completed ?? false; // 🔥 MODIF
+
+            const { error: updateError } = await supabase.from("users").update(stravaData).eq("id", userId);
+            if (updateError) console.error(">>> [JWT] Erreur Update:", updateError);
+
+          } else {
+            // --- CRÉATION NOUVEL UTILISATEUR ---
+            console.log(">>> [JWT] Création nouvel utilisateur...");
+            const userName = (profile as any).username || (profile as any).firstname || 'Athlète Strava';
+
+            const insertPayload = {
+              ...stravaData,
+              name: userName,
+              email: userEmail,
+              onboarding_completed: false // <-- IMPORTANT
+            };
+
+            const { data: newUser, error: insertError } = await supabase
+              .from("users")
+              .insert(insertPayload)
+              .select("id")
+              .single();
+
+            if (insertError) {
+              console.error(">>> [JWT] ❌ ERREUR INSERTION:", JSON.stringify(insertError, null, 2));
             }
 
-            // B. Si pas trouvé par ID, on essaie par EMAIL
-            if (!existingUser && profile.email) {
-               // 🔥 MODIF : Ajout de onboarding_completed dans le select
-               const { data: emailUser, error: emailError } = await supabase
-                .from("users")
-                .select("id, email, strava_id, onboarding_completed")
-                .eq("email", profile.email)
-                .single();
-               
-               if (emailUser && !emailUser.strava_id) {
-                   existingUser = emailUser;
-                   console.log(">>> [JWT] Fusion détectée avec compte email existant.");
-               }
+            if (newUser) {
+              userId = newUser.id.toString();
+              isOnboardingCompleted = false; // Nouveau user = onboarding à faire
             }
+          }
 
-            if (existingUser) {
-              // --- MISE À JOUR UTILISATEUR EXISTANT ---
-              userId = existingUser.id.toString();
-              isOnboardingCompleted = existingUser.onboarding_completed ?? false; // 🔥 MODIF
-
-              const { error: updateError } = await supabase.from("users").update(stravaData).eq("id", userId);
-              if (updateError) console.error(">>> [JWT] Erreur Update:", updateError);
-
-            } else {
-              // --- CRÉATION NOUVEL UTILISATEUR ---
-              console.log(">>> [JWT] Création nouvel utilisateur...");
-              const userName = (profile as any).username || (profile as any).firstname || 'Athlète Strava';
-              
-              const insertPayload = {
-                  ...stravaData,
-                  name: userName,
-                  email: userEmail,
-                  // 🔥 MODIF : On enlève le poids et la FTP par défaut pour forcer l'onboarding
-                  // weight: 75,  <-- SUPPRIMÉ
-                  // ftp: 200,    <-- SUPPRIMÉ
-                  onboarding_completed: false // <-- IMPORTANT
-              };
-              
-              const { data: newUser, error: insertError } = await supabase
-                .from("users")
-                .insert(insertPayload)
-                .select("id")
-                .single();
-
-              if (insertError) {
-                  console.error(">>> [JWT] ❌ ERREUR INSERTION:", JSON.stringify(insertError, null, 2));
-              }
-
-              if (newUser) {
-                  userId = newUser.id.toString();
-                  isOnboardingCompleted = false; // Nouveau user = onboarding à faire
-              }
-            }
-
-            // Mise à jour du Token
-            if (userId) {
-                token.userId = userId;
-                token.strava_id = account.providerAccountId;
-                token.justConnectedStrava = true;
-                token.name = (profile as any).username ?? 'Athlète Strava';
-                token.email = userEmail;
-                token.onboarding_completed = isOnboardingCompleted; // 🔥 MODIF
-            }
+          // Mise à jour du Token
+          if (userId) {
+            token.userId = userId;
+            token.strava_id = account.providerAccountId;
+            token.justConnectedStrava = true;
+            token.name = (profile as any).username ?? 'Athlète Strava';
+            token.email = userEmail;
+            token.onboarding_completed = isOnboardingCompleted; // 🔥 MODIF
+          }
 
         } catch (err) {
-            console.error(">>> [JWT] 💥 Exception non gérée:", err);
+          console.error(">>> [JWT] 💥 Exception non gérée:", err);
         }
 
         token.access_token = account.access_token;
         token.refresh_token = account.refresh_token;
         token.expires_at = account.expires_at;
-        
+
         return token;
       }
 
@@ -257,21 +254,21 @@ export const authOptions: NextAuthOptions = {
       session.user.strava_id = token.strava_id;
       session.user.name = token.name;
       session.user.email = token.email;
-      
+
       // 🔥 MODIF : On passe l'info à la session (utilisé par le middleware et le front)
       // Note: Il faut tricher avec "as any" si tu n'as pas encore fait le fichier de types
-      (session.user as any).onboarding_completed = token.onboarding_completed; 
+      (session.user as any).onboarding_completed = token.onboarding_completed;
 
       session.access_token = token.access_token;
       session.refresh_token = token.refresh_token;
       session.expires_at = token.expires_at;
-      
+
       if (token.justConnectedStrava) session.justConnectedStrava = true;
       if (token.error) session.error = token.error;
 
       return session;
     },
-    
+
     async redirect({ url, baseUrl }) {
       if (url.startsWith('/')) return `${baseUrl}${url}`;
       else if (new URL(url).origin === baseUrl) return url;
