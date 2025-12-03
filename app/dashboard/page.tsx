@@ -370,7 +370,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     const scoreMonth = computePeriodScore(processedStats.month, processedStats.prevMonth);
     const score30j = computePeriodScore(processedStats.last30, processedStats.prev30);
     const score90j = computePeriodScore(processedStats.last90, processedStats.prev90);
-    const globalScore = (score7j + scoreMonth + score30j + score90j) / 4;
+    const globalScore = (1*score7j + 1*scoreMonth + 4*score30j + 12*score90j) / 18;
 
     return {
       allTimeStats,
