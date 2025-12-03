@@ -2488,4 +2488,3 @@ export default function ProfileClient({ profile: initialProfile }: { profile?: U
   )
 
 }
-} 
