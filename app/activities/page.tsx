@@ -14,7 +14,7 @@ async function getActivities(userId: string, page: number): Promise<{ activities
   const activitiesPromise = supabaseAdmin
     .from("activities")
     .select(
-      "id, name, distance_km, elevation_gain_m, start_time, avg_speed_kmh, avg_power_w, tss, polyline"
+      "id, name, distance_km, elevation_gain_m, start_time, avg_speed_kmh, avg_power_w, tss, polyline, duration_s, type"
     )
     .eq("user_id", userId)
     .order("start_time", { ascending: false })

@@ -16,63 +16,97 @@ interface Badge {
   label: string;
   color: string;
   icon?: string;
-  category: 'distance' | 'elevation' | 'special';
+  category: 'distance' | 'elevation' | 'special' | 'HT' | 'intensity';
 }
 
 interface FilterOptions {
   distances: Set<'short' | 'medium' | 'long' | 'ultra'>;
   terrains: Set<'flat' | 'hilly' | 'mountain'>;
+  Home_trainer: Set<'HT'>;
+  IntensityHT: Set<'Recup' | 'Z2' | 'Tempo'| 'SS' | 'Intense'>;
   specialBadge: 'all' | 'power' | 'speed' | 'distance' | 'elevation' | 'tss';
 }
 
 function ActivityCard({ activity, specialBadges, onDelete }: { activity: ActivityCardData; specialBadges: Map<string, Badge>; onDelete: (id: number) => void; }) {
   const [isHovered, setIsHovered] = useState(false);
   
+  // --- LOGIQUE STANDARD (EXTÉRIEUR) ---
   const getDistanceBadge = (distanceKm: number): Badge => {
-    if (distanceKm < 50) {
-      return { label: 'Courte', color: '#10b981', category: 'distance' };
-    } else if (distanceKm < 100) {
-      return { label: 'Moyenne', color: '#ff6b9d', category: 'distance' };
-    } else if (distanceKm < 250 ){
-      return { label: 'Longue', color: '#d04fd7', category: 'distance' };
-    } else{
-      return { label: 'Ultra', color: '#f4079dff', category: 'distance' };
-
-
-    }
-    
-    
+    if (distanceKm < 50) return { label: 'Courte', color: '#00F5FF', category: 'distance' };
+    if (distanceKm < 100) return { label: 'Moyenne', color: '#00FF8F', category: 'distance' };
+    if (distanceKm < 250 ) return { label: 'Longue', color: '#F8FF00', category: 'distance' };
+    return { label: 'Ultra', color: '#FF00E0', category: 'distance' };
   };
 
   const getElevationBadge = (elevationM: number, distanceKm: number): Badge => {
-    const elevationPerKm = distanceKm > 0 ? elevationM / distanceKm : 0; // Added check for distanceKm to avoid division by zero
-    if (elevationPerKm < 10) {
-      return { label: 'Plate', color: '#3b82f6', category: 'elevation' };
-    } else if (elevationPerKm < 20) {
-      return { label: 'Accidentée', color: '#f59e0b', category: 'elevation' };
-    } else {
-      return { label: 'Montagneuse', color: '#ef4444', category: 'elevation' };
-    }
+    const elevationPerKm = distanceKm > 0 ? elevationM / distanceKm : 0;
+    if (elevationPerKm < 10) return { label: 'Plate', color: '#00FFBF', category: 'elevation' };
+    if (elevationPerKm < 20) return { label: 'Accidentée', color: '#F7FF00', category: 'elevation' };
+    return { label: 'Montagneuse', color: '#FF0066', category: 'elevation' };
   };
 
-  const distanceBadge = getDistanceBadge(activity.distance_km ?? 0);
-  const elevationBadge = getElevationBadge(activity.elevation_gain_m ?? 0, activity.distance_km ?? 1);
+  // --- LOGIQUE HOME TRAINER ---
+  const getIntensityBadge = (tss: number, durationSeconds: number): Badge => {
+    // Sécurité division par zéro
+    if (!durationSeconds || durationSeconds === 0) return { label: 'Endurance Z2', color: '#10b981', category: 'special' };
+    
+    const durationHours = durationSeconds / 3600;
+    const tssPerHour = tss / durationHours;
+
+    if (tssPerHour >= 90) {
+        return { label: 'Intense', color: '#FF0033', category: 'intensity' }; // Rouge
+    } else if (tssPerHour >= 70) {
+        return { label: 'SweeSpot ', color: '#ff8400ff', category: 'intensity' }; // Orange   
+    } 
+     else if (tssPerHour >= 55) {
+        return { label: 'Tempo', color: '#FFB800', category: 'intensity' }; // Orange
+    } else if (tssPerHour >= 40){
+        return { label: 'Z2', color: '#00FF88', category: 'intensity' }; // Vert
+    } else {
+        return { label: 'Récup', color: '#00fff7ff', category: 'intensity' }; // Vert
+    }
+
+  };
+
+  // --- CONSTRUCTION DES BADGES ---
+  const isVirtual = activity.type === 'VirtualRide';
+  let displayedBadges: Badge[] = [];
+
+  if (isVirtual) {
+    // 1. Badge Home Trainer (Unique)
+    displayedBadges.push({ 
+        label: 'Home Trainer', 
+        color: '#C900FF', // Violet Néon style Zwift
+        icon: '', 
+        category: 'HT' 
+    });
+
+    // 2. Badge Intensité (Basé sur TSS/h)
+    const intensityBadge = getIntensityBadge(activity.tss ?? 0, activity.duration_s ?? 0);
+    displayedBadges.push(intensityBadge);
+
+  } else {
+    // Logique Classique (Extérieur)
+    displayedBadges.push(getDistanceBadge(activity.distance_km ?? 0));
+    displayedBadges.push(getElevationBadge(activity.elevation_gain_m ?? 0, activity.distance_km ?? 1));
+    const intensityBadge = getIntensityBadge(activity.tss ?? 0, activity.duration_s ?? 0);
+    displayedBadges.push(intensityBadge);
+  }
+
+  // 3. Badge Global Spécial (Watt Max, Fusée, etc.) - On le garde toujours car c'est une distinction
   const specialBadge = specialBadges.get(String(activity.id)); 
-  
-  const displayedBadges = [distanceBadge, elevationBadge];
   if (specialBadge) {
     displayedBadges.push(specialBadge);
   }
 
-const handleDeleteClick = (e: React.MouseEvent) => {
-    e.preventDefault(); // Empêche la navigation
-    e.stopPropagation(); // Arrête la propagation
+  // --- DELETE HANDLER ---
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     onDelete(activity.id);
   };
 
-
- return (
-    // 1. WRAPPER RELATIF POUR CONTENIR LE LIEN ET LE BOUTON
+  return (
     <div 
       style={{ position: 'relative' }}
       onMouseEnter={() => setIsHovered(true)}
@@ -107,6 +141,7 @@ const handleDeleteClick = (e: React.MouseEvent) => {
                         </p>
                     </div>
                     
+                    {/* BADGES SECTION */}
                     <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '1.25rem', minHeight: '32px' }}>
                         {displayedBadges.map((badge, index) => (
                         <span 
@@ -144,7 +179,6 @@ const handleDeleteClick = (e: React.MouseEvent) => {
             </div>
         </Link>
 
-        {/* 2. BOUTON SUPPRIMER (Affiché au survol) */}
         {isHovered && (
             <button 
                 onClick={handleDeleteClick}
@@ -186,6 +220,8 @@ export default function ActivityClient({
   const [filters, setFilters] = useState<FilterOptions>({
     distances: new Set(),
     terrains: new Set(),
+    Home_trainer: new Set(),
+    IntensityHT: new Set(),
     specialBadge: 'all',
   });
   
@@ -260,10 +296,34 @@ export default function ActivityClient({
     if (filters.distances.size > 0) {
       filtered = filtered.filter(act => {
         const distanceKm = act.distance_km ?? 0;
-        if (filters.distances.has('short') && distanceKm < 50) return true;
-        if (filters.distances.has('medium') && distanceKm >= 50 && distanceKm < 100) return true;
-        if (filters.distances.has('long') && distanceKm >= 100 && distanceKm < 250) return true;
-        if (filters.distances.has('ultra') && distanceKm >= 250) return true;
+        if (filters.distances.has('short') && distanceKm < 50 && act.type == "Ride") return true;
+        if (filters.distances.has('medium') && distanceKm >= 50 && distanceKm < 100 && act.type == "Ride") return true;
+        if (filters.distances.has('long') && distanceKm >= 100 && distanceKm < 250 && act.type == "Ride") return true;
+        if (filters.distances.has('ultra') && distanceKm >= 250 && act.type == "Ride") return true;
+        return false;
+      });
+    }
+
+    if (filters.Home_trainer.has('HT')) {
+       filtered = filtered.filter(act => act.type === 'VirtualRide');
+    }
+
+    // 3. 🔥 Filtre Intensité (Calculé via TSS/h)
+    if (filters.IntensityHT.size > 0) {
+      filtered = filtered.filter(act => {
+        // Sécurité division
+        if (!act.duration_s || act.duration_s === 0) return false; 
+        const durationHours = act.duration_s / 3600;
+        // Si durée < 3 min, calcul peu pertinent
+        if (durationHours < 0.05) return false; 
+
+        const tssPerHour = (act.tss ?? 0) / durationHours;
+        
+        if (filters.IntensityHT.has('Intense') && tssPerHour >= 85) return true;
+        if (filters.IntensityHT.has('SS') && tssPerHour >= 70 && tssPerHour < 90) return true;
+        if (filters.IntensityHT.has('Tempo') && tssPerHour >= 55 && tssPerHour < 70) return true;
+        if (filters.IntensityHT.has('Z2') && tssPerHour >= 40 && tssPerHour < 55) return true;
+        if (filters.IntensityHT.has('Recup') && tssPerHour < 40) return true;
         return false;
       });
     }
@@ -272,9 +332,9 @@ export default function ActivityClient({
     if (filters.terrains.size > 0) {
       filtered = filtered.filter(act => {
         const elevationPerKm = (act.elevation_gain_m ?? 0) / (act.distance_km ?? 1);
-        if (filters.terrains.has('flat') && elevationPerKm < 10) return true;
-        if (filters.terrains.has('hilly') && elevationPerKm >= 10 && elevationPerKm < 20) return true;
-        if (filters.terrains.has('mountain') && elevationPerKm >= 20) return true;
+        if (filters.terrains.has('flat') && elevationPerKm < 10 && act.type == "Ride") return true;
+        if (filters.terrains.has('hilly') && elevationPerKm >= 10 && elevationPerKm < 20 && act.type == "Ride") return true;
+        if (filters.terrains.has('mountain') && elevationPerKm >= 20 && act.type == "Ride") return true;
         return false;
       });
     }
@@ -395,6 +455,27 @@ export default function ActivityClient({
         newDistances.add(type);
       }
       return { ...prev, distances: newDistances };
+    });
+    setDisplayedPage(1);
+  };
+
+  const toggleHTFilter = () => {
+    setFilters(prev => {
+      const newHT = new Set(prev.Home_trainer);
+      if (newHT.has('HT')) newHT.delete('HT');
+      else newHT.add('HT');
+      return { ...prev, Home_trainer: newHT };
+    });
+    setDisplayedPage(1);
+  };
+
+  // 🔥 Logique Toggle Intensité
+  const toggleIntensityFilter = (type: 'Z2' | 'SS' | 'Intense' | 'Tempo' | 'Recup') => {
+    setFilters(prev => {
+      const newIntensity = new Set(prev.IntensityHT);
+      if (newIntensity.has(type)) newIntensity.delete(type);
+      else newIntensity.add(type);
+      return { ...prev, IntensityHT: newIntensity };
     });
     setDisplayedPage(1);
   };
@@ -660,14 +741,18 @@ export default function ActivityClient({
               }}
               style={sortSelectStyle}
             >
-              <option value="date_desc">Plus récent</option>
-              <option value="date_asc">Plus ancien</option>
-              <option value="dist_desc">Distance ⬇️</option>
-              <option value="dist_asc">Distance ⬆️</option>
-              <option value="elev_desc">Dénivelé ⬇️</option>
-              <option value="elev_asc">Dénivelé ⬆️</option>
-              <option value="pmoy_desc">Pmoy ⬇️</option>
-              <option value="pmoy_asc">Pmoy ⬆️</option>
+              <option value="date_desc">📅 Plus récent</option>
+            <option value="date_asc">📅 Plus ancien</option>
+
+            <option value="dist_desc">📏 Distance ↓</option>
+            <option value="dist_asc">📏 Distance ↑</option>
+
+            <option value="elev_desc">⛰️ Dénivelé ↓</option>
+            <option value="elev_asc">⛰️ Dénivelé ↑</option>
+
+            <option value="pmoy_desc">⚡ Puissance moy. ↓</option>
+            <option value="pmoy_asc">⚡ Puissance moy. ↑</option>
+
             </select>
           </div>
         </div>
@@ -746,6 +831,30 @@ export default function ActivityClient({
                 Montagne
               </button>
             </div>
+          </div>
+
+          <div style={filterGroupStyle}>
+             <div style={filterGroupLabelStyle}>Type & Intensité</div>
+             <div style={filterButtonsStyle}>
+                {/* Bouton HT */}
+                <button
+                    onClick={toggleHTFilter}
+                    style={{
+                        ...filterButtonStyle,
+                        ...(filters.Home_trainer.has('HT') ? { ...filterButtonActiveStyle, borderColor: '#cc13d6', boxShadow: '0 4px 15px rgba(204, 19, 214, 0.4)', background: 'linear-gradient(135deg, #cc13d6 0%, #a855f7 100%)' } : {})
+                    }}
+                >
+                    Home Trainer
+                </button>
+
+                {/* Boutons Intensité */}
+                <button onClick={() => toggleIntensityFilter('Recup')} style={{...filterButtonStyle, ...(filters.IntensityHT.has('Recup') ? { ...filterButtonActiveStyle, background: '#00fff7ff', borderColor: '#00fff7ff' } : {})}}>Recup</button>
+                <button onClick={() => toggleIntensityFilter('Z2')} style={{...filterButtonStyle, ...(filters.IntensityHT.has('Z2') ? { ...filterButtonActiveStyle, background: '#00FF88', borderColor: '#00FF88' } : {})}}>Z2</button>
+                <button onClick={() => toggleIntensityFilter('Tempo')} style={{...filterButtonStyle, ...(filters.IntensityHT.has('Tempo') ? { ...filterButtonActiveStyle, background: '#FFB800', borderColor: '#FFB800' } : {})}}>Tempo</button>
+                <button onClick={() => toggleIntensityFilter('SS')} style={{...filterButtonStyle, ...(filters.IntensityHT.has('SS') ? { ...filterButtonActiveStyle, background: '#ff8400ff', borderColor: '#ff8400ff' } : {})}}>SweetSpot</button>
+                <button onClick={() => toggleIntensityFilter('Intense')} style={{...filterButtonStyle, ...(filters.IntensityHT.has('Intense') ? { ...filterButtonActiveStyle, background: '#FF0033', borderColor: '#FF0033' } : {})}}>Intense</button>
+
+             </div>
           </div>
 
           <div style={filterGroupStyle}>
@@ -1091,7 +1200,7 @@ const sortSelectStyle: React.CSSProperties = {
 
 const multiFiltersRowStyle: React.CSSProperties = {
   display: 'flex',
-  gap: '1.5rem',
+  gap: '1rem',
   flexWrap: 'wrap',
 };
 

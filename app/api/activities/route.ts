@@ -18,7 +18,7 @@ export async function GET(req: Request) {
     const { data: activities, error } = await supabaseAdmin
       .from("activities")
       // On sélectionne les champs nécessaires pour les cartes (optimisé, sans streams lourds)
-      .select("id, name, start_time, distance_km, elevation_gain_m, duration_s, avg_speed_kmh, avg_power_w, tss, polyline")
+      .select("id, name, start_time, distance_km, elevation_gain_m, duration_s, avg_speed_kmh, avg_power_w, tss, polyline, duration_s, type")
       .eq("user_id", userId)
       .order("start_time", { ascending: false }); // Du plus récent au plus ancien par défaut
 

@@ -170,6 +170,8 @@ export type ActivityCardData = {
   avg_speed_kmh: number;
   avg_power_w: number | null;
   tss: number | null;
+  type?: string | null;
+  duration_s?: number | 0;
   polyline: { polyline: string } | null;
 };
 
