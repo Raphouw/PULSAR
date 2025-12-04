@@ -588,7 +588,7 @@ export default function CalendarClient({ activities, initialShopData }: { activi
             <div style={{ padding: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
                 <div>
                     <h2 style={{ fontSize: "1.8rem", fontWeight: 900, color: "#fff", display: "flex", gap: "0.8rem", alignItems: 'center', margin: 0, letterSpacing:'-1px' }}>
-                        <ShoppingBag size={28} color="#d04fd7" /> ARMURERIE
+                        <ShoppingBag size={28} color="#d04fd7" /> BOUTIQUE
                     </h2>
                     <p style={{ margin: '5px 0 0 0', color: '#666', fontSize: '0.8rem', fontWeight: 600 }}>PERSONNALISEZ VOTRE EXPÉRIENCE</p>
                 </div>
@@ -638,7 +638,7 @@ export default function CalendarClient({ activities, initialShopData }: { activi
                                                 color: '#fff', fontWeight: 800, cursor: 'pointer', textTransform: 'uppercase', fontSize: '0.8rem'
                                             }}
                                         >
-                                            {loadout[selectedEffect.slot] === selectedEffect.id ? "RETIRER DE L'ÉQUIPEMENT" : "ÉQUIPER MAINTENANT"}
+                                            {loadout[selectedEffect.slot] === selectedEffect.id ? "RETIRER LE COSMÉTIQUE" : "ÉQUIPER MAINTENANT"}
                                         </button>
                                     ) : (
                                         <button 
@@ -668,7 +668,7 @@ export default function CalendarClient({ activities, initialShopData }: { activi
                     {/* HOTBAR INVENTAIRE */}
                     <div className="loadout-container">
                         <div style={{display:'flex', justifyContent:'space-between', marginBottom:'0.5rem'}}>
-                            <div className="loadout-title"><Backpack size={12}/> Équipement</div>
+                            <div className="loadout-title"><Backpack size={12}/> COSMÉTIQUES</div>
                             <button onClick={unequipAll} className="unequip-btn"><Trash2 size={10} style={{display:'inline', marginRight:4}}/>Tout retirer</button>
                         </div>
                         <div className="inventory-bar">
