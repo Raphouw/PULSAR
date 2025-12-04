@@ -18,41 +18,69 @@ export const getTssColor = (tss: number) => {
 
 export const calculateWallet = (activities: CalendarActivity[]) => {
   let totalPoints = 0;
-  
-  // 1. Calcul par activité (Base + Intensité)
-  activities.forEach(act => {
-    const tss = act.tss || 0;
-    let points = tss;
+  const processedWeeks: Set<string> = new Set();
+  const weekCounts: Record<string, number> = {};
 
+  activities.forEach(act => {
+    // 🔥 On utilise l'estimation si le vrai TSS manque
+    const effectiveTSS = act.tss || estimateTSS(act);
+    
     // Bonus "No Pain No Gain"
-    if (tss >= 200) {
-      points = Math.floor(tss * 1.5); // +50%
-    } else if (tss >= 100) {
-      points = Math.floor(tss * 1.2); // +20%
-    }
+    let points = effectiveTSS;
+    if (effectiveTSS >= 200) points = Math.floor(effectiveTSS * 1.5);
+    else if (effectiveTSS >= 100) points = Math.floor(effectiveTSS * 1.2);
 
     totalPoints += points;
-  });
 
-  // 2. Bonus Constance (Semaines complètes)
-  // On regroupe par semaine (ISO week)
-  const weeks: Record<string, number> = {};
-  activities.forEach(act => {
+    // Logique Semaine
     const date = new Date(act.start_time);
-    // Clé unique par semaine (ex: "2025-W42")
     const onejan = new Date(date.getFullYear(), 0, 1);
     const weekNum = Math.ceil((((date.getTime() - onejan.getTime()) / 86400000) + onejan.getDay() + 1) / 7);
     const key = `${date.getFullYear()}-W${weekNum}`;
-    
-    weeks[key] = (weeks[key] || 0) + 1;
+    weekCounts[key] = (weekCounts[key] || 0) + 1;
   });
 
-  // Si une semaine a au moins 4 sorties (ou 5 selon ta rigueur), on donne un bonus
-  Object.values(weeks).forEach(count => {
-    if (count >= 4) totalPoints += 150; // Salaire hebdo
+  // Bonus Constance
+  Object.values(weekCounts).forEach(count => {
+    if (count >= 4) totalPoints += 150;
   });
 
   return Math.round(totalPoints);
+};
+
+export const estimateTSS = (act: CalendarActivity): number => {
+  // Si Strava a déjà donné le TSS ou l'Intensity Factor, on prend.
+  if (act.tss && act.tss > 0) return act.tss;
+
+  const hours = act.duration_s / 3600;
+  if (hours <= 0) return 0;
+
+  // Cas A : On a la Fréquence Cardiaque (FC)
+  // Formule simplifiée TRIMP : On estime l'intensité basée sur la FC moyenne
+  // Hypothèse : FC Max standard 190 si inconnue.
+  if (act.avg_heartrate && act.avg_heartrate > 0) {
+     const hrMax = act.max_heartrate || 190; 
+     const intensity = act.avg_heartrate / hrMax;
+     
+     // Formule approximative : TSS = (sec x IF x IF) / (3600 x 100) * 100 (Facteur ajusté)
+     // On simule un IF (Intensity Factor) linéaire par rapport à la FC
+     let estimatedIF = 0.5; // Balade
+     if (intensity > 0.6) estimatedIF = 0.6; // Endurance
+     if (intensity > 0.7) estimatedIF = 0.7; // Tempo
+     if (intensity > 0.8) estimatedIF = 0.85; // Seuil
+     if (intensity > 0.9) estimatedIF = 0.95; // VO2
+
+     return Math.round(100 * hours * (estimatedIF * estimatedIF));
+  }
+
+  // Cas B : On a juste la vitesse/distance (Pas précis, mais mieux que rien)
+  // On attribue un score forfaitaire bas (TSS 30-40 / heure pour du roulage moyen)
+  const speed = act.avg_speed_kmh || 0;
+  let tssPerHour = 30; // Balade cool
+  if (speed > 25) tssPerHour = 50;
+  if (speed > 30) tssPerHour = 70; // Ça commence à appuyer
+
+  return Math.round(hours * tssPerHour);
 };
 
 export const getStreakConfig = (streakIndex: number) => {
@@ -367,4 +395,30 @@ export const getStartCoordFromPolyline = (encoded: string): { lat: number, lon: 
   return { lat: lat * 1e-5, lon: lng * 1e-5 };
 };
 
+export const resolveCardClass = (
+    hasActivity: boolean,
+    isToday: boolean,
+    slotStyles: { frame?: string | null, smart?: string | null, today?: string | null }
+): string => {
+    let classes = "day-cell"; // Classe de base
+
+    // Priorité 1 : Le Réacteur (Today) écrase tout
+    if (isToday && slotStyles.today === "reactor_today") {
+        return `${classes} today-reactor`;
+    }
+
+    // Priorité 2 : Style "Smart" (Analyse IA) SI pas de cosmétique cadre forcé
+    // OU si on veut que le cosmétique cadre s'ajoute au smart (à décider, ici on sépare)
+    if (slotStyles.smart) {
+        classes += ` ${slotStyles.smart}`;
+    }
+
+    // Priorité 3 : Cadre Cosmétique (Acheté)
+    // S'ajoute par dessus le smart (ex: bordure néon sur une carte "montagne")
+    if (hasActivity && slotStyles.frame) {
+        classes += ` ${slotStyles.frame}`;
+    }
+
+    return classes;
+};
 

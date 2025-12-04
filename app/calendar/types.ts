@@ -1,5 +1,5 @@
 // --- TYPES ---
- export type CalendarActivity = {
+export type CalendarActivity = {
   id: number
   name: string
   start_time: string
@@ -15,20 +15,27 @@
   max_heartrate?: number | null
   avg_speed_kmh?: number | null
   calories_kcal?: number | null
+  // Nouveaux champs pour l'estimation
+  estimated_tss?: number 
 }
 
+
+export type EffectSlot = 
+  | "FRAME"       // Bordure passive (Néon, Mercure, Magma) - Change l'aspect de la case
+  | "HOVER"       // Au survol (Prisme, Lampe torche, Particules)
+  | "INTERACTION" // Au clic (Explosion, Trou noir, Shatter)
+  | "AMBIANCE"    // Global (Météo, Analyse IA) - Affecte tout l'écran ou le calcul
+  | "TODAY"       // Spécifique à la case d'aujourd'hui (Réacteur)
+
+
+
 export type UserLoadout = {
-  hover: string | null
-  flip: string | null
-  card: string | null
-  passive: string | null
-  click: string | null
-  today: string | null // Pour le réacteur
+  [key in EffectSlot]: string | null // Un ID d'effet par slot
 }
 
 export type ShopData = {
   spentTSS: number
-  ownedEffects: string[] // Liste des IDs ['black_hole', 'neon_frame']
+  ownedEffects: string[]
   loadout: UserLoadout
 }
 
@@ -50,9 +57,9 @@ export type ShopEffect = {
   name: string
   description: string
   price: number
-  type: "hover" | "flip" | "card" | "click" | "passive"
-  preview: string
-  colors: string[]
-  owned: boolean
-  cssClass?: string
+  slot: EffectSlot // 🔥 REMPLACE "type" pour être plus strict
+  preview: string  // Emoji ou icône
+  colors: string[] // Pour les particules
+  cssClass?: string // La classe CSS appliquée
+  requiresActivity?: boolean // True si l'effet ne marche que sur une case active (ex: Pulse)
 }

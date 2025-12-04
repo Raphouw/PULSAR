@@ -510,11 +510,11 @@ export default function DashboardClient({ data, session: serverSession, hasStrav
       if (!res.ok) throw new Error("Erreur Strava");
       const result = await res.json();
       
-      let dismissTime = 1500; // Par défaut : rapide (1.5s)
+      let dismissTime = 1000; // Par défaut : rapide (1.5s)
 
       if (result.imported > 0) {
         setCheckMessage(`+${result.imported} activité(s) !`);
-        dismissTime = 4000; // Plus long si on a des infos à lire
+        dismissTime = 1500; // Plus long si on a des infos à lire
         
         if (result.brokenRecords?.length > 0) {
             setNewRecords(result.brokenRecords);

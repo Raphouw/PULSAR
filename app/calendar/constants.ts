@@ -83,113 +83,258 @@ export const PUNCHLINES = {
 }
 
 export const SHOP_EFFECTS: ShopEffect[] = [
-{ id: "neon_frame", name: "Cadre Néon", description: "Bordure lumineuse cybernétique.", price: 3500, type: "passive", preview: "🟣", colors: ["#d04fd7", "#00f3ff"], owned: false, cssClass: "effect-neon" },
-  { id: "mercury_border", name: "Mercure T-1000", description: "Bordure en métal liquide mouvant.", price: 20000, type: "passive", preview: "💧", colors: ["#silver", "#ffffff"], owned: false, cssClass: "effect-mercury" },
-  { id: "divine_glow", name: "Aura Divine", description: "Pulsation dorée sacrée.", price: 20000, type: "passive", preview: "🌞", colors: ["#ffd700"], owned: false, cssClass: "effect-divine" },
-  {
-    id: "shiny_card",
-    name: "Holographique",
-    description: "Finition rare 'Carte à collectionner'.",
-    price: 100,
-    type: "passive",
-    preview: "✨",
-    colors: ["#fff"],
-    owned: false,
-    cssClass: "effect-holo"
+  // --- SLOT: FRAME (Bordures & Apparence de la case) ---
+  // Une seule bordure à la fois !
+  { 
+    id: "neon_frame", 
+    slot: "FRAME",
+    name: "Cadre Néon", 
+    description: "Bordure lumineuse cybernétique.", 
+    price: 350, 
+    preview: "🟣", 
+    colors: ["#d04fd7", "#00f3ff"], 
+    cssClass: "effect-neon",
+    requiresActivity: true 
   },
-   {
-    id: "magma_border",
-    name: "Magma",
-    description: "Bordure en fusion constante.",
-    price: 80,
-    type: "passive",
-    preview: "🌋",
-    colors: ["#ef4444", "#f59e0b"],
-    owned: false,
-    cssClass: "effect-magma"
+  { 
+    id: "mercury_border", 
+    slot: "FRAME",
+    name: "Mercure T-1000", 
+    description: "Bordure en métal liquide mouvant.", 
+    price: 2000, 
+    preview: "💧", 
+    colors: ["#silver", "#ffffff"], 
+    cssClass: "effect-mercury",
+    requiresActivity: true 
+  },
+  { 
+    id: "magma_border", 
+    slot: "FRAME",
+    name: "Magma", 
+    description: "Bordure en fusion constante.", 
+    price: 80, 
+    preview: "🌋", 
+    colors: ["#ef4444", "#f59e0b"], 
+    cssClass: "effect-magma",
+    requiresActivity: true 
+  },
+  { 
+    id: "divine_glow", 
+    slot: "FRAME",
+    name: "Aura Divine", 
+    description: "Pulsation dorée sacrée.", 
+    price: 2000, 
+    preview: "🌞", 
+    colors: ["#ffd700"], 
+    cssClass: "effect-divine",
+    requiresActivity: true 
+  },
+  {
+    id: "pulse",
+    slot: "FRAME", // J'ai déplacé Pulse en FRAME car c'est un effet visuel permanent
+    name: "Cardio",
+    description: "Battement synchronisé au cœur.",
+    price: 1500,
+    preview: "❤️",
+    colors: ["#ef4444"],
+    cssClass: "effect-pulse",
+    requiresActivity: true
   },
   {
     id: "glitch_mode",
+    slot: "FRAME",
     name: "Cyber Glitch",
     description: "La carte tremble au survol.",
     price: 50,
-    type: "passive",
     preview: "📺",
     colors: ["#00f3ff"],
-    owned: false,
-    cssClass: "effect-glitch"
+    cssClass: "effect-glitch",
+    requiresActivity: true
   },
-  
-  // --- SLOT FOND (Passifs Ambiance) ---
-  { id: "weather_dynamic", name: "Météo Live", description: "Le fond change selon l'heure.", price: 50000, type: "passive", preview: "🌤️", colors: ["#87ceeb", "#1a1a2e"], owned: false },
-  { id: "smart_analysis", name: "Tactical Visor", description: "Analyse la stat dominante (IA).", price: 30000, type: "passive", preview: "🧠", colors: ["#ff4500", "#10b981", "#00f3ff"], owned: false },
-  
-  // --- SPÉCIAL ---
-  { id: "reactor_today", name: "Réacteur ARC", description: "Transforme la case d'aujourd'hui.", price: 50000, type: "passive", preview: "☢️", colors: ["#00f3ff"], owned: false },
-  { id: "pulse", name: "Cardio", description: "Battement synchronisé.", price: 15000, type: "card", preview: "❤️", colors: ["#ef4444"], owned: false },
+  {
+    id: "shiny_card",
+    slot: "FRAME",
+    name: "Holographique",
+    description: "Finition rare 'Carte à collectionner'.",
+    price: 100,
+    preview: "✨",
+    colors: ["#fff"],
+    cssClass: "effect-holo",
+    requiresActivity: true
+  },
 
-  // --- SLOT HOVER (Survol) ---
-  { id: "prismatic", name: "Prisme", description: "Reflets diamant réactifs.", price: 40000, type: "hover", preview: "💎", colors: ["#fff", "#00ffff", "#ff00ff"], owned: false, cssClass: "effect-prism" },
-  { id: "flashlight", name: "Lampe Torche", description: "Révélez les détails dans le noir.", price: 15000, type: "hover", preview: "🔦", colors: ["#fff"], owned: false },
+  // --- SLOT: HOVER (Survol Souris) ---
+  // Un seul effet de curseur/survol à la fois
+  { 
+    id: "prismatic", 
+    slot: "HOVER",
+    name: "Prisme", 
+    description: "Reflets diamant réactifs.", 
+    price: 4000, 
+    preview: "💎", 
+    colors: ["#fff", "#00ffff", "#ff00ff"], 
+    cssClass: "effect-prism",
+    requiresActivity: true 
+  },
+  { 
+    id: "flashlight", 
+    slot: "HOVER",
+    name: "Lampe Torche", 
+    description: "Révélez les détails dans le noir.", 
+    price: 1500, 
+    preview: "🔦", 
+    colors: ["#fff"], 
+    cssClass: "stealth-mode", // Attention, flashlight utilise une logique JS + CSS
+    requiresActivity: true 
+  },
   {
     id: "firetrail",
+    slot: "HOVER",
     name: "Traînée de Feu",
     description: "Des flammes suivent votre curseur.",
     price: 75,
-    type: "hover",
     preview: "🔥",
     colors: ["#ff4500", "#ffa500"],
-    owned: false,
+    requiresActivity: true
   },
-
-   {
+  {
     id: "snow",
+    slot: "HOVER",
     name: "Blizzard",
     description: "Flocons de neige tombants.",
     price: 60,
-    type: "hover",
     preview: "❄️",
     colors: ["#fff", "#a5f3fc"],
-    owned: false,
+    requiresActivity: true
   },
-
-   {
-    id: "matrix",
-    name: "Matrix",
-    description: "Pluie de code binaire.",
-    price: 120,
-    type: "hover",
-    preview: "01",
-    colors: ["#00ff00", "#003300"],
-    owned: false,
-  },
-   {
-    id: "bubbles",
-    name: "Bulles",
-    description: "Des bulles s'élèvent doucement.",
-    price: 55,
-    type: "hover",
-    preview: "🫧",
-    colors: ["#00f3ff", "#ffffff"],
-    owned: false,
-  },
-    {
+  {
     id: "lightning",
+    slot: "HOVER",
     name: "Haute Tension",
     description: "Arcs électriques erratiques.",
     price: 90,
-    type: "hover",
     preview: "⚡",
     colors: ["#fff", "#ffff00"],
-    owned: false,
+    requiresActivity: true
+  },
+  {
+    id: "bubbles",
+    slot: "HOVER",
+    name: "Bulles",
+    description: "Des bulles s'élèvent doucement.",
+    price: 55,
+    preview: "🫧",
+    colors: ["#00f3ff", "#ffffff"],
+    requiresActivity: true
+  },
+  {
+    id: "matrix",
+    slot: "HOVER",
+    name: "Matrix",
+    description: "Pluie de code binaire.",
+    price: 120,
+    preview: "01",
+    colors: ["#00ff00", "#003300"],
+    requiresActivity: true
   },
 
-  // --- SLOT CLIC (Interaction) ---
-  { id: "shatter", name: "Bris de Glace", description: "Explosion de verre.", price: 12000, type: "flip", preview: "🔨", colors: ["#a5f3fc"], owned: false },
-  { id: "black_hole", name: "Trou Noir", description: "Implosion massive.", price: 25000, type: "flip", preview: "⚫", colors: ["#000", "#4b0082"], owned: false },
-  { id: "explosion", name: "Supernova", description: "Explosion stellaire.", price: 12000, type: "flip", preview: "💥", colors: ["#ff0000", "#ffff00", "#ffffff"], owned: false },
-  { id: "confetti", name: "Fête", description: "Canon à confettis.", price: 8000, type: "flip", preview: "🎉", colors: ["#d04fd7", "#00f3ff", "#ffd700", "#ef4444"], owned: false },
-  { id: "rubber_click", name: "Jelly", description: "Rebond élastique.", price: 4500, type: "click", preview: "🍮", colors: ["#d04fd7"], owned: false, cssClass: "effect-rubber" },
-  { id: "shockwave_click", name: "Onde de Choc", description: "Impact puissant.", price: 8000, type: "click", preview: "🌊", colors: ["#00f3ff"], owned: false, cssClass: "effect-shockwave" },
+  // --- SLOT: INTERACTION (Clic) ---
+  // Un seul effet de clic à la fois
+  { 
+    id: "shatter", 
+    slot: "INTERACTION",
+    name: "Bris de Glace", 
+    description: "Explosion de verre.", 
+    price: 1200, 
+    preview: "🔨", 
+    colors: ["#a5f3fc"],
+    requiresActivity: true 
+  },
+  { 
+    id: "black_hole", 
+    slot: "INTERACTION",
+    name: "Trou Noir", 
+    description: "Implosion massive.", 
+    price: 2500, 
+    preview: "⚫", 
+    colors: ["#000", "#4b0082"],
+    requiresActivity: true 
+  },
+  { 
+    id: "explosion", 
+    slot: "INTERACTION",
+    name: "Supernova", 
+    description: "Explosion stellaire.", 
+    price: 1200, 
+    preview: "💥", 
+    colors: ["#ff0000", "#ffff00", "#ffffff"],
+    requiresActivity: true 
+  },
+  { 
+    id: "confetti", 
+    slot: "INTERACTION",
+    name: "Fête", 
+    description: "Canon à confettis.", 
+    price: 800, 
+    preview: "🎉", 
+    colors: ["#d04fd7", "#00f3ff", "#ffd700", "#ef4444"],
+    requiresActivity: true 
+  },
+  { 
+    id: "rubber_click", 
+    slot: "INTERACTION",
+    name: "Jelly", 
+    description: "Rebond élastique.", 
+    price: 450, 
+    preview: "🍮", 
+    colors: ["#d04fd7"], 
+    cssClass: "effect-rubber",
+    requiresActivity: true 
+  },
+  { 
+    id: "shockwave_click", 
+    slot: "INTERACTION",
+    name: "Onde de Choc", 
+    description: "Impact puissant.", 
+    price: 800, 
+    preview: "🌊", 
+    colors: ["#00f3ff"], 
+    cssClass: "effect-shockwave",
+    requiresActivity: true 
+  },
 
-]
+  // --- SLOT: AMBIANCE (Passifs globaux) ---
+  { 
+    id: "weather_dynamic", 
+    slot: "AMBIANCE",
+    name: "Météo Live", 
+    description: "Le fond change selon l'heure.", 
+    price: 5000, 
+    preview: "🌤️", 
+    colors: ["#87ceeb", "#1a1a2e"],
+    requiresActivity: false 
+  },
+  { 
+    id: "smart_analysis", 
+    slot: "AMBIANCE",
+    name: "Tactical Visor", 
+    description: "Analyse automatique (Grimpeur/Sprinteur).", 
+    price: 3000, 
+    preview: "🧠", 
+    colors: ["#ff4500", "#10b981", "#00f3ff"],
+    requiresActivity: true 
+  },
+
+  // --- SLOT: TODAY (Unique) ---
+  { 
+    id: "reactor_today", 
+    slot: "TODAY",
+    name: "Réacteur ARC", 
+    description: "Transforme la case d'aujourd'hui.", 
+    price: 5000, 
+    preview: "☢️", 
+    colors: ["#00f3ff"], 
+    cssClass: "today-reactor",
+    requiresActivity: false 
+  },
+];

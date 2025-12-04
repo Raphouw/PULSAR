@@ -104,11 +104,7 @@ body.bg-phase-dusk {
 @keyframes fog-move { 0% { background-position: 0 0; } 100% { background-position: -200% 0; } }
 
 /* --- SHOP --- */
-.shop-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; }
 
-.shop-tabs { display: flex; gap: 1rem; margin-bottom: 1.5rem; border-bottom: 1px solid rgba(255,255,255,0.1); padding-bottom: 1rem;}
-.shop-tab { background: transparent; border: none; color: #666; font-weight: 700; font-size: 0.9rem; cursor: pointer; padding: 0.5rem 1rem; transition: all 0.2s; border-radius: 8px; }
-.shop-tab.active { background: rgba(255,255,255,0.1); color: #fff; }
 
 /* --- PARTICULES (PHYSIQUE) --- */
 .particle-base {
@@ -448,6 +444,260 @@ body.bg-phase-dusk {
   opacity: 0.8;
   z-index: 5;
 }
+
+/* --- BOUTIQUE 2.0 (ARMURERIE) --- */
+
+
+
+
+.shop-layout {
+  display: flex;
+  gap: 1.5rem;
+  height: 600px; /* Hauteur fixe pour le scroll interne */
+  overflow: hidden;
+}
+
+/* COLONNE GAUCHE : PREVIEW */
+.shop-preview-panel {
+  flex: 0 0 300px;
+  background: rgba(0, 0, 0, 0.3);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  padding-right: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.preview-card-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at center, rgba(255,255,255,0.03) 0%, transparent 70%);
+  border-radius: 16px;
+  border: 1px dashed rgba(255,255,255,0.1);
+  position: relative;
+}
+
+/* COLONNE DROITE : CATALOGUE */
+.shop-catalog-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* TABS STYLÉS */
+.shop-tabs-container {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  overflow-x: auto;
+  padding-bottom: 5px;
+}
+
+.shop-tab-modern {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 0.6rem 1rem;
+  border-radius: 8px;
+  color: #888;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.shop-tab-modern:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.shop-tab-modern.active {
+  background: linear-gradient(135deg, rgba(208, 79, 215, 0.15), rgba(139, 92, 246, 0.15));
+  border-color: #d04fd7;
+  color: #fff;
+  box-shadow: 0 4px 12px rgba(208, 79, 215, 0.2);
+}
+
+/* GRILLE ITEMS */
+.shop-items-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 1.5rem; /* Plus d'espace */
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* 🔥 Le padding permet aux cartes de grandir (scale) sans être coupées */
+  padding: 1rem; 
+  padding-bottom: 2rem;
+}
+
+.shop-item-card {
+  background: rgba(30, 30, 40, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
+  padding: 1rem;
+  position: relative;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  z-index: 1;
+}
+
+.shop-item-card:hover {
+  transform: translateY(-4px);
+  background: rgba(40, 40, 55, 0.8);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.3);
+  z-index: 10;
+}
+
+.shop-item-card.owned {
+  border-color: rgba(16, 185, 129, 0.3);
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.05) 0%, rgba(30, 30, 40, 0.6) 100%);
+}
+
+.shop-item-card.equipped {
+  border-color: #d04fd7;
+  box-shadow: 0 0 0 1px #d04fd7, 0 8px 20px rgba(208, 79, 215, 0.2);
+}
+
+.shop-item-preview-icon {
+  font-size: 2.5rem;
+  margin-bottom: 0.5rem;
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+}
+
+.shop-item-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 0.2rem;
+}
+
+.shop-item-price {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #ffd700;
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+
+/* SCROLLBAR MASK */
+.shop-items-grid::-webkit-scrollbar { width: 4px; }
+.shop-items-grid::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); }
+.shop-items-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+.unequip-btn {
+  font-size: 0.7rem;
+  color: #ef4444;
+  text-decoration: underline;
+  cursor: pointer;
+  background: none; border: none;
+  opacity: 0.7; transition: opacity 0.2s;
+}
+.unequip-btn:hover { opacity: 1; }
+
+.preview-desc-overlay {
+  position: absolute;
+  bottom: 10px; left: 0; right: 0;
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+  pointer-events: none;
+}
+
+.loadout-container {
+  margin-top: 1.5rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  width: 100%;
+}
+
+.loadout-title {
+  font-size: 0.7rem;
+  color: #666;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.inventory-bar {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: center;
+}
+
+.inventory-slot {
+  width: 48px;
+  height: 48px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  position: relative;
+  transition: all 0.2s ease;
+  cursor: help;
+}
+
+.inventory-slot.equipped {
+  background: rgba(208, 79, 215, 0.1);
+  border-color: #d04fd7;
+  box-shadow: 0 0 10px rgba(208, 79, 215, 0.2), inset 0 0 10px rgba(208, 79, 215, 0.1);
+}
+
+.inventory-slot:hover {
+  transform: translateY(-2px);
+  border-color: #fff;
+}
+
+/* Tooltip custom pour l'inventaire */
+.inventory-slot::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 110%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #111;
+  border: 1px solid #333;
+  color: #fff;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.2s;
+  z-index: 100;
+  font-weight: 700;
+}
+
+.inventory-slot:hover::after {
+  opacity: 1;
+}
+
+.slot-icon {
+  font-size: 0.8rem;
+  color: #444;
+}
+
 
 .week-silver-glow { background: #c0c0c0; box-shadow: 0 -2px 10px rgba(192, 192, 192, 0.5); }
 .week-gold-glow { background: #ffd700; box-shadow: 0 -3px 15px rgba(255, 215, 0, 0.6); height: 3px; }
