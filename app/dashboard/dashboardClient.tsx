@@ -510,29 +510,41 @@ export default function DashboardClient({ data, session: serverSession, hasStrav
       if (!res.ok) throw new Error("Erreur Strava");
       const result = await res.json();
       
+      let dismissTime = 1500; // Par défaut : rapide (1.5s)
+
       if (result.imported > 0) {
         setCheckMessage(`+${result.imported} activité(s) !`);
+        dismissTime = 4000; // Plus long si on a des infos à lire
+        
         if (result.brokenRecords?.length > 0) {
             setNewRecords(result.brokenRecords);
         }
         router.refresh();
       } else {
-        setCheckMessage('À jour.');
+        setCheckMessage('Tout est à jour ✅');
       }
       
+      // On lance le backfill uniquement s'il y a eu du mouvement ou si c'est forcé
       if (backfillStatus !== 'running') {
           startBackfill();
       }
 
+      // Timer dynamique pour la disparition
+      setTimeout(() => { 
+          setCheckMessage(''); 
+          setChecking(false);
+      }, dismissTime);
+
     } catch (err: any) { 
-        setCheckMessage('Erreur synchro'); 
+        setCheckMessage('Erreur synchro ❌'); 
         console.error(err);
-    } finally { 
+        // En cas d'erreur, on laisse le message un peu plus longtemps
         setTimeout(() => { 
             setCheckMessage(''); 
             setChecking(false);
-        }, 2000); 
-    }
+        }, 3000); 
+    } 
+    // Note : J'ai retiré le bloc 'finally' pour gérer les timeouts dynamiquement dans le try/catch
   }, [hasStrava, checking, router, backfillStatus, startBackfill, cooldownRemaining]);
 
   const handleMetricClick = (metricName: string) => {
