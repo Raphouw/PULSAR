@@ -112,11 +112,19 @@ export async function fetchNewStravaActivities(userId: string, sessionToken?: st
 
   // 1️⃣ Récupérer la dernière activité locale
   const lastLocal = await getLatestLocalActivity(userId);
-  const after = lastLocal?.start_time
-    ? Math.floor(new Date(lastLocal.start_time).getTime() / 1000)
-    : 0;
+  
+  // 🔥 CORRECTION ICI : On ajoute un "Buffer" de sécurité (Chevauchement)
+  // Au lieu de prendre strictement la date de fin, on recule de 14 jours.
+  // Cela permet de retrouver des activités supprimées récemment ou oubliées.
+  let after = 0;
+  if (lastLocal?.start_time) {
+      const lastTime = new Date(lastLocal.start_time).getTime();
+      const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000; 
+      // On demande à Strava tout ce qui date d'après "Dernière activité - 14 jours"
+      after = Math.floor((lastTime - TWO_WEEKS) / 1000);
+  }
 
-  // 2️⃣ Récupérer tous les strava_id déjà présents en base
+  // 2️⃣ Récupérer tous les strava_id déjà présents en base (pour filtrer les doublons)
   const { data: existingActivities } = await supabaseAdmin
     .from("activities")
     .select("strava_id")
@@ -124,7 +132,7 @@ export async function fetchNewStravaActivities(userId: string, sessionToken?: st
 
   const existingIds = existingActivities?.map(a => a.strava_id) || [];
 
-  // 3️⃣ Récupérer les activités Strava après le timestamp de la dernière locale
+  // 3️⃣ Récupérer les activités Strava (Boucle de pagination)
   let page = 1;
   const perPage = 100;
   let allActivities: StravaActivity[] = [];
@@ -144,9 +152,13 @@ export async function fetchNewStravaActivities(userId: string, sessionToken?: st
     page++;
   }
 
-  // 4️⃣ Filtrer uniquement les rides qui ne sont pas déjà en base
+  // 4️⃣ Filtrer : On garde Rides/Run QUI NE SONT PAS DÉJÀ en BDD
+  // C'est ici que la magie opère : l'activité supprimée n'étant plus dans 'existingIds', elle va repasser !
   const newActivities = allActivities
-    .filter(act => (act.type === "Ride" || act.type === "VirtualRide") && !existingIds.includes(act.id));
+    .filter(act => 
+        (act.type === "Ride" || act.type === "VirtualRide" || act.type === "Run" || act.type === "Hike") 
+        && !existingIds.includes(act.id)
+    );
 
   return newActivities;
 }
