@@ -15,6 +15,7 @@ import { PowerModelChart } from './PowerModelChart';
 import DeepAnalysisButton from './DeepAnalysisButton';
 import { useAnalysis } from '../context/AnalysisContext'; // 🔥 IMPORT DU CONTEXTE
 import NewRecordModal from './NewRecordModal';
+import { useBackfill } from '../context/BackfillContext';
 
 // --- Constantes et Helpers ---
 const MANUAL_CHECK_COOLDOWN_MS = 5 * 60 * 1000;
@@ -55,7 +56,10 @@ const HeaderSection = ({
   checkMessage, 
   checking, 
   isGlobalAnalyzing,
-  onRefresh 
+  onRefresh,
+  onDeepSync,
+  isBackfilling,
+  backfillStatus
 }: any) => {
   
   const fmt = (n: number) => Math.floor(n).toLocaleString('fr-FR');
@@ -135,6 +139,8 @@ const HeaderSection = ({
           )}
         </div>
 
+
+
         {/* Boutons */}
         <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'flex-end', alignItems: 'center' }}>
         {checkMessage && (
@@ -162,7 +168,36 @@ const HeaderSection = ({
               Lier mon compte Strava
             </button>
         )}
-          
+        
+            {hasStrava && backfillStatus !== 'completed' && (
+             <button 
+             onClick={onDeepSync} 
+             disabled={isBackfilling}
+             style={{
+                 ...actionButtonStyle, 
+                 background: isBackfilling ? 'rgba(208, 79, 215, 0.1)' : 'rgba(208, 79, 215, 0.15)',
+                 borderColor: 'rgba(208, 79, 215, 0.4)',
+                 color: '#d04fd7',
+                 opacity: isBackfilling ? 0.7 : 1
+             }}
+             title="Récupérer les données manquantes (Streams)"
+           >
+             {isBackfilling ? (
+                // Icône Spinner
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ animation: 'spin 1s linear infinite' }}>
+                  <path d="M21 12a9 9 0 1 1-6.219-8.56"></path>
+                </svg>
+             ) : (
+                // Icône Base de données / Analyse
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                </svg>
+             )}
+             <span>{isBackfilling ? 'Analyse en cours...' : 'Analyser Historique'}</span>
+           </button>
+          )}
         <button 
             onClick={onRefresh} 
             disabled={isGlobalAnalyzing} // Désactivé si une analyse tourne déjà
@@ -724,8 +759,19 @@ console.log("[Dashboard] Session client:", clientSession);
   const [lastCheckTime, setLastCheckTime] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<TabType>('overview');
   const [expandedMetric, setExpandedMetric] = useState<string | null>(null);
-
-
+  const { startBackfill, isBackfilling, status: backfillStatus } = useBackfill();
+      useEffect(() => {
+          // Si on a Strava, qu'on ne fait rien, et que le statut est 'idle' (jamais lancé)
+          // On peut lancer une petite vérification
+          if (hasStrava && backfillStatus === 'idle' && !isBackfilling) {
+              // Optionnel : attendre 5 secondes après le chargement de la page pour ne pas ralentir le LCP
+              const t = setTimeout(() => {
+                  console.log("Auto-start backfill check...");
+                  startBackfill(); 
+              }, 5000);
+              return () => clearTimeout(t);
+          }
+      }, [hasStrava, backfillStatus, isBackfilling]);
   
   const cardRefs = {
     tss: useRef<HTMLDivElement | null>(null),
@@ -939,6 +985,9 @@ console.log("[Dashboard] Session client:", clientSession);
       checkMessage={isAnalyzing ? null : checkMessage}
       checking={checking || isAnalyzing}
       onRefresh={handleManualRefresh}
+      onDeepSync={startBackfill}
+      isBackfilling={isBackfilling}
+      backfillStatus={backfillStatus}
     />
 
     {/* 2. TABS NAVIGATION */}
