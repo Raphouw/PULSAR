@@ -120,12 +120,18 @@ function ActivityCard({ activity, specialBadges, onDelete }: { activity: Activit
                   ? '0 20px 40px rgba(208, 79, 215, 0.3), 0 0 0 2px rgba(208, 79, 215, 0.2)' 
                   : '0 4px 15px rgba(0, 0, 0, 0.2)',
             }}>
-                <div style={{ position: 'relative' }}>
+               {/* 🔥 CORRECTION ICI : Ajout de height: '160px' et background */}
+                <div style={{ position: 'relative', height: '160px', width: '100%', background: '#e0e0e0' }}>
                 {activity.polyline?.polyline ? (
-                    <MiniMap 
-                        key={`map-${activity.id}`} 
-                        encodedPolyline={activity.polyline.polyline} 
-                    />
+                    // Ajout du wrapper pour le masque dégradé (optionnel mais stylé)
+                    <div style={{ width: '100%', height: '100%', WebkitMaskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)', maskImage: 'linear-gradient(to bottom, black 85%, transparent 100%)' }}>
+                        <MiniMap 
+                            key={`map-${activity.id}`} 
+                            encodedPolyline={activity.polyline.polyline}
+                            mapHeight="100%" // On remplit les 160px du parent
+                            fitBoundsPadding={[20, 20]} // Marges simples car les badges sont en dessous ici
+                        />
+                    </div>
                 ) : (
                     <div style={miniMapPlaceholderStyle}>Pas de tracé</div>
                 )}
