@@ -8,30 +8,6 @@ import { analyzeAndSaveActivity } from '../../../../lib/analysisEngine';
 
 export const dynamic = 'force-dynamic';
 
-// --- HELPER CRITIQUE : NETTOYAGE DES STREAMS ---
-const cleanStravaStreams = (raw: any) => {
-    // Fonction qui extrait le tableau [1, 2, 3] depuis l'objet complexe Strava
-    const extract = (key: string) => {
-        // Cas A : Format { watts: { data: [...] } }
-        if (raw[key]?.data) return raw[key].data;
-        // Cas B : Format [{ type: 'watts', data: [...] }]
-        if (Array.isArray(raw)) return raw.find((s: any) => s.type === key)?.data || [];
-        return []; // Vide si non trouvé
-    };
-
-    return {
-        time: extract('time'),
-        distance: extract('distance'),
-        altitude: extract('altitude'),
-        latlng: extract('latlng'),
-        watts: extract('watts'),
-        heartrate: extract('heartrate'),
-        cadence: extract('cadence'),
-        temp: extract('temp'),
-    };
-};
-
-// Récupération API Strava
 async function getStravaStreams(activityId: number, accessToken: string) {
   try {
     const types = ['time', 'distance', 'latlng', 'altitude', 'watts', 'heartrate', 'cadence', 'temp'].join(',');
@@ -55,17 +31,14 @@ export async function GET(req: Request) {
     const userId = session.user.id;
     if (!session.access_token) return NextResponse.json({ message: "Pas de token" });
 
-    // 1. Récupération Strava
     const newActivities = await fetchNewStravaActivities(userId, session.access_token);
 
     if (newActivities.length === 0) {
       return NextResponse.json({ success: true, imported: 0, message: "À jour.", hasStrava: true });
     }
 
-    // 2. Création des lignes en BDD (Stats vides au début)
     const importResult = await importActivities(userId, newActivities);
 
-    // 3. ANALYSE PROFONDE ET CORRECTION DES DONNÉES
     const { data: userProfile } = await supabaseAdmin.from('users').select('weight, ftp').eq('id', userId).single();
     
     let analyzedCount = 0;
@@ -73,32 +46,43 @@ export async function GET(req: Request) {
 
     const analysisPromises = newActivities.map(async (stravaActivity: any) => {
         try {
-            // A. On récupère l'ID BDD
             const { data: dbActivity } = await supabaseAdmin
                 .from('activities').select('id').eq('strava_id', stravaActivity.id).single();
 
             if (!dbActivity) return;
 
-            // B. On télécharge les streams
             const rawStreams = await getStravaStreams(stravaActivity.id, session.access_token!);
 
             if (rawStreams) {
-                // 🔥 LA CORRECTION EST ICI : ON NETTOIE AVANT D'ENVOYER
-                const cleanStreams = cleanStravaStreams(rawStreams);
+                const extract = (key: string): number[] => {
+                    if (rawStreams[key]?.data) return rawStreams[key].data;
+                    if (Array.isArray(rawStreams)) return rawStreams.find((s: any) => s.type === key)?.data || [];
+                    return [];
+                };
+                const cleanStreams = {
+                    time: extract('time'), distance: extract('distance'), altitude: extract('altitude'),
+                    latlng: extract('latlng'), watts: extract('watts'), heartrate: extract('heartrate'),
+                    cadence: extract('cadence'), temp: extract('temp'),
+                };
 
-                // C. On envoie les données PROPRES au moteur
+                // --- CORRECTION TYPE ---
+                let avgPower: number | null = null;
+                
+                if (cleanStreams.watts.length > 0) {
+                    avgPower = Math.round(cleanStreams.watts.reduce((a, b) => a + b, 0) / cleanStreams.watts.length);
+                }
+
+                await supabaseAdmin.from('activities')
+                    .update({ streams_data: cleanStreams, avg_power_w: avgPower })
+                    .eq('id', dbActivity.id);
+
                 const result = await analyzeAndSaveActivity(
                     dbActivity.id, 
                     stravaActivity.id, 
-                    cleanStreams, // <--- ICI
+                    cleanStreams, 
                     userProfile?.weight || 75, 
                     userProfile?.ftp || 250
                 );
-                
-                // D. On sauvegarde aussi les streams propres pour les graphes
-                await supabaseAdmin.from('activities')
-                    .update({ streams_data: cleanStreams })
-                    .eq('id', dbActivity.id);
 
                 if (result.success) {
                     analyzedCount++;

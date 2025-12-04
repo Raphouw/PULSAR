@@ -116,11 +116,11 @@ export async function fetchNewStravaActivities(userId: string, sessionToken?: st
   // 🔥 CORRECTION ICI : On ajoute un "Buffer" de sécurité (Chevauchement)
   // Au lieu de prendre strictement la date de fin, on recule de 14 jours.
   // Cela permet de retrouver des activités supprimées récemment ou oubliées.
-  let after = 0;
+ let after = 0;
   if (lastLocal?.start_time) {
       const lastTime = new Date(lastLocal.start_time).getTime();
+      // On revient 14 jours en arrière
       const TWO_WEEKS = 14 * 24 * 60 * 60 * 1000; 
-      // On demande à Strava tout ce qui date d'après "Dernière activité - 14 jours"
       after = Math.floor((lastTime - TWO_WEEKS) / 1000);
   }
 

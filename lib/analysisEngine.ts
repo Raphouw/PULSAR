@@ -1,3 +1,4 @@
+// Fichier : lib/analysisEngine.ts
 import { supabaseAdmin } from './supabaseAdminClient';
 import { 
   findBestInterval, 
@@ -13,89 +14,66 @@ export type AnalysisResult = {
 };
 
 export async function analyzeAndSaveActivity(activityId: number, stravaId: number, streams: any, userWeight: number = 75, userFtp: number = 250): Promise<AnalysisResult> {
-  // console.log(`⚙️ [AnalysisEngine] Analyse activité #${activityId}...`);
-  
   const brokenRecords: { duration: number; value: number; old: number; type: string }[] = [];
 
-  // 1. Extraction Sécurisée & Tolérante
-  // 🔥 MODIF : Si pas de watts, on met un tableau vide [] au lieu de undefined
-  const watts = streams.watts?.data || streams.watts || []; 
-  const time = streams.time?.data || streams.time;
-  const distance = streams.distance?.data || streams.distance; 
-  const hr = streams.heartrate?.data || streams.heartrate || []; 
+  // 🔥 FIX RADICAL : On considère que 'streams' est DÉJÀ nettoyé (tableau simple).
+  // On ne cherche plus ".data". Si l'appelant envoie du sale, ça plantera ici (et c'est mieux que d'enregistrer 4093).
+  const watts = streams.watts || []; 
+  const time = streams.time || [];
+  const distance = streams.distance || []; 
+  const hr = streams.heartrate || []; 
 
-  // Si pas de temps, l'activité est corrompue ou vide, là on doit stop
-  if (!time || !Array.isArray(time) || time.length === 0) {
-    console.error("❌ [AnalysisEngine] Erreur: Stream 'time' manquant.");
-    // On pourrait marquer l'activité comme 'error' en BDD pour ne plus la reprocesser
-    // Pour l'instant on renvoie false
+  // Vérification de sécurité de base
+  if (!time || time.length === 0) {
+    console.error("❌ [AnalysisEngine] Erreur: Stream 'time' manquant ou vide.");
     return { success: false, brokenRecords: [] };
-  }
-
-  // 🔥 MODIF : On ne bloque plus ici. On log juste une info.
-  if (watts.length === 0) {
-    console.log("ℹ️ [AnalysisEngine] Pas de données de puissance (Run/Hike/Vélo sans capteur). Calcul partiel.");
   }
 
   // --- 2. CALCUL STATS GLOBALES ---
   const durationSeconds = time[time.length - 1] - time[0];
   
-  // Sécurité pour les calculs de puissance
+  // Calcul NP / TSS / IF
   const np = watts.length > 0 ? NPformulaCoggan(watts) : 0;
   
   let tss = 0;
   let intensity_factor = 0;
   
-  // On ne calcule le TSS que si on a des watts et une FTP valide
   if (userFtp > 0 && np > 0) {
     intensity_factor = np / userFtp;
+    // Formule standard TSS
     tss = (durationSeconds * np * intensity_factor) / (userFtp * 3600) * 100;
   }
 
   const totalWatts = watts.reduce((a: number, b: number) => a + (b || 0), 0);
   const avgPower = watts.length > 0 ? totalWatts / watts.length : 0;
   
-  // Calcul du travail (Kj)
+  // Travail & Calories
   const workKj = calculateWork(avgPower, durationSeconds);
-  
-  // Calories : Si on a des Watts, on utilise workKj. Sinon, on laisse null (ou on pourrait estimer via HR plus tard)
-  // Strava envoie souvent "kilojoules" dans l'import initial, on essaie de ne pas écraser s'il n'y a pas de watts
   let calories: number | null = workKj ? Math.round(workKj) : null;
 
-  // --- SAUVEGARDE EN BDD ---
-  // 🔥 C'est ici que la boucle infinie se brise. 
-  // Même si TSS = 0, on l'écrit en BDD. La prochaine requête "tss is null" ignorera donc cette activité.
-  
+  // --- SAUVEGARDE EN BDD (STATS AVANCÉES) ---
+  // Note : Avg Power et Avg HR sont déjà sauvegardés par l'appelant (API Route) pour sécurité.
+  // Ici on sauvegarde surtout NP, TSS, IF et Calories.
   const updateData: any = {
-      avg_power_w: Math.round(avgPower),
       np_w: Math.round(np),
-      tss: Math.round(tss), // Sera 0 si pas de watts
+      tss: Math.round(tss),
       intensity_factor: parseFloat(intensity_factor.toFixed(2)),
   };
 
-  // On n'écrase les calories que si on a pu les calculer via la puissance
   if (calories !== null && calories > 0) {
       updateData.calories_kcal = calories;
   }
 
+  // On met à jour sans écraser les moyennes calculées par l'API (sauf si nécessaire)
   await supabaseAdmin.from('activities').update(updateData).eq('id', activityId);
 
-
-  // --- 3. RECORDS & DÉTECTION PR (Uniquement si Watts présents) ---
+  // --- 3. RECORDS (Power Curve) ---
   if (watts.length > 0) {
-      const { data: activityData } = await supabaseAdmin
-        .from('activities')
-        .select('user_id, start_time')
-        .eq('id', activityId)
-        .single();
-        
+      const { data: activityData } = await supabaseAdmin.from('activities').select('user_id, start_time').eq('id', activityId).single();
       const userId = activityData?.user_id;
       const activityDate = activityData?.start_time || new Date().toISOString();
 
-      const { data: allExistingRecords } = await supabaseAdmin
-        .from('records')
-        .select('duration_s, value')
-        .eq('user_id', userId);
+      const { data: allExistingRecords } = await supabaseAdmin.from('records').select('duration_s, value').eq('user_id', userId);
 
       const currentBests = new Map<number, number>();
       allExistingRecords?.forEach(r => {
@@ -103,6 +81,7 @@ export async function analyzeAndSaveActivity(activityId: number, stravaId: numbe
           if (r.value > existing) currentBests.set(r.duration_s, r.value);
       });
 
+      // Nettoyage des anciens records de cette activité pour éviter les doublons
       await supabaseAdmin.from('records').delete().eq('activity_id', activityId);
 
       const recordsToInsert: any[] = [];
@@ -115,21 +94,16 @@ export async function analyzeAndSaveActivity(activityId: number, stravaId: numbe
         if (bestInterval) {
             let typeLabel = `P${duration}s`;
             if (duration === 180) typeLabel = 'CP3';
-            if (duration === 300) typeLabel = 'CP5';
-            if (duration === 720) typeLabel = 'CP12';
-            if (duration === 1200) typeLabel = 'CP20';
-            if (duration === 3600) typeLabel = 'CP60';
+            else if (duration === 300) typeLabel = 'CP5';
+            else if (duration === 720) typeLabel = 'CP12';
+            else if (duration === 1200) typeLabel = 'CP20';
+            else if (duration === 3600) typeLabel = 'CP60';
 
             const newVal = bestInterval.watts;
             const oldRecord = currentBests.get(duration) || 0;
 
             if (newVal > oldRecord && oldRecord > 0) {
-                brokenRecords.push({
-                    duration: duration,
-                    value: newVal,
-                    old: oldRecord,
-                    type: typeLabel
-                });
+                brokenRecords.push({ duration, value: newVal, old: oldRecord, type: typeLabel });
             }
 
             recordsToInsert.push({
