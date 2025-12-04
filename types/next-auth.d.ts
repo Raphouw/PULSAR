@@ -69,9 +69,7 @@ declare module 'chart.js' {
 // 3. TES TYPES MÉTIERS (INCHANGÉS)
 // ---------------------------------------------------------
 
-// Définit la structure de l'objet streams_data
-// Note: Tu avais deux définitions de ActivityStreams, j'ai gardé celle-ci qui semble être la première
-// Si tu préfères l'autre (plus stricte sans null), supprime celle-ci.
+
 export type ActivityStreams = {
   time: (number | null)[];
   watts?: (number | null)[];
@@ -136,21 +134,7 @@ export interface CycloEvent {
     history: EventHistory[]; // Jointure sur event_history
 }
 
-// ATTENTION : Tu avais une seconde définition de ActivityStreams ici.
-// Typescript va râler s'il y a deux "export interface/type" du même nom.
-// J'ai commenté celle-ci pour éviter les erreurs, décommente-la si c'est celle que tu utilises vraiment
-/*
-export interface ActivityStreams {
-  distance: number[];
-  altitude: number[];
-  latlng: [number, number][];
-  time: number[];
-  watts: number[];
-  heartrate: number[];
-  cadence: number[];
-  temp?: (number | null)[];
-}
-*/
+
 
 export type Activity = {
   id: number;
@@ -171,7 +155,7 @@ export type ActivityCardData = {
   avg_power_w: number | null;
   tss: number | null;
   type?: string | null;
-  duration_s?: number | 0;
+  duration_s: number | 0;
   polyline: { polyline: string } | null;
 };
 

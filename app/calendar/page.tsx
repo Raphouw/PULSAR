@@ -1,8 +1,8 @@
 // Fichier : app/calendar/page.tsx
 import React from 'react';
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "../../lib/auth"; // Assure-toi que le chemin est bon selon ta structure
-import { supabaseAdmin } from "../../lib/supabaseAdminClient"; // Idem
+import { authOptions } from "../../lib/auth"; 
+import { supabaseAdmin } from "../../lib/supabaseAdminClient";
 import { redirect } from "next/navigation";
 import CalendarClient from './calendarClient';
 import { ShopData } from "./types";
@@ -37,30 +37,20 @@ export default async function CalendarPage() {
   const spentTSS = purchases?.reduce((acc, p) => acc + p.cost, 0) || 0;
   const ownedEffects = purchases?.map(p => p.effect_id) || [];
   
-  // 🔥 CORRECTION ICI : Mapping Anciennes Clés (DB) -> Nouvelles Clés (Typescript)
   const rawLoadout = settings?.equipped_loadout || {};
 
   const shopData: ShopData = {
     spentTSS,
     ownedEffects,
     loadout: {
-        // On cherche d'abord la clé MAJUSCULE (Nouveau système), 
-        // sinon la clé minuscule (Ancienne DB), sinon null.
-        
-        // Cadres (ex: neon_frame)
+        // MAPPING ROBUSTE
         FRAME: rawLoadout.FRAME || rawLoadout.card || null, 
-        
-        // Survol (ex: flashlight, particles)
         HOVER: rawLoadout.HOVER || rawLoadout.hover || null, 
-        
-        // Interaction (ex: black_hole). On fusionne les anciens 'flip' et 'click' ici.
+        TRAIL: rawLoadout.TRAIL || null, // 🔥 NOUVEAU SLOT
         INTERACTION: rawLoadout.INTERACTION || rawLoadout.click || rawLoadout.flip || null, 
-        
-        // Ambiance (ex: weather_dynamic)
         AMBIANCE: rawLoadout.AMBIANCE || rawLoadout.passive || null, 
-        
-        // Today (ex: reactor)
         TODAY: rawLoadout.TODAY || rawLoadout.today || null, 
+        SPECIAL: rawLoadout.SPECIAL || null, // 🔥 Ajouté
     }
   };
 

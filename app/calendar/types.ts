@@ -21,11 +21,13 @@ export type CalendarActivity = {
 
 
 export type EffectSlot = 
-  | "FRAME"       // Bordure passive (Néon, Mercure, Magma) - Change l'aspect de la case
-  | "HOVER"       // Au survol (Prisme, Lampe torche, Particules)
-  | "INTERACTION" // Au clic (Explosion, Trou noir, Shatter)
-  | "AMBIANCE"    // Global (Météo, Analyse IA) - Affecte tout l'écran ou le calcul
-  | "TODAY"       // Spécifique à la case d'aujourd'hui (Réacteur)
+  | "FRAME"       // Bordures (Néon, Magma...)
+  | "HOVER"       // Effet au survol de la carte (Glitch, Jelly...)
+  | "TRAIL"       // Particules qui suivent la souris (Feu, Neige...)
+  | "INTERACTION" // Clic (Explosion...)
+  | "AMBIANCE"    // Global (Météo, IA)
+  | "TODAY"
+  | "SPECIAL"
 
 
 

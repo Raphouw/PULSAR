@@ -273,7 +273,7 @@ export default function ActivityClient({
     const maxTSS = Math.max(...allActivities.map(a => a.tss ?? 0));
 
     allActivities.forEach(activity => {
-      if (activity.avg_power_w && activity.avg_power_w === maxPower && maxPower > 0) {
+      if (activity.avg_power_w && activity.avg_power_w === maxPower && maxPower > 0 && activity.duration_s > 3600) {
         badges.set(String(activity.id), { label: 'Watt Max', color: '#FF3C00', icon: '⚡', category: 'special' });
       }
       else if (activity.avg_speed_kmh && activity.avg_speed_kmh === maxSpeed && maxSpeed > 0) {

@@ -218,30 +218,268 @@ body.bg-phase-dusk {
 @keyframes heat-pulse { 0% { box-shadow: inset 0 0 20px #4a0d00; } 50% { box-shadow: inset 0 0 60px #ff4500; } 100% { box-shadow: inset 0 0 20px #4a0d00; } }
 .smart-heat { background: linear-gradient(45deg, #2a0a00, #5a1a00) !important; border: 1px solid #ff4500 !important; animation: heat-pulse 3s infinite ease-in-out !important; position: relative; overflow: hidden; }
 .smart-heat::after { content: '🔥'; position: absolute; bottom: -5px; right: 5px; font-size: 40px; opacity: 0.2; filter: blur(2px); }
-
-@keyframes warp-speed { 0% { transform: translate(-50%, -50%) scale(0.5); opacity: 0; } 20% { opacity: 1; } 100% { transform: translate(-50%, -50%) scale(4); opacity: 0; } }
-.smart-speed { background-color: #020617 !important; border: 1px solid #00f3ff !important; position: relative; overflow: hidden; z-index: 0; }
-.smart-speed::after { content: ''; position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; transform: translate(-50%, -50%); background: radial-gradient(circle, rgba(0, 243, 255, 0.2) 0%, transparent 40%); z-index: -1; }
-.smart-speed::before { content: ''; position: absolute; top: 50%; left: 50%; width: 100%; height: 100%; background-image: radial-gradient(2px 2px at 20px 30px, #fff, transparent), radial-gradient(2px 2px at 40px 70px, #00f3ff, transparent), radial-gradient(2px 2px at 50px 160px, #fff, transparent), radial-gradient(2px 2px at 90px 40px, #fff, transparent), radial-gradient(2px 2px at 130px 80px, #fff, transparent), radial-gradient(2px 2px at 160px 120px, #00f3ff, transparent); background-size: 200px 200px; animation: warp-speed 0.8s linear infinite; z-index: -1; }
-
-.smart-climb::before { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: var(--climb-h, 30%); background: linear-gradient(180deg, #ffffff 0%, #cbd5e1 15%, #475569 40%, #1e293b 100%); clip-path: polygon(0% 100%, 20% 80%, 50% 0%, 80% 70%, 100% 100%); z-index: -1; transition: height 0.5s ease-out; }
-
-/* --- CLIC --- */
-@keyframes rubber { 0% { transform: scale(1); } 30% { transform: scale(1.25, 0.75); } 40% { transform: scale(0.75, 1.25); } 50% { transform: scale(1.15, 0.85); } 100% { transform: scale(1); } }
-.effect-rubber { animation: rubber 0.6s ease !important; transform-origin: bottom center; }
-
-@keyframes shockwave-circle {
-  0% { transform: translate(-50%, -50%) scale(0); opacity: 1; border-width: 20px; }
-  100% { transform: translate(-50%, -50%) scale(3); opacity: 0; border-width: 0px; }
+.smart-heat.effect-pulse {
+  /* 1. On force l'animation physique (battement) au lieu de la couleur (chaleur) */
+  animation-name: heartbeat !important;
+  
+  /* 2. 🔥 LE FIX EST ICI : On force la durée via la variable injectée par JS.
+     Cela contourne le "3s !important" de la classe smart-heat de base. */
+  animation-duration: var(--beat-duration, 1s) !important;
+  
+  /* 3. On garde le style visuel "Feu" */
+  border-color: #ff4500 !important; 
+  box-shadow: 0 0 15px rgba(255, 69, 0, 0.4);
 }
-.effect-shockwave { position: relative; overflow: visible !important; }
-.effect-shockwave::before {
-  content: ''; position: absolute; top: 50%; left: 50%; width: 100px; height: 100px;
-  border-radius: 50%; border: 2px solid #00f3ff; background: transparent;
-  transform: translate(-50%, -50%) scale(0);
-  animation: shockwave-circle 0.6s ease-out forwards;
-  pointer-events: none; z-index: 100;
+
+/* On s'assure que le heat-pulse de base (lent) ne s'applique QUE si le cardio n'est PAS là */
+.smart-heat:not(.effect-pulse) {
+    animation: heat-pulse 3s infinite ease-in-out !important;
 }
+
+
+
+@keyframes speed-boost-flash {
+  /* FIX : Suppression des transforms scale() pour éviter le conflit avec l'onde de choc */
+  0% { box-shadow: 0 0 15px rgba(0, 243, 255, 0.15); }
+  50% { box-shadow: 0 0 30px rgba(0, 243, 255, 0.8); } /* Le boost / Le flash */
+  100% { box-shadow: 0 0 15px rgba(0, 243, 255, 0.15); }
+}
+
+@keyframes warp-speed-shake {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(1px, 1px); }
+  50% { transform: translate(-1px, 0); }
+  75% { transform: translate(0, -1px); }
+  100% { transform: translate(0, 0); }
+}
+
+@keyframes stars-fly {
+  0% { background-position: 50% 50%; opacity: 0.5; }
+  100% { background-position: 50% 400%; opacity: 1; }
+}
+
+.smart-speed {
+  /* Fond noir profond */
+  background-color: #050b14 !important;
+  /* Bordure Cyan électrique */
+  border: 1px solid rgba(0, 243, 255, 0.5) !important;
+  box-shadow: 0 0 15px rgba(0, 243, 255, 0.15), inset 0 0 20px rgba(0, 0, 0, 0.8);
+  position: relative;
+  /* La règle de base est de cacher pour le tunnel */
+  overflow: hidden !important; 
+  /* On permet à la carte de bouger (pour le flash) */
+  transition: all 0.1s ease-out; 
+}
+
+/* === NOUVEAU FIX : Désactiver le 'overflow: hidden' de smart-speed si on est en mode 'shockwave' === */
+.smart-speed.effect-shockwave:active, 
+.smart-speed.effect-shockwave.anim-active {
+  /* Ceci annule le "overflow: hidden" de .smart-speed pour la durée de l'animation */
+  overflow: visible !important; 
+}
+
+/* Gérer le clic via la nouvelle animation */
+.smart-speed:active {
+  animation: speed-boost-flash 0.15s ease-out;
+}
+
+/* Texte au premier plan : Doit rester stable et lisible */
+.smart-speed > div {
+  position: relative;
+  z-index: 10;
+  /* Petite vibration pour l'effet de vitesse intense */
+  animation: warp-speed-shake 0.2s linear infinite; 
+  text-shadow: 0 0 5px rgba(0,0,0,0.8);
+}
+
+/* COUCHE 1 : Les étoiles filantes (Tunnel) */
+.smart-speed::before {
+  content: '';
+  position: absolute;
+  inset: -100%; /* Plus grand que le conteneur pour éviter les bords */
+  z-index: 1;
+  
+  /* Création d'étoiles via des gradients radiaux minuscules */
+  background-image: 
+    radial-gradient(1px 1px at 20px 30px, #fff, rgba(0,0,0,0)),
+    radial-gradient(1px 1px at 40px 70px, #fff, rgba(0,0,0,0)),
+    radial-gradient(1px 1px at 50px 160px, #fff, rgba(0,0,0,0)),
+    radial-gradient(2px 2px at 90px 40px, #00f3ff, rgba(0,0,0,0)), /* Cyan */
+    radial-gradient(1px 1px at 130px 80px, #fff, rgba(0,0,0,0)),
+    radial-gradient(2px 50px at 50% 50%, #fff, rgba(0,0,0,0)); /* Streak central */
+  
+  background-size: 200px 200px;
+  
+  /* Animation de défilement très rapide vers le bas (comme la route qui défile) */
+  animation: stars-fly 0.5s linear infinite;
+  
+  /* Perspective trick: on étire vers le bas pour faire des lignes */
+  transform: perspective(300px) rotateX(20deg) scale(1.5);
+  opacity: 0.6;
+}
+
+/* COUCHE 2 : Vignette de vitesse (Effet Tunnel Vision) */
+.smart-speed::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  /* Le centre est clair, les bords sont noirs et flous (vision tunnel) */
+  background: radial-gradient(
+    circle at center, 
+    rgba(0,0,0,0) 30%, 
+    rgba(0, 243, 255, 0.1) 50%, 
+    rgba(0,0,0,0.8) 90%
+  );
+  pointer-events: none;
+  /* J'enlève le mix-blend-mode: screen; pour un rendu plus net du noir de la vignette */
+}
+
+
+.smart-climb {
+  /* Fond du ciel : Nuit d'hiver froide, bleu très sombre */
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.8) 0%, rgba(0, 0, 0, 0.9) 100%) !important;
+  /* Bordure : Blanc glacé subtil */
+  border-color: rgba(255, 255, 255, 0.3) !important;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Texte au premier plan avec une ombre portée "froide" */
+.smart-climb > div {
+  position: relative;
+  z-index: 10;
+  text-shadow: 0 2px 4px rgba(0, 10, 20, 1);
+}
+
+/* COUCHE 1 : Le dessin de la montagne enneigée */
+.smart-climb::before {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  /* Hauteur dynamique gérée par le JS */
+  height: var(--climb-h, 45%);
+
+  /* NOUVEAU DÉGRADÉ "NEIGE & ROCHE" :
+     0% - 25% : Blanc pur / Bleu glacé (Les sommets enneigés)
+     25% - 60% : Gris bleuté (La roche froide)
+     100% : Base sombre qui se fond dans la carte
+  */
+  background: linear-gradient(180deg, 
+      #f0f9ff 0%,   /* Sommet blanc pur */
+      #dcecfb 25%,  /* Neige ombragée */
+      #64748b 50%,  /* Roche grise froide */
+      #1e293b 100%  /* Base sombre */
+  );
+
+  /* Forme alpine escarpée */
+  clip-path: polygon(0% 100%, 12% 75%, 28% 88%, 45% 15%, 58% 60%, 72% 40%, 85% 65%, 100% 100%);
+
+  z-index: 1;
+  transition: height 0.5s ease-out;
+  
+  /* Lueur douce et froide autour des pics (effet "air glacé") */
+  filter: drop-shadow(0 -4px 8px rgba(220, 236, 251, 0.4));
+}
+
+/* COUCHE 2 : Brume glaciale en bas (Remplace la grille) */
+.smart-climb::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 2; /* Devant la montagne */
+    
+    /* Un léger voile blanc/bleu en bas pour simuler le froid ou la brume de vallée */
+    background: linear-gradient(to top, rgba(220, 236, 251, 0.15) 0%, transparent 40%);
+    pointer-events: none;
+}
+
+.weather-preview-bg {
+  position: absolute; inset: 0; z-index: 0;
+  border-radius: 12px;
+  transition: background 1s ease;
+}
+
+
+.effect-rubber {
+  transition: transform 0.3s ease;
+}
+.effect-rubber:hover {
+  animation: rubber 0.8s ease; 
+}
+@keyframes rubber { 
+  0% { transform: scale(1); } 
+  30% { transform: scale(1.15, 0.85); } 
+  40% { transform: scale(0.85, 1.15); } 
+  50% { transform: scale(1.05, 0.95); } 
+  100% { transform: scale(1); } 
+}
+
+@keyframes heartbeat {
+  0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+  15% { transform: scale(1.02); box-shadow: 0 0 0 5px rgba(239, 68, 68, 0); }
+  30% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+  45% { transform: scale(1.02); box-shadow: 0 0 0 5px rgba(239, 68, 68, 0); }
+  100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.effect-pulse {
+  border-color: #ef4444 !important;
+  /* L'animation duration sera définie en inline style via JS (60/bpm) */
+  animation-name: heartbeat;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+@keyframes shockwave-blast {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.8), 
+                0 0 0 0 rgba(0, 243, 255, 0.8),
+                inset 0 0 0 0 rgba(255, 255, 255, 0.5);
+    opacity: 1;
+    transform: scale(1);
+  }
+  40% {
+    /* Le flash s'étend rapidement */
+    box-shadow: 0 0 0 20px rgba(255, 255, 255, 0), 
+                0 0 0 10px rgba(0, 243, 255, 0.6),
+                inset 0 0 50px 0 rgba(255, 255, 255, 0);
+  }
+  100% {
+    /* Dissipation totale */
+    box-shadow: 0 0 0 40px rgba(255, 255, 255, 0), 
+                0 0 0 20px rgba(0, 243, 255, 0),
+                inset 0 0 0 0 rgba(255, 255, 255, 0);
+    opacity: 0;
+    transform: scale(1.02); /* Légère expansion du conteneur */
+  }
+}
+
+.effect-shockwave {
+  position: relative;
+  /* On permet au overflow d'être visible pendant l'anim */
+  overflow: visible !important; 
+  transform-origin: center;
+}
+
+.effect-shockwave::after {
+  content: '';
+  position: absolute;
+  inset: -2px; /* Colle aux bords */
+  border-radius: inherit;
+  z-index: 100;
+  pointer-events: none;
+  opacity: 0;
+  border: 2px solid rgba(255,255,255,0.8);
+}
+
+/* Au clic ou via JS (classe .anim-active) */
+.effect-shockwave:active::after,
+.effect-shockwave.anim-active::after {
+  animation: shockwave-blast 0.5s cubic-bezier(0, 0.5, 0.2, 1) forwards;
+}
+
+
 
 @keyframes flip { 0% { transform: rotateY(0); } 50% { transform: rotateY(90deg); } 100% { transform: rotateY(0); } }
 .flipping { animation: flip 0.6s ease-in-out; transform-style: preserve-3d; }
@@ -452,21 +690,30 @@ body.bg-phase-dusk {
 
 .shop-layout {
   display: flex;
-  gap: 1.5rem;
-  height: 600px; /* Hauteur fixe pour le scroll interne */
+  gap: 0; /* On gère l'espacement via le padding interne des panels pour plus de contrôle */
+  /* 🔥 FIX : On remplace height: 600px par une hauteur relative au viewport */
+  height: 70vh; 
+  min-height: 600px; /* On garantit assez d'espace */
+  max-height: 800px;
   overflow: hidden;
 }
 
 /* COLONNE GAUCHE : PREVIEW */
 .shop-preview-panel {
-  flex: 0 0 300px;
-  background: rgba(0, 0, 0, 0.3);
+  flex: 0 0 320px;
+  background: #0e0e12;
   border-right: 1px solid rgba(255, 255, 255, 0.05);
-  padding-right: 1.5rem;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
-  gap: 1.5rem;
+  gap: 1rem;
+  
+  /* Gestion du scroll si l'écran est petit */
+  overflow-y: auto;
+  overflow-x: hidden;
+  position: relative;
 }
+.shop-preview-panel::-webkit-scrollbar { display: none; }
 
 .preview-card-container {
   flex: 1;
@@ -474,10 +721,22 @@ body.bg-phase-dusk {
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  /* On garde le radial par défaut, mais on permet de le surcharger */
   background: radial-gradient(circle at center, rgba(255,255,255,0.03) 0%, transparent 70%);
   border-radius: 16px;
   border: 1px dashed rgba(255,255,255,0.1);
   position: relative;
+  overflow: hidden; /* Important pour que le ciel ne dépasse pas */
+  transition: all 0.5s ease;
+}
+
+.weather-container-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0; /* Derrière la carte */
+  opacity: 0.6;
+  filter: blur(20px); /* Un petit flou pour faire "Ambiance" */
+  transition: background 1s ease;
 }
 
 /* COLONNE DROITE : CATALOGUE */
@@ -488,22 +747,49 @@ body.bg-phase-dusk {
   overflow: hidden;
 }
 
+.empty-shop-state {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  color: #666;
+  font-style: italic;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  background: rgba(0,0,0,0.2);
+}
+
+.shop-tabs-container::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
 /* TABS STYLÉS */
 .shop-tabs-container {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center; /* Centre tout le bloc d'onglets */
   gap: 0.5rem;
-  margin-bottom: 1rem;
-  overflow-x: auto;
+  margin-bottom: 1.5rem;
   padding-bottom: 5px;
+  width: 100%;
+  
+  /* Supression Scrollbar */
+  overflow: visible; 
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 .shop-tab-modern {
+  /* 🔥 FIX: On empêche le bouton de grandir pour remplir le vide */
+  flex: 0 0 auto; 
+  
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
   padding: 0.6rem 1rem;
   border-radius: 8px;
   color: #888;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   font-weight: 700;
   text-transform: uppercase;
   cursor: pointer;
@@ -529,12 +815,12 @@ body.bg-phase-dusk {
 /* GRILLE ITEMS */
 .shop-items-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 1.5rem; /* Plus d'espace */
+  /* minmax à 140px force environ 3 items sur un écran standard */
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); 
+  gap: 1rem;
   overflow-y: auto;
   overflow-x: hidden;
-  /* 🔥 Le padding permet aux cartes de grandir (scale) sans être coupées */
-  padding: 1rem; 
+  padding: 0.5rem;
   padding-bottom: 2rem;
 }
 
@@ -598,14 +884,22 @@ body.bg-phase-dusk {
 .shop-items-grid::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 
 .unequip-btn {
-  font-size: 0.7rem;
+  font-size: 0.6rem;
   color: #ef4444;
-  text-decoration: underline;
+  background: rgba(239, 68, 68, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(239, 68, 68, 0.2);
   cursor: pointer;
-  background: none; border: none;
-  opacity: 0.7; transition: opacity 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
 }
-.unequip-btn:hover { opacity: 1; }
+.unequip-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ff6b6b;
+}
 
 .preview-desc-overlay {
   position: absolute;
@@ -618,28 +912,51 @@ body.bg-phase-dusk {
 }
 
 .loadout-container {
-  margin-top: 1.5rem;
-  padding-top: 1.5rem;
-  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  /* Margin-top: auto pousse l'inventaire tout en bas du panneau */
+  margin-top: auto; 
+  padding-top: 1rem;
   width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center; /* Centre le bloc entier horizontalement */
+}
+
+.loadout-header {
+  width: 100%;
+  /* On s'aligne sur la largeur de la grille d'inventaire */
+  max-width: 220px; 
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
 }
 
 .loadout-title {
   font-size: 0.7rem;
-  color: #666;
+  color: #888;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 1px;
-  margin-bottom: 0.8rem;
   display: flex;
   align-items: center;
   gap: 6px;
+  margin: 0;
 }
 
 .inventory-bar {
   display: flex;
-  gap: 0.8rem;
-  justify-content: center;
+  flex-wrap: wrap;
+  justify-content: center; /* Centre parfaitement les lignes */
+  gap: 8px; /* Un peu plus d'espace entre les cases */
+  
+  /* 🔥 CALCUL PRÉCIS : 
+     4 cases de 48px + 3 espaces de 8px = 216px de contenu minimum.
+     On met 235px pour être large (sécurité) mais empêcher d'en mettre 5 (qui demanderaient ~272px).
+  */
+  width: 235px; 
+  margin: 0 auto; /* Sécurité pour centrer le bloc lui-même */
 }
 
 .inventory-slot {
@@ -651,10 +968,11 @@ body.bg-phase-dusk {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   position: relative;
   transition: all 0.2s ease;
-  cursor: help;
+  cursor: pointer;
+  flex-shrink: 0; 
 }
 
 .inventory-slot.equipped {

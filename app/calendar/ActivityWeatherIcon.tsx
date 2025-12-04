@@ -4,6 +4,30 @@ import React, { useEffect, useState, useMemo } from "react"
 import { Sun, Cloud, CloudRain, CloudLightning, Snowflake, CloudFog } from "lucide-react"
 import { getStartCoordFromPolyline } from "./utils"
 
+// --- QUEUE SYSTEM (Global au module, pas au composant) ---
+const MAX_CONCURRENT_REQUESTS = 2; // Conservateur pour éviter le rate-limit
+const requestQueue: (() => Promise<void>)[] = [];
+let activeRequests = 0;
+
+const processQueue = () => {
+    if (activeRequests >= MAX_CONCURRENT_REQUESTS || requestQueue.length === 0) return;
+    
+    const nextTask = requestQueue.shift();
+    if (nextTask) {
+        activeRequests++;
+        nextTask().finally(() => {
+            activeRequests--;
+            processQueue(); // On enchaîne
+        });
+    }
+};
+
+const enqueueTask = (task: () => Promise<void>) => {
+    requestQueue.push(task);
+    processQueue();
+};
+// ---------------------------------------------------------
+
 const IGNORE_START_SECONDS = 600;
 
 export default function ActivityWeatherIcon({ 
@@ -17,8 +41,6 @@ export default function ActivityWeatherIcon({
   active: boolean,
   isBigMode?: boolean
 }) {
-  // 1. ÉTAT LOCAL (Initialisé DIRECTEMENT avec ce qu'il y a en BDD)
-  // Si la BDD est remplie, weather contient déjà les valeurs.
   const [weather, setWeather] = useState<{
       code: number | null,
       min: number | null,
@@ -33,25 +55,28 @@ export default function ActivityWeatherIcon({
 
   const [localStreams, setLocalStreams] = useState(activity.streams_data);
 
-  // 2. BACKFILL STREAMS (Seulement si manquants)
+  // 1. BACKFILL STREAMS (Queue System)
   useEffect(() => {
-    if (active && !localStreams && activity.strava_id) {
-        const delay = (indexDelay * 300) + Math.random() * 2000;
-        const timer = setTimeout(() => {
-            fetch('/api/sync-stream', {
-                method: 'POST',
-                body: JSON.stringify({ activityId: activity.id, stravaId: activity.strava_id })
-            })
-            .then(res => res.json())
-            .then(data => { if (data.success && data.streams) setLocalStreams(data.streams); })
-            .catch(console.error);
-        }, delay);
+    if (active && !localStreams && activity.strava_id && !activity.streams_data) {
+        const task = async () => {
+            try {
+                const res = await fetch('/api/sync-stream', {
+                    method: 'POST',
+                    body: JSON.stringify({ activityId: activity.id, stravaId: activity.strava_id })
+                });
+                const data = await res.json();
+                if (data.success && data.streams) setLocalStreams(data.streams);
+            } catch (e) { console.error("Stream sync error", e); }
+        };
+
+        // On ajoute un délai aléatoire pour ne pas saturer la queue instantanément au chargement
+        const delay = (indexDelay * 100) + Math.random() * 1000;
+        const timer = setTimeout(() => enqueueTask(task), delay);
         return () => clearTimeout(timer);
     }
   }, [active, localStreams, activity.id, activity.strava_id, indexDelay]);
 
-
-  // 3. CALCUL TEMPÉRATURE (Stream > BDD)
+  // 2. CALCUL TEMPÉRATURE (Stream > BDD) - Pure CPU, pas de fetch
   const streamStats = useMemo(() => {
     if (localStreams && localStreams.temp && localStreams.temp.data) {
         const rawTemps = localStreams.temp.data as number[];
@@ -70,44 +95,35 @@ export default function ActivityWeatherIcon({
     return null;
   }, [localStreams]);
 
-
-  // 4. ORCHESTRATION PRINCIPALE (LA LOGIQUE "ONE SHOT")
+  // 3. ORCHESTRATION & API HISTORIQUE (Queue System)
   useEffect(() => {
     if (!active) return;
 
-    // --- LE MUR DE SÉCURITÉ (STOP) ---
-    // Si on a déjà le Code Météo ET la Température Moyenne en BDD (ou dans le state local)
-    // ET qu'on n'a pas de nouvelles données Stream à sauvegarder (pas d'upgrade possible)
     const dbIsComplete = activity.weather_code !== null && activity.temp_avg !== null;
-    const streamIsBetter = streamStats !== null && activity.temp_min === null; // On a trouvé Min/Max alors qu'ils manquaient
+    const streamIsBetter = streamStats !== null && activity.temp_min === null; 
 
-    if (dbIsComplete && !streamIsBetter) {
-        // Tout est déjà stocké, on ne fait RIEN.
-        return;
-    }
-    // ---------------------------------
+    if (dbIsComplete && !streamIsBetter) return;
 
-    const processAndSave = async () => {
+    const processWeather = async () => {
         let finalCode = weather.code;
         let finalMin = weather.min;
         let finalMax = weather.max;
         let finalAvg = weather.avg;
 
-        // A. Si on a trouvé des streams, on met à jour les temps
         if (streamStats) {
             finalMin = streamStats.min;
             finalMax = streamStats.max;
             finalAvg = streamStats.avg;
         }
 
-        // B. Si le Code Météo manque, on appelle l'API Historique
+        // Call External API only if code is missing
         if (finalCode === null) {
             let lat = activity.start_lat;
             let lon = activity.start_lng;
             
-            // Décodage polyline si nécessaire
             if (!lat || !lon) {
                 let raw: any = activity.polyline;
+                // ... (Logique de décodage existante conservée) ...
                 if (typeof raw === 'string' && raw.trim().startsWith('{')) try { raw = JSON.parse(raw) } catch {};
                 const pStr = (raw && typeof raw === 'object') ? (raw.polyline || raw.summary_polyline) : raw;
                 if (pStr && typeof pStr === 'string' && pStr.length > 5) {
@@ -120,33 +136,26 @@ export default function ActivityWeatherIcon({
                 try {
                     const dateStr = activity.start_time;
                     const dF = new Date(dateStr).toISOString().split('T')[0];
+                    // Fetch Open-Meteo
                     const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${dF}&end_date=${dF}&hourly=weather_code,temperature_2m`;
-                    
                     const res = await fetch(url);
                     if (res.ok) {
                         const data = await res.json();
                         const hIdx = new Date(dateStr).getHours();
                         finalCode = data.hourly?.weather_code?.[hIdx] ?? null;
-                        // Fallback temp si on n'avait rien
                         if (finalAvg === null) finalAvg = data.hourly?.temperature_2m?.[hIdx] ?? null;
                     }
-                } catch (e) { console.error(e); }
+                } catch (e) { console.error("Weather API error", e); }
             }
         }
 
-        // C. SAUVEGARDE (Seulement si on a trouvé quelque chose de nouveau)
-        const hasChanges = 
-            finalCode !== activity.weather_code ||
-            finalMin !== activity.temp_min ||
-            finalMax !== activity.temp_max ||
-            finalAvg !== activity.temp_avg;
+        // Save if changes
+        const hasChanges = finalCode !== activity.weather_code || finalAvg !== activity.temp_avg || finalMin !== activity.temp_min;
 
         if (hasChanges && (finalCode !== null || finalAvg !== null)) {
-            
-            // Mise à jour visuelle immédiate
             setWeather({ code: finalCode, min: finalMin, max: finalMax, avg: finalAvg });
-
-            // Sauvegarde BDD
+            
+            // On sauvegarde en BDD (pas besoin de queue ici, c'est notre API interne, Next gère bien)
             await fetch('/api/save-weather', {
                 method: 'POST',
                 body: JSON.stringify({
@@ -157,17 +166,17 @@ export default function ActivityWeatherIcon({
                     tempAvg: finalAvg
                 })
             });
-            if (isBigMode) console.log(`💾 [SAVED] Act #${activity.id} updated in DB.`);
+            if (isBigMode) console.log(`💾 [SAVED] Act #${activity.id}`);
         }
     };
 
-    // On lance le processus avec un petit délai pour étaler la charge
-    const delay = (indexDelay * 200) + Math.random() * 500;
-    const timer = setTimeout(processAndSave, delay);
+    // On met cette tâche lourde dans la queue
+    const delay = (indexDelay * 150) + Math.random() * 500;
+    const timer = setTimeout(() => enqueueTask(processWeather), delay);
+    
     return () => clearTimeout(timer);
 
-  }, [active, streamStats, activity, weather.code, indexDelay]); // Dépendances nettoyées
-
+  }, [active, streamStats, activity.id, weather.code, indexDelay]);
 
   // --- RENDU ---
   if (!active || weather.code === null) return null;
@@ -188,7 +197,6 @@ export default function ActivityWeatherIcon({
   return (
     <div style={containerStyle}>
         <WeatherIcon size={iconSize} color={iconColor} style={baseStyle} />
-        
         {isBigMode && weather.avg !== null && (
             <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1, paddingBottom: '2px' }}>
                 <span style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fff', textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
