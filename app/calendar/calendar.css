@@ -22,6 +22,9 @@ body {
   100% { background-position: 0% 50%; }
 }
 
+.physic-zap { 
+  animation: zap-flash 0.2s ease-out forwards; width: 30px !important; height: 2px !important; border-radius: 0 !important; box-shadow: 0 0 10px currentColor;
+}
 body.bg-phase-dawn,
 body.bg-phase-day,
 body.bg-phase-dusk,
@@ -611,7 +614,7 @@ body.bg-phase-dusk { background: linear-gradient(125deg, #312e81 0%, #be185d 50%
 .physic-reindeer { animation: reindeer-hop 0.5s infinite; font-size: 20px !important; background: transparent !important; }
 
 /* 🔔 NOUVEAU : ONDE SONORE (RING) */
-@keyframes ring-expand { 0% { transform: scale(0); opacity: 1; border-width: 2px; } 100% { transform: scale(3); opacity: 0; border-width: 0px; } }
+@keyframes ring-expand { 0% { transform: scale(0); opacity: 1; border-width: 2px; } 100% { transform: scale(20); opacity: 0; border-width: 0px; } }
 .physic-ring { border: 2px solid #ffd700; background: transparent; border-radius: 50%; animation: ring-expand 0.6s ease-out forwards; }
 
 @keyframes matrix-fall {

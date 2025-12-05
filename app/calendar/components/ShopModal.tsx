@@ -30,7 +30,9 @@ const MOCK_WEATHER_CYCLE = [
 const MOCK_SMART_CYCLE = [
     { label: "INTENSITÉ 🔥", class: "smart-heat" },
     { label: "VITESSE ⚡", class: "smart-speed" },
-    { label: "MONTAGNE ⛰️", class: "smart-climb", variable: { "--climb-h": "60%" } }
+    { label: "MONTAGNE ⛰️", class: "smart-climb", variable: { "--climb-h": "40%" } },
+    { label: "MONTAGNE ⛰️", class: "smart-climb", variable: { "--climb-h": "60%" } },
+    { label: "MONTAGNE ⛰️", class: "smart-climb", variable: { "--climb-h": "80%" } }
 ];
 
 const MOCK_ACTIVITIES: CalendarActivity[] = [
