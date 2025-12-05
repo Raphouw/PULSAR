@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import CalendarClient from './calendarClient';
 import { ShopData } from "./types";
 
-// 🔥 FIX CRITIQUE : Désactive le cache statique de Vercel
+// Force le calcul dynamique à chaque requête (évite le cache périmé)
 export const dynamic = 'force-dynamic';
 
 export default async function CalendarPage() {
@@ -16,15 +16,19 @@ export default async function CalendarPage() {
     redirect('/auth/signin');
   }
 
-  // 1. Récupération des activités
+  // 1. Récupération des activités (VERSION LÉGÈRE)
+  // ⚠️ J'ai retiré 'streams_data' qui faisait planter le chargement
   const { data: activities, error } = await supabaseAdmin
     .from('activities')
-    .select('id, strava_id, name, start_time, distance_km, avg_speed_kmh, elevation_gain_m, duration_s, tss, type, avg_power_w, avg_heartrate, polyline, weather_code, temp_min, temp_max, temp_avg, streams_data') 
+    .select('id, strava_id, name, start_time, distance_km, avg_speed_kmh, elevation_gain_m, duration_s, tss, type, avg_power_w, avg_heartrate, polyline, weather_code, temp_min, temp_max, temp_avg') 
     .eq('user_id', session.user.id)
     .order('start_time', { ascending: true });
 
-  // 2. Récupération des achats ET DU SOLDE UTILISATEUR (NEW)
-  // On récupère aussi le wallet_balance directement depuis la table users
+  if (error) {
+    console.error("Erreur Chargement Activités:", error);
+  }
+
+  // 2. Récupération du Solde & Achats
   const { data: userData } = await supabaseAdmin
     .from('users')
     .select('wallet_balance, spent_tss')
@@ -33,7 +37,7 @@ export default async function CalendarPage() {
 
   const { data: purchases } = await supabaseAdmin
     .from('shop_purchases')
-    .select('effect_id, cost')
+    .select('effect_id')
     .eq('user_id', session.user.id);
 
   // 3. Récupération du Loadout
@@ -43,17 +47,15 @@ export default async function CalendarPage() {
     .eq('user_id', session.user.id)
     .single();
 
-  // 🔥 CHANGEMENT ICI : On prend la valeur BDD, sinon 0
-  const walletBalance = userData?.wallet_balance || 0; 
-  const spentTSS = userData?.spent_tss || 0; // Ou via purchases.reduce si tu préfères, mais la BDD l'a déjà.
-
+  // Valeurs par défaut sécurisées
+  const walletBalance = userData?.wallet_balance ?? 0; 
+  const spentTSS = userData?.spent_tss ?? 0;
   const ownedEffects = purchases?.map(p => p.effect_id) || [];
   const rawLoadout = settings?.equipped_loadout || {};
 
   const shopData: ShopData = {
-    // On passe le vrai solde calculé par le serveur
-    serverBalance: walletBalance, 
-    spentTSS, // Optionnel, juste pour info
+    serverBalance: walletBalance,
+    spentTSS,
     ownedEffects,
     loadout: {
         FRAME: rawLoadout.FRAME || rawLoadout.card || null, 
@@ -65,10 +67,6 @@ export default async function CalendarPage() {
         SPECIAL: rawLoadout.SPECIAL || null,
     }
   };
-
-  if (error) {
-    console.error("Erreur Calendar:", error);
-  }
 
   return (
     <div style={{ minHeight: '100vh', padding: '2rem' }}>
