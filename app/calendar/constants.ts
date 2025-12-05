@@ -166,11 +166,7 @@ export const SHOP_EFFECTS: ShopEffect[] = [
     name: "Fête", description: "Canon à confettis.", 
     price: 800, preview: "🎉", colors: ["#d04fd7", "#00f3ff", "#ffd700", "#ef4444"], requiresActivity: true 
   },
-  { 
-    id: "shockwave_click", slot: "INTERACTION",
-    name: "Onde de Choc", description: "Impact puissant.", 
-    price: 800, preview: "🌊", colors: ["#00f3ff"], cssClass: "effect-shockwave", requiresActivity: true 
-  },
+ 
 
   // --- 5. AMBIANCE ---
   { 

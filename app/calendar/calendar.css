@@ -300,12 +300,7 @@ body.bg-phase-dusk {
   transition: all 0.1s ease-out; 
 }
 
-/* === NOUVEAU FIX : Désactiver le 'overflow: hidden' de smart-speed si on est en mode 'shockwave' === */
-.smart-speed.effect-shockwave:active, 
-.smart-speed.effect-shockwave.anim-active {
-  /* Ceci annule le "overflow: hidden" de .smart-speed pour la durée de l'animation */
-  overflow: visible !important; 
-}
+
 
 /* Gérer le clic via la nouvelle animation */
 .smart-speed:active {
@@ -459,56 +454,6 @@ body.bg-phase-dusk {
   animation-iteration-count: infinite;
   animation-timing-function: ease-in-out;
 }
-
-@keyframes shockwave-blast {
-  0% {
-    box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.8), 
-                0 0 0 0 rgba(0, 243, 255, 0.8),
-                inset 0 0 0 0 rgba(255, 255, 255, 0.5);
-    opacity: 1;
-    transform: scale(1);
-  }
-  40% {
-    /* Le flash s'étend rapidement */
-    box-shadow: 0 0 0 20px rgba(255, 255, 255, 0), 
-                0 0 0 10px rgba(0, 243, 255, 0.6),
-                inset 0 0 50px 0 rgba(255, 255, 255, 0);
-  }
-  100% {
-    /* Dissipation totale */
-    box-shadow: 0 0 0 40px rgba(255, 255, 255, 0), 
-                0 0 0 20px rgba(0, 243, 255, 0),
-                inset 0 0 0 0 rgba(255, 255, 255, 0);
-    opacity: 0;
-    transform: scale(1.02); /* Légère expansion du conteneur */
-  }
-}
-
-.effect-shockwave {
-  position: relative;
-  /* On permet au overflow d'être visible pendant l'anim */
-  overflow: visible !important; 
-  transform-origin: center;
-}
-
-.effect-shockwave::after {
-  content: '';
-  position: absolute;
-  inset: -2px; /* Colle aux bords */
-  border-radius: inherit;
-  z-index: 100;
-  pointer-events: none;
-  opacity: 0;
-  border: 2px solid rgba(255,255,255,0.8);
-}
-
-/* Au clic ou via JS (classe .anim-active) */
-.effect-shockwave:active::after,
-.effect-shockwave.anim-active::after {
-  animation: shockwave-blast 0.5s cubic-bezier(0, 0.5, 0.2, 1) forwards;
-}
-
-
 
 @keyframes flip { 0% { transform: rotateY(0); } 50% { transform: rotateY(90deg); } 100% { transform: rotateY(0); } }
 .flipping { animation: flip 0.6s ease-in-out; transform-style: preserve-3d; }
