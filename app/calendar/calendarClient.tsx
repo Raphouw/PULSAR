@@ -48,9 +48,14 @@ const styles = {
 export default function CalendarClient({ activities, initialShopData }: { activities: CalendarActivity[], initialShopData: ShopData }) {
   // --- STATE ---
   const [currentDate, setCurrentDate] = useState(new Date())
-  const [walletBalance, setWalletBalance] = useState(
-      initialShopData.serverBalance ?? calculateWallet(activities)
-  );
+  const [walletBalance, setWalletBalance] = useState(() => {
+      if (typeof initialShopData.serverBalance === 'number') {
+          return initialShopData.serverBalance;
+      }
+      // Fallback de secours (Net = Brut - Dépenses)
+      const estimatedGross = calculateWallet(activities);
+      return estimatedGross - initialShopData.spentTSS;
+  });
   const [spentTSS, setSpentTSS] = useState(initialShopData.spentTSS)
   const [ownedEffects, setOwnedEffects] = useState<Set<string>>(new Set(initialShopData.ownedEffects))
   const [loadout, setLoadout] = useState<UserLoadout>(initialShopData.loadout)
