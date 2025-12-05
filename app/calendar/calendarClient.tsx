@@ -20,9 +20,9 @@ import DayCard from "./components/DayCard"
 // --- STYLES UTILITAIRES (Pour garder la compatibilité visuelle) ---
 // Note: Idéalement à migrer en classes CSS/Tailwind, mais gardé ici pour l'instant
 const styles = {
-  container: { display: "flex", gap: "1rem", alignItems: "flex-start", flexWrap: "wrap" as const, maxHeight: "100vh", overflow: "hidden", padding: "0.5rem" },
-  calendarSection: { flex: "1 1 70%", minWidth: "0", maxHeight: "100vh", overflow: "hidden" },
-  sidebarSection: { flex: "0 0 22%", display: "flex", flexDirection: "column" as const, gap: "0.75rem", maxHeight: "100vh", overflowY: "auto" as const, overflowX: "hidden" as const, scrollbarWidth: "none" as const },
+  container: { display: "flex", gap: "1rem", alignItems: "flex-start", flexWrap: "wrap" as const, maxHeight: "150vh", overflow: "hidden", padding: "0.5rem" },
+  calendarSection: { flex: "1 1 70%", minWidth: "0", maxHeight: "150vh", overflow: "hidden" },
+  sidebarSection: { flex: "0 0 22%", display: "flex", flexDirection: "column" as const, gap: "0.75rem", maxHeight: "150vh", overflowY: "auto" as const, overflowX: "hidden" as const, scrollbarWidth: "none" as const },
   glassPanel: { background: "rgba(20, 20, 30, 0.6)", backdropFilter: "blur(12px)", border: "1px solid rgba(255, 255, 255, 0.08)", borderRadius: "14px", padding: "1rem", boxShadow: "0 4px 20px rgba(0,0,0,0.2)", position: "relative" as const },
   headerRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.75rem", background: "rgba(255,255,255,0.03)", padding: "0.5rem 0.75rem", borderRadius: "12px", border: "1px solid rgba(255,255,255,0.05)", flexWrap: "wrap" as const, gap: "0.5rem" },
   monthTitle: { fontSize: "1.5rem", fontWeight: 900, background: "linear-gradient(90deg, #fff 0%, #a0a0a0 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", margin: 0, textTransform: "uppercase" as const, minWidth: "200px" },
@@ -91,7 +91,7 @@ export default function CalendarClient({ activities, initialShopData }: { activi
   };
 
   const handleUnequipAll = () => {
-      const emptyLoadout: UserLoadout = { FRAME: null, HOVER: null, TRAIL: null, INTERACTION: null, AMBIANCE: null, TODAY: null, SPECIAL: null };
+      const emptyLoadout: UserLoadout = { FRAME: null, HOVER: null, TRAIL: null, INTERACTION: null, AMBIANCE: null, TODAY: null, SPECIAL: null, AURA:null, };
       setLoadout(emptyLoadout);
       saveLoadoutToDB(emptyLoadout);
   };
@@ -175,7 +175,11 @@ export default function CalendarClient({ activities, initialShopData }: { activi
   const tssLevelInfo = getTssLevelInfo(stats.totalTSS)
   const tssLevelClass = getTssLevelClass(stats.totalTSS)
   const isWeatherActive = loadout.AMBIANCE === "weather_dynamic";
+  const auraEffect = SHOP_EFFECTS.find(e => e.id === loadout.AURA);
 
+
+  const hasActivityInMonth = stats.count > 0;
+  const auraClass = (auraEffect && hasActivityInMonth) ? auraEffect.cssClass : "";
   // --- DATA DU MOIS ---
   const monthData = useMemo(() => {
     const daysInMonth = new Date(year, month + 1, 0).getDate()
@@ -271,10 +275,12 @@ export default function CalendarClient({ activities, initialShopData }: { activi
             <div style={styles.progressBarBg}><div className="progress-bar" style={styles.progressBarFill("#00f3ff", (stats.fullWeeksCount / 4) * 100)} /></div>
             <div style={styles.progressValue}>{Math.floor(stats.fullWeeksCount)} / 4</div>
           </div>
+          
         </div>
+        
 
         {/* GRID CALENDRIER */}
-        <div style={styles.glassPanel}>
+      <div className={`calendar-grid-container ${auraClass}`} style={styles.glassPanel}>          
           <div style={styles.gridHeader}>
             {["LUN", "MAR", "MER", "JEU", "VEN", "SAM", "DIM"].map((d) => <div key={d} style={styles.gridHeaderCell}>{d}</div>)}
           </div>
@@ -301,9 +307,15 @@ export default function CalendarClient({ activities, initialShopData }: { activi
                 />
               )
             })}
+            
           </div>
+          
         </div>
+      
       </div>
+
+      
+      
 
       {/* --- SIDEBAR (22%) --- */}
       <div style={styles.sidebarSection}>

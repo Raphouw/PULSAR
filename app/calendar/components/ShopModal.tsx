@@ -11,12 +11,14 @@ type ShopTab = { id: EffectSlot, label: string, icon: string }
 
 const SHOP_TABS: ShopTab[] = [
     { id: 'FRAME', label: 'Cadres', icon: '🖼️' },
-    { id: 'HOVER', label: 'Survol', icon: '✨' },
+    { id: 'HOVER', label: 'Survol', icon: '🖱️' },
     { id: 'TRAIL', label: 'Trainée', icon: '☄️' },
     { id: 'INTERACTION', label: 'Clics', icon: '💥' },
     { id: 'AMBIANCE', label: 'Ambiance', icon: '🌤️' },
     { id: 'TODAY', label: 'Case du jour', icon: '📅' },
+    { id: 'AURA', label: 'Aura', icon: '✨' }, 
     { id: 'SPECIAL', label: 'Spécial', icon: '🎁' },
+    
 ];
 
 const MOCK_WEATHER_CYCLE = [
@@ -93,7 +95,7 @@ export default function ShopModal({
     // Loadout Temporaire
     let previewLoadout: UserLoadout = { 
         FRAME: null, HOVER: null, TRAIL: null, INTERACTION: null, 
-        AMBIANCE: null, TODAY: null, SPECIAL: null 
+        AMBIANCE: null, TODAY: null, SPECIAL: null, AURA: null,
     };
 
     if (displayEffect) {

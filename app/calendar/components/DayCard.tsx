@@ -66,6 +66,7 @@ export default function DayCard({
     const todayEffect = SHOP_EFFECTS.find(e => e.id === loadout.TODAY); 
     const clickEffect = SHOP_EFFECTS.find(e => e.id === loadout.INTERACTION);
     const ambianceEffect = loadout.AMBIANCE;
+    const auraEffect = SHOP_EFFECTS.find(e => e.id === loadout.AURA); // 🔥 NOUVEAU
 
     // 3. Construction des styles via l'utilitaire
     const slotStyles = {
@@ -85,6 +86,10 @@ export default function DayCard({
         dynamicClasses += " today-king-container"; 
         // 2. L'enfant gère le fond noir et les rayons (qui sont coupés)
         innerBgClasses = "today-king-bg"; 
+    }
+
+    if ((hasActivity || isPreview) && auraEffect?.cssClass) {
+        dynamicClasses += ` ${auraEffect.cssClass}`;
     }
 
     // GESTION SPECIALE SYNTHWAVE & PAVÉS (On met tout dans le fond clippé)
@@ -265,6 +270,8 @@ export default function DayCard({
                     {ambianceEffect === "aurora_sky" && <div className="shooting-star"></div>}
                 </div>
             )}
+
+         
 
             {!isPreview && showConnector && streakConfig && <div className={streakConfig.className} />}
             

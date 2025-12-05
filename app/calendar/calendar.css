@@ -2120,3 +2120,60 @@ body.bg-phase-dusk { background: linear-gradient(125deg, #312e81 0%, #be185d 50%
     0%, 100% { transform: translateY(0); }
     50% { transform: translateY(-3px); }
 }
+
+
+/* ==========================================================================
+   15. NOUVEAU SLOT : AURA (HALO VOLUMÉTRIQUE GLOBAL)
+   ========================================================================== */
+
+/* (Le style de base reste le même, notamment overflow: visible) */
+
+/* 🚀 AURA : SPEED WARP GLOBAL (Couronne Lumineuse) */
+
+.calendar-grid-container.aura-speed-warp {
+    /* Maintient le contour de base plus net */
+    border-color: rgba(0, 243, 255, 0.5) !important;
+    box-shadow: 0 0 10px rgba(0, 243, 255, 0.4); 
+}
+
+@keyframes warp-spin {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.calendar-grid-container.aura-speed-warp::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    
+    /* 🔥 LA CLÉ : Une taille beaucoup plus grande pour que le dégradé radial ne touche le centre */
+    width: 250%; 
+    height: 250%;
+    
+    border-radius: 50%;
+    
+    /* 🔥 Le nouveau dégradé RADIAL : 
+       - Démarrer en transparent (au centre) 
+       - Passer par une faible opacité (#00f3ff10) pour le halo interne
+       - Finir par l'effet lumineux sur les bords (la couronne)
+    */
+    background: radial-gradient(
+        circle at center, 
+        transparent 50%,           /* Centre totalement transparent */
+        rgba(0, 243, 255, 0.05) 55%, /* Début de l'effet très doux */
+        rgba(0, 243, 255, 0.3) 65%,  /* Pic lumineux (la couronne) */
+        transparent 80%            /* Fin de l'aura */
+    );
+    
+    filter: blur(25px); /* Garder le flou pour l'effet "halo" */
+    
+    animation: warp-spin 10s linear infinite;
+    
+    pointer-events: none;
+    z-index: -1; 
+    mix-blend-mode: screen; 
+    
+    /* On retire la bordure externe qui faisait un double-contour */
+    border: none;
+}

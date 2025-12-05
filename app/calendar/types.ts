@@ -28,6 +28,7 @@ export type EffectSlot =
   | "AMBIANCE"    // Global (Météo, IA)
   | "TODAY"
   | "SPECIAL"
+  | "AURA"
 
 
 
