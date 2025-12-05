@@ -36,6 +36,7 @@ export type UserLoadout = {
 }
 
 export type ShopData = {
+  serverBalance?: number // 🔥 Nouveau champ optionnel (le vrai solde)
   spentTSS: number
   ownedEffects: string[]
   loadout: UserLoadout

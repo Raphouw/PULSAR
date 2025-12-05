@@ -48,6 +48,9 @@ const styles = {
 export default function CalendarClient({ activities, initialShopData }: { activities: CalendarActivity[], initialShopData: ShopData }) {
   // --- STATE ---
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [walletBalance, setWalletBalance] = useState(
+      initialShopData.serverBalance ?? calculateWallet(activities)
+  );
   const [spentTSS, setSpentTSS] = useState(initialShopData.spentTSS)
   const [ownedEffects, setOwnedEffects] = useState<Set<string>>(new Set(initialShopData.ownedEffects))
   const [loadout, setLoadout] = useState<UserLoadout>(initialShopData.loadout)
@@ -65,7 +68,7 @@ export default function CalendarClient({ activities, initialShopData }: { activi
 
   // --- LOGIQUE BOUTIQUE ---
   const walletTotal = useMemo(() => calculateWallet(activities), [activities]);
-  const currentBalance = walletTotal - spentTSS;
+  const currentBalance = walletBalance;
 
   const saveLoadoutToDB = (newLoadout: UserLoadout) => {
       fetch('/api/shop/equip', { 
@@ -89,14 +92,25 @@ export default function CalendarClient({ activities, initialShopData }: { activi
   };
 
   const handlePurchase = async (effect: ShopEffect) => {
+      // Vérif locale rapide (optimiste)
       if (currentBalance >= effect.price && !ownedEffects.has(effect.id)) {
+          // Mise à jour optimiste UI
+          setWalletBalance(prev => prev - effect.price); 
           setSpentTSS(prev => prev + effect.price);
           setOwnedEffects(prev => new Set(prev).add(effect.id));
-          const newLoadout = { ...loadout, [effect.slot]: effect.id };
-          setLoadout(newLoadout);
-          saveLoadoutToDB(newLoadout);
           try {
-              await fetch('/api/shop/buy', { method: 'POST', body: JSON.stringify({ effectId: effect.id, cost: effect.price }) });
+              // Appel API
+              const res = await fetch('/api/shop/buy', { 
+                  method: 'POST', 
+                  body: JSON.stringify({ effectId: effect.id, cost: effect.price }) 
+              });
+              
+              if (!res.ok) {
+                  // Si le serveur refuse (triche/erreur), on rollback
+                  const data = await res.json();
+                  alert("Erreur achat: " + data.error);
+                  window.location.reload(); // Rechargement brutal mais sûr pour remettre les compteurs d'équerre
+              }
           } catch(e) { console.error("Erreur achat:", e); }
       }
   };
