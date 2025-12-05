@@ -132,6 +132,31 @@ export const createParticles = (e: React.MouseEvent | DOMRect, effect: ShopEffec
         count = 1; 
         particleText = "🦌"; 
     }
+
+   else if (effect.id === "power_up_trail") {
+        physicsClass = "physic-float"; 
+        count = 1;
+        // On choisit aléatoirement un power up
+        const icons = ["🪶", "🚐", "👻", "🪵"]; 
+        particleText = icons[Math.floor(Math.random() * icons.length)];
+        sizeBase = 18; // Assez gros pour qu'on voit l'icone
+    }
+    
+    // 👻 GHOST PELOTON (Amélioré)
+    else if (effect.id === "ghost_peloton") {
+        physicsClass = "physic-float"; 
+        count = 1;
+        particleText = "🚴"; 
+        // On va le rendre transparent via CSS inline dans la boucle
+    }
+    
+    // 📸 CAMERA FLASH (Clic)
+    else if (effect.id === "camera_flash") {
+        physicsClass = "physic-blast";
+        count = 8; // Peu de particules, c'est surtout le flash CSS qui joue
+        // Mais on ajoute des petits "+" blancs
+        particleText = "+";
+    }
     
     // 🔥 INTERACTIONS
     else if (effect.id === "bell_ring") { physicsClass = "physic-ring"; count = 1; sizeBase = 20; }
@@ -149,6 +174,12 @@ export const createParticles = (e: React.MouseEvent | DOMRect, effect: ShopEffec
           particle.style.width = `${Math.max(2, Math.random() * sizeBase)}px`
           particle.style.height = particle.style.width
       }
+if (effect.id === "ghost_peloton") {
+           particle.style.filter = "blur(1px) grayscale(100%)";
+           particle.style.opacity = "0.4";
+           particle.style.color = "#fff"; // Toujours blanc fantome
+       }
+      
 
       // Couleur
       const color = colors[Math.floor(Math.random() * colors.length)]
@@ -461,11 +492,7 @@ export const resolveCardClass = (
         if (slotStyles.frame) classes += ` ${slotStyles.frame}`;
         if (slotStyles.hover) classes += ` ${slotStyles.hover}`;
         
-        // 🔥 CORRECTION CRITIQUE ICI :
-        // L'ambiance (Nocturne/Vélodrome) est DANS le bloc "if (hasActivity)"
-        // Donc elle ne s'appliquera JAMAIS aux cases vides.
-        if (slotStyles.ambiance === "night_ride") classes += " ambiance-night";
-        if (slotStyles.ambiance === "velodrome") classes += " ambiance-velodrome";
+       ;
     }
     
     return classes;

@@ -913,3 +913,359 @@ body.bg-phase-dusk { background: linear-gradient(125deg, #312e81 0%, #be185d 50%
 .inventory-slot::after { content: attr(data-tooltip); position: absolute; bottom: 110%; left: 50%; transform: translateX(-50%); background: #111; border: 1px solid #333; color: #fff; padding: 4px 8px; border-radius: 4px; font-size: 0.6rem; white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity 0.2s; z-index: 100; font-weight: 700; }
 .inventory-slot:hover::after { opacity: 1; }
 .slot-icon { font-size: 0.8rem; color: #444; }
+
+
+/* ==========================================================================
+   12. NOUVEAUX COSMÉTIQUES (BATCH 2)
+   ========================================================================== */
+
+/* 🔴 FRAME: KOM HUNTER (A pois rouges néons) */
+.hover-kom:hover {
+  background-color: #fff !important;
+  background-image: radial-gradient(#ff0000 20%, transparent 20%), radial-gradient(#ff0000 20%, transparent 20%) !important;
+  background-size: 20px 20px !important;
+  background-position: 0 0, 10px 10px !important;
+  border: 2px solid #ff0000 !important;
+  transform: scale(1.05) !important;
+  box-shadow: 0 10px 25px rgba(255, 0, 0, 0.4) !important;
+  z-index: 20;
+}
+.hover-kom:hover * { color: #000 !important; text-shadow: none !important; font-weight: 900 !important; }
+
+
+
+
+
+.ambiance-paris-roubaix {
+  /* Base : Terre battue humide du Nord */
+  background-color: #1a1816 !important;
+  
+  /* Pavés mythiques - motif complexe inspiré d'Arenberg */
+  background-image: 
+    /* Couche profonde : ombres des pavés */
+    repeating-linear-gradient(335deg, 
+      rgba(0,0,0,0.8) 0px, 
+      rgba(0,0,0,0.8) 2px, 
+      transparent 2px, 
+      transparent 23px,
+      rgba(0,0,0,0.8) 23px,
+      rgba(0,0,0,0.8) 25px
+    ),
+    repeating-linear-gradient(65deg, 
+      rgba(0,0,0,0.7) 0px, 
+      rgba(0,0,0,0.7) 2px, 
+      transparent 2px, 
+      transparent 23px,
+      rgba(0,0,0,0.7) 23px,
+      rgba(0,0,0,0.7) 25px
+    ),
+    
+    /* Reflets pluvieux sur les pierres */
+    radial-gradient(
+      circle at 30% 20%,
+      rgba(120, 100, 80, 0.15) 0%,
+      transparent 40%
+    ),
+    radial-gradient(
+      circle at 70% 60%,
+      rgba(140, 120, 100, 0.1) 0%,
+      transparent 40%
+    ),
+    
+    /* Texture granuleuse des pierres */
+    linear-gradient(
+      to bottom,
+      transparent 50%,
+      rgba(40, 35, 30, 0.3) 100%
+    ) !important;
+    
+  background-size: 
+    50px 50px,  /* Motif pavés */
+    50px 50px,  /* Motif pavés */
+    100% 100%,  /* Reflets */
+    100% 100%,  /* Reflets */
+    100% 100% !important; /* Texture */
+  
+  background-position: 
+    0 0, 0 0, 
+    0 0, 0 0, 
+    0 0 !important;
+
+  /* Bordure : Pierre usée par les siècles */
+  border: 2px solid transparent !important;
+  border-image: linear-gradient(
+    to right,
+    #5d4c3d 0%,
+    #8a7a6b 25%,
+    #5d4c3d 50%,
+    #3a3229 75%,
+    #5d4c3d 100%
+  ) 1 !important;
+  
+  /* Effets d'immersion */
+  box-shadow: 
+    /* Ombre portée */
+    0 8px 32px rgba(0, 0, 0, 0.8),
+    
+    /* Profondeur intérieure */
+    inset 0 0 60px rgba(0, 0, 0, 0.95),
+    
+    /* Boue accumulée sur les bords */
+    inset 0 0 100px rgba(71, 55, 41, 0.7),
+    
+    /* Reflets métalliques (vélos) */
+    inset 2px 2px 10px rgba(200, 180, 160, 0.1),
+    inset -2px -2px 10px rgba(0, 0, 0, 0.5) !important;
+  
+  position: relative;
+  overflow: hidden;
+  border-radius: 2px !important;
+  
+  /* Animation subtile de lumière */
+  animation: lumiere-roubaix 15s infinite alternate ease-in-out;
+}
+
+/* Couche de boue et poussière */
+.ambiance-paris-roubaix::before {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  background-image: 
+    /* Éclaboussures de boue */
+    radial-gradient(
+      circle at 20% 30%,
+      rgba(92, 64, 51, 0.4) 0%,
+      transparent 25%
+    ),
+    radial-gradient(
+      circle at 80% 70%,
+      rgba(70, 50, 40, 0.5) 0%,
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 40% 80%,
+      rgba(110, 85, 70, 0.3) 0%,
+      transparent 30%
+    ),
+    
+    /* Traces de pneus */
+    linear-gradient(
+      45deg,
+      transparent 45%,
+      rgba(60, 50, 40, 0.4) 50%,
+      transparent 55%
+    ),
+    linear-gradient(
+      -45deg,
+      transparent 45%,
+      rgba(60, 50, 40, 0.3) 50%,
+      transparent 55%
+    ) !important;
+  
+  background-size: 
+    200% 200%,
+    200% 200%,
+    200% 200%,
+    100px 100px,
+    100px 100px !important;
+  
+  animation: traces-boue 25s infinite linear;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  z-index: 1;
+  filter: blur(1px);
+}
+
+/* Couche de saleté et usure */
+.ambiance-paris-roubaix::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  
+  /* Texture de grain et craquelures */
+  background-image: 
+    url("data:image/svg+xml,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.15'/%3E%3C/svg%3E"),
+    
+    /* Fissures dans la pierre */
+    linear-gradient(
+      90deg,
+      transparent 48%,
+      rgba(40, 35, 30, 0.6) 49%,
+      rgba(40, 35, 30, 0.6) 51%,
+      transparent 52%
+    ),
+    linear-gradient(
+      0deg,
+      transparent 48%,
+      rgba(40, 35, 30, 0.6) 49%,
+      rgba(40, 35, 30, 0.6) 51%,
+      transparent 52%
+    ) !important;
+  
+  background-size: 
+    200px 200px,
+    40px 40px,
+    40px 40px !important;
+  
+  opacity: 0.4;
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  z-index: 2;
+}
+
+
+/* Amélioration de la lisibilité */
+.ambiance-paris-roubaix > * {
+  position: relative;
+  z-index: 3;
+  text-shadow: 
+    0 2px 4px rgba(0, 0, 0, 0.9),
+    0 0 20px rgba(150, 120, 90, 0.3) !important;
+  
+  /* Texte légèrement éclairé */
+  color: rgba(240, 235, 225, 0.95) !important;
+}
+
+/* Effet de surbrillance au survol */
+.ambiance-paris-roubaix:hover {
+  box-shadow: 
+    0 12px 40px rgba(0, 0, 0, 0.9),
+    inset 0 0 60px rgba(0, 0, 0, 0.95),
+    inset 0 0 100px rgba(100, 80, 60, 0.8),
+    inset 0 0 0 1px rgba(200, 180, 160, 0.2) !important;
+  
+  transition: all 0.5s ease;
+}
+
+/* Animations */
+@keyframes lumiere-roubaix {
+  0% {
+    background-position: 
+      0 0, 0 0,
+      0 0, 0 0,
+      0 0;
+  }
+  100% {
+    background-position: 
+      0 0, 0 0,
+      10px 5px, -5px 10px,
+      0 0;
+  }
+}
+
+@keyframes traces-boue {
+  0% {
+    background-position: 
+      0% 0%, 
+      100% 100%,
+      50% 50%,
+      0 0,
+      0 0;
+  }
+  100% {
+    background-position: 
+      100% 100%, 
+      0% 0%,
+      150% 150%,
+      200px 200px,
+      -200px -200px;
+  }
+}
+
+
+
+
+/* 💉 INTERACTION: LACTIC ACID (Flashe en violet toxique) */
+@keyframes acid-burn {
+    0% { background: #1a1a1a; transform: scale(1); }
+    10% { background: #adff2f; transform: scale(1.1) rotate(2deg); box-shadow: 0 0 30px #adff2f; color: #000; }
+    30% { background: #32cd32; transform: scale(0.95) rotate(-2deg); }
+    100% { background: #1a1a1a; transform: scale(1); }
+}
+.anim-acid {
+    animation: acid-burn 0.6s ease-out !important;
+    z-index: 50 !important;
+}
+
+@keyframes camera-flash-anim {
+    0% { background: #fff; opacity: 0; transform: scale(1); }
+    10% { opacity: 1; transform: scale(1.1); box-shadow: 0 0 50px #fff; z-index: 999; }
+    100% { opacity: 0; transform: scale(1); }
+}
+.anim-flash {
+    position: relative;
+}
+.anim-flash::after {
+    content: ''; position: absolute; inset: -20px; background: #fff;
+    animation: camera-flash-anim 0.4s ease-out forwards;
+    pointer-events: none; z-index: 100; mix-blend-mode: overlay;
+}
+
+
+.ambiance-synthwave {
+    /* Ciel dégradé violet nuit */
+    background: linear-gradient(to bottom, #10002b 0%, #240046 50%, #3c096c 100%) !important;
+    border: 1px solid #ff9e00 !important;
+    position: relative;
+    overflow: hidden !important; /* CRITIQUE pour ne pas déborder */
+}
+/* Le Soleil Rétro */
+.ambiance-synthwave::after {
+    content: ''; position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    width: 60px; height: 60px;
+    background: linear-gradient(to bottom, #ff9e00, #ff0000);
+    border-radius: 50%;
+    box-shadow: 0 0 20px #ff9e00;
+    z-index: 0;
+}
+/* La Grille mouvante (Utilise background-position pour être safe) */
+.ambiance-synthwave::before {
+    content: ''; position: absolute; bottom: -20%; left: -50%; right: -50%; height: 80%;
+    background-image: 
+        linear-gradient(rgba(255, 0, 255, 0.6) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 0, 255, 0.6) 1px, transparent 1px);
+    background-size: 40px 40px;
+    /* Perspective forcée */
+    transform: perspective(200px) rotateX(60deg);
+    animation: synth-grid-scroll 1.5s linear infinite;
+    z-index: 1;
+}
+@keyframes synth-grid-scroll { 
+    0% { background-position: 0 0; } 
+    100% { background-position: 0 40px; } 
+}
+
+.today-king {
+    border: 3px solid #ffd700 !important;
+    /* Petit fond doré subtil à la place des rayons */
+    background: radial-gradient(circle at top, rgba(255, 215, 0, 0.15), transparent 70%) !important;
+    box-shadow: 0 0 25px rgba(255, 215, 0, 0.5), inset 0 0 10px rgba(255, 215, 0, 0.2) !important;
+    position: relative !important;
+    overflow: visible !important; /* CRITIQUE : Pour laisser la couronne sortir */
+    z-index: 10;
+}
+
+/* La Couronne qui flotte */
+.today-king::after {
+    content: '👑'; 
+    position: absolute; 
+    top: -26px; /* Position parfaite au dessus de la bordure */
+    left: 50%; 
+    transform: translateX(-50%);
+    font-size: 32px; 
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.8));
+    animation: crown-float 3s ease-in-out infinite;
+    z-index: 30;
+}
+
+/* Animation de flottaison douce */
+@keyframes crown-float { 
+    0%, 100% { transform: translateX(-50%) translateY(0); } 
+    50% { transform: translateX(-50%) translateY(-6px); } 
+}
+
+/* Le chiffre en doré */
+.today-king .today-number {
+    color: #ffd700 !important;
+    text-shadow: 0 0 10px #ffd700;
+}

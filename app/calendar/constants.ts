@@ -290,4 +290,53 @@ export const SHOP_EFFECTS: ShopEffect[] = [
     name: "Boule à Neige", description: "Transforme le jour J en sphère hivernale.", 
     price: 800, preview: "🔮", colors: ["#fff", "#a5f3fc"], cssClass: "today-snowglobe", requiresActivity: false 
   },
+  { 
+    id: "kom_hunter", slot: "HOVER",
+    name: "Maillot à Pois", description: "Devenez le roi de la montagne au survol.", 
+    price: 1500, preview: "🔴", colors: ["#fff", "#f00"], cssClass: "hover-kom", requiresActivity: true 
+  },
+  { 
+    id: "hell_north", slot: "AMBIANCE",
+    name: "L'Enfer du Nord", description: "Pavés légendaires, boue et gloire.", 
+    price: 1200, preview: "🪨", colors: ["#333", "#555"], cssClass: "ambiance-paris-roubaix", requiresActivity: true 
+  },
+  
+
+  // --- TRAIL (Power Ups) ---
+  { 
+    id: "power_up_trail", slot: "TRAIL",
+    name: "Power Ups", description: "Plume, Van et Aéro tombent de votre souris.", 
+    price: 600, preview: "🪶", colors: ["#0099ff", "#ff6600", "#cc00ff"], requiresActivity: false 
+  },
+  { 
+    id: "ghost_peloton", slot: "TRAIL",
+    name: "Peloton Fantôme", description: "Des âmes cyclistes vous suivent.", 
+    price: 2000, preview: "👻", colors: ["rgba(255,255,255,0.4)"], requiresActivity: false 
+  },
+  { 
+    id: "lactic_burn", slot: "INTERACTION",
+    name: "Brûlure Lactique", description: "Flash toxique à l'impact.", 
+    price: 666, preview: "🧪", colors: ["#adff2f", "#32cd32"], cssClass: "anim-acid", requiresActivity: true 
+  },
+
+  // --- CLIC ---
+  { 
+    id: "camera_flash", slot: "INTERACTION",
+    name: "Photo Finish", description: "Flash aveuglant de la victoire.", 
+    price: 500, preview: "📸", colors: ["#fff"], cssClass: "anim-flash", requiresActivity: true 
+  },
+
+  // --- AMBIANCE ---
+ { 
+    id: "synthwave_grid", slot: "AMBIANCE",
+    name: "Synthwave 80s", description: "Sunset & Grid.", 
+    price: 3500, preview: "👾", colors: ["#ff00ff", "#00ffff"], requiresActivity: false 
+  },
+  
+  // --- TODAY ---
+ { 
+    id: "king_road", slot: "TODAY",
+    name: "Empereur du Bitume", description: "La couronne du leader.", 
+    price: 8000, preview: "👑", colors: ["#ffd700"], cssClass: "today-king", requiresActivity: false 
+  },
 ];

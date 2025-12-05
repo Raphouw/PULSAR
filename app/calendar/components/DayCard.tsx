@@ -51,13 +51,16 @@ export default function DayCard({
     const hasActivity = activities.length > 0;
     const color = getTssColor(totalTSS);
     
+    // Détection Virtual (Zwift/Indoor) pour le fond hachuré par défaut
+    const isVirtual = activities.some(a => a.type === "VirtualRide" || a.type === "IndoorCycling" || a.type === "E-Bike Ride");
+
     // 1. Analyse IA "Smart"
     let smartStyle = getSmartCardStyle(activities);
     if (isPreview && forcedSmartStyle) {
         smartStyle = forcedSmartStyle;
     }
     
-    // 2. Récupération des OBJETS effets (pour avoir leurs cssClass)
+    // 2. Récupération des OBJETS effets
     const frameEffect = SHOP_EFFECTS.find(e => e.id === loadout.FRAME);
     const hoverEffect = SHOP_EFFECTS.find(e => e.id === loadout.HOVER);
     const todayEffect = SHOP_EFFECTS.find(e => e.id === loadout.TODAY); 
@@ -70,14 +73,26 @@ export default function DayCard({
         hover: hoverEffect?.cssClass,
         smart: (loadout.AMBIANCE === "smart_analysis") ? smartStyle?.class : null,
         today: todayEffect?.cssClass,
-        // On ne passe pas 'ambiance' ici car on va le forcer manuellement ci-dessous pour être sûr
         ambiance: null 
     };
 
     let dynamicClasses = resolveCardClass(hasActivity, isToday, slotStyles);
-    
-    // --- GESTION DES AMBIANCES (Force l'application si activité ou preview) ---
+    let innerBgClasses = ""; // Pour le fond clippé
+
+    // GESTION SPECIALE KING (On sépare les couches)
+    if (isToday && loadout.TODAY === "king_road") {
+        // 1. Le parent gère la bordure et la couronne (qui dépasse)
+        dynamicClasses += " today-king-container"; 
+        // 2. L'enfant gère le fond noir et les rayons (qui sont coupés)
+        innerBgClasses = "today-king-bg"; 
+    }
+
+    // GESTION SPECIALE SYNTHWAVE & PAVÉS (On met tout dans le fond clippé)
     if (hasActivity || isPreview) {
+        if (ambianceEffect === "hell_north") innerBgClasses = "ambiance-paris-roubaix";
+        if (ambianceEffect === "synthwave_grid") innerBgClasses = "ambiance-synthwave";
+
+        // Pour les ambiances simples, on garde le comportement standard
         if (ambianceEffect === "night_ride") dynamicClasses += " ambiance-night";
         if (ambianceEffect === "velodrome") dynamicClasses += " ambiance-velodrome";
     }
@@ -87,27 +102,33 @@ export default function DayCard({
     const isClicking = clickingCells?.has(dayIndex);
 
     if (isFlipping) dynamicClasses += " flipping";
-    
-    // 🔥 GESTION DES CLICS (Refactorisée)
-    // Si on clique et que l'effet a une classe CSS définie (ex: anim-bell, anim-gear), on l'ajoute
-    if (isClicking && clickEffect?.cssClass) {
-        dynamicClasses += ` ${clickEffect.cssClass}`;
-    }
+    if (isClicking && clickEffect?.cssClass) dynamicClasses += ` ${clickEffect.cssClass}`;
 
-    // Gestion des animations lourdes/spécifiques qui durent longtemps (Blackhole, Shatter)
-    // Ces effets reposent souvent sur l'état 'isFlipping' pour leur durée
     if (isFlipping) {
         if (clickEffect?.id === "black_hole") dynamicClasses += " anim-blackhole";
         if (clickEffect?.id === "shatter") dynamicClasses += " anim-shatter";
     }
     
-    // Stealth Mode (Flashlight)
     if ((hasActivity || isPreview) && loadout.HOVER === "flashlight") dynamicClasses += " stealth-mode";
-    
-    // Overrides externes (ex: depuis la boutique pour la preview)
     if (overrideClasses) dynamicClasses += ` ${overrideClasses}`;
 
-    // 4. Styles Inline
+    // 4. Styles Inline du Background
+    // Par défaut : Dégradé simple avec la couleur du TSS
+    let backgroundStyle = (hasActivity || isPreview) 
+        ? `linear-gradient(135deg, ${color}15 0%, ${color}05 100%)` 
+        : "rgba(255, 255, 255, 0.02)";
+
+    // Si Virtuel : Motif Hachuré (Rayures 45°) avec la couleur du TSS
+    if (isVirtual && (hasActivity || isPreview)) {
+        backgroundStyle = `repeating-linear-gradient(
+            -45deg,
+            ${color}25,
+            ${color}15 30px,
+            ${color}05 5px,
+            ${color}05 10px
+        )`;
+    }
+
     const borderProps: React.CSSProperties = {
         borderColor: isToday ? "#00f3ff" : (hasActivity || isPreview) ? `${color}40` : "rgba(255,255,255,0.02)",
         borderWidth: '1px', 
@@ -121,30 +142,39 @@ export default function DayCard({
         display: "flex", 
         flexDirection: "column",
         position: "relative",
-        overflow: "visible", 
+        
+        // 🔥 LE FIX EST ICI :
+        // Si c'est le King, on autorise le dépassement (pour la couronne).
+        // Sinon, on clip tout (pour que ce soit propre).
+        overflow: (isToday && loadout.TODAY === "king_road") ? "visible" : "hidden",
+        
         zIndex: isPreview ? 2 : 1,
         cursor: "pointer",
         transition: "transform 0.2s ease, border-color 0.2s ease",
-        background: (hasActivity || isPreview) ? `linear-gradient(135deg, ${color}15 0%, ${color}05 100%)` : "rgba(255, 255, 255, 0.02)",
+        background: backgroundStyle, 
         ...borderProps, 
         ...overrideStyles
     };
+    
+    // Gère le calque interne pour les ambiances qui doivent être coupées (Rayons, Grilles)
+    // On ajoute une div interne pour ça
+    let innerLayerClass = "";
+    if (isToday && loadout.TODAY === "king_road") innerLayerClass = "today-king-bg";
+    if ((hasActivity || isPreview) && ambianceEffect === "synthwave_grid") innerLayerClass = "ambiance-synthwave"; 
+    // Note: Pour synthwave, on l'applique à l'intérieur pour le clipping, mais on garde la classe externe pour la bordure si besoin
 
-    // Injection variables Smart Analysis
     if (loadout.AMBIANCE === "smart_analysis" && smartStyle?.variable) {
         Object.assign(finalStyle, smartStyle.variable);
     }
 
-    // 🔥 FIX CAS PARTICULIERS TODAY
-    // Le "Réacteur" demande un fond transparent pour voir l'animation CSS derrière.
+    // Fix Réacteur Today
     if (isToday && loadout.TODAY === "reactor_today") {
         finalStyle.background = 'transparent'; 
         finalStyle.borderColor = 'transparent';
         finalStyle.borderWidth = '0px';
     }
-    // Note: Maillot Jaune, Start Line, Gift, Snowglobe sont gérés par cssClass + !important dans le CSS
 
-    // Pulse (Cardio)
+    // Pulse
     let pulseBpm: number | null = null;
     const isPulseEquipped = loadout.FRAME === "pulse";
     
@@ -163,7 +193,6 @@ export default function DayCard({
         }
     }
 
-    // Handlers Souris
     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
         if (loadout.HOVER === "flashlight" && (hasActivity || isPreview)) {
             const rect = e.currentTarget.getBoundingClientRect();
@@ -204,6 +233,11 @@ export default function DayCard({
             onMouseLeave={handleMouseLeave}
             onClick={(e) => onClick && onClick(e, hasActivity || isPreview)}
         >
+            {/* CALQUE INTERNE POUR LES EFFETS QUI DOIVENT ETRE COUPÉS (Overflow Hidden) */}
+            {innerLayerClass && (
+                <div className={innerLayerClass} style={{position:'absolute', inset:0, borderRadius:'6px', zIndex:-1, pointerEvents:'none'}}></div>
+            )}
+
             {!isPreview && showConnector && streakConfig && <div className={streakConfig.className} />}
             
             {!isPreview && streakConfig && (
@@ -214,7 +248,6 @@ export default function DayCard({
 
             <div style={{ fontSize: "0.85rem", fontWeight: isToday ? 900 : 600, color: isToday ? "#00f3ff" : (hasActivity || isPreview) ? "#fff" : "#666", marginBottom: "4px", display: "flex", justifyContent: "space-between", alignItems: "center", position:'relative', zIndex:5 }}>
                 <div style={{display:'flex', alignItems:'center', gap:'4px'}}>
-                    {/* Ajout de la classe today-number pour ciblage CSS précis */}
                     <span className={isToday ? "today-number" : ""}>{dayNum}</span>
                     {pulseBpm && (
                         <span style={{ fontSize: '0.6rem', color: '#ef4444', fontWeight: 800, background: 'rgba(239,68,68,0.1)', padding:'0 3px', borderRadius:'4px', display: 'flex', alignItems: 'center', gap:'2px' }}>
@@ -228,6 +261,17 @@ export default function DayCard({
                     </span>
                 )}
             </div>
+
+            {innerBgClasses && (
+                <div className={innerBgClasses} style={{
+                    position:'absolute', 
+                    inset: 0, 
+                    borderRadius: '7px', // Un poil moins que le parent (8px) pour pas dépasser de la bordure
+                    overflow: 'hidden', // C'est lui qui coupe les rayons !
+                    zIndex: -1, 
+                    pointerEvents:'none'
+                }}></div>
+            )}
 
             <div style={{display:"flex", flexDirection:"column", gap:"2px", overflow:"hidden", flex:1, position:'relative', zIndex:5}}>
                 {activities.map(act => (
