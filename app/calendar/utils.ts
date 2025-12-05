@@ -78,6 +78,7 @@ export const createParticles = (e: React.MouseEvent | DOMRect, effect: ShopEffec
     if (!effect) return;
     const colors = effect.colors || ["#fff"]
     
+    // ... (Calcul originX/Y inchangé) ...
     let originX, originY;
     if ('clientX' in e) { 
         const rect = e.currentTarget.getBoundingClientRect();
@@ -92,23 +93,48 @@ export const createParticles = (e: React.MouseEvent | DOMRect, effect: ShopEffec
         originY = e.top + Math.random() * e.height;
         if (effect.id === "firetrail") originY = e.bottom - 10;
     }
-    
+
     let count = trigger === "flip" ? 40 : 3;
     let physicsClass = "physic-float"; 
     let sizeBase = 6;
     let isConfetti = false;
+    let particleText = ""; // Pour les emojis
 
+    // MAPPING DES EFFETS
     if (effect.id === "firetrail") { physicsClass = "physic-fire"; count = 3; }
     else if (effect.id === "snow") { physicsClass = "physic-gravity"; count = 2; }
-    else if (effect.id === "matrix") { physicsClass = "physic-gravity"; count = 1; }
-    else if (effect.id === "lightning") { physicsClass = "physic-zap"; count = 1; }
-    else if (effect.id === "explosion") { physicsClass = "physic-blast"; count = 50; }
-    else if (effect.id === "confetti") { 
-        physicsClass = "physic-gravity"; 
-        count = 40; 
-        isConfetti = true; 
+    else if (effect.id === "magic_dust") { physicsClass = "physic-float"; count = 5; sizeBase = 3; }
+    else if (effect.id === "matrix") { 
+        physicsClass = "physic-matrix"; 
+        count = 1; 
+        particleText = Math.random() > 0.5 ? "1" : "0"; 
     }
+    
+    // ⚡ HAUTE TENSION : Éclairs orientés
+    else if (effect.id === "lightning") { 
+        physicsClass = "physic-zap"; 
+        count = 1; 
+        // Pas de texte, pas de rotation complexe forcée ici
+    }
+    else if (effect.id === "explosion") { physicsClass = "physic-blast"; count = 50; }
+    else if (effect.id === "confetti") { physicsClass = "physic-gravity"; count = 40; isConfetti = true; }
     else if (effect.id === "bubbles") { physicsClass = "physic-bubble"; count = 1; }
+    
+    // 🔥 NOUVEAUX TRAILS
+    else if (effect.id === "sparks_trail") { physicsClass = "physic-spark"; count = 3; sizeBase = 4; }
+    else if (effect.id === "leaf_trail") { physicsClass = "physic-leaf"; count = 1; sizeBase = 8; }
+    if (effect.id === "reindeer_trail") {
+        // 🔥 Si c'est un survol (hover) et pas un clic, on réduit drastiquement la chance d'apparition
+        // 1 chance sur 10 seulement par mouvement de souris
+        if (trigger === "hover" && Math.random() > 0.3) return;
+        
+        physicsClass = "physic-reindeer"; 
+        count = 1; 
+        particleText = "🦌"; 
+    }
+    
+    // 🔥 INTERACTIONS
+    else if (effect.id === "bell_ring") { physicsClass = "physic-ring"; count = 1; sizeBase = 20; }
     else if (effect.id === "shatter") { count = 20; physicsClass = "physic-gravity"; }
     else if (effect.id === "black_hole") { physicsClass = "physic-spiral"; count = 40; }
 
@@ -117,44 +143,62 @@ export const createParticles = (e: React.MouseEvent | DOMRect, effect: ShopEffec
       particle.className = `particle-base ${physicsClass}`
       particle.style.left = `${originX}px`
       particle.style.top = `${originY}px`
-      particle.style.width = `${Math.max(2, Math.random() * sizeBase)}px`
-      particle.style.height = particle.style.width
+      
+      // Taille
+      if (!particleText && !physicsClass.includes('ring')) {
+          particle.style.width = `${Math.max(2, Math.random() * sizeBase)}px`
+          particle.style.height = particle.style.width
+      }
 
+      // Couleur
+      const color = colors[Math.floor(Math.random() * colors.length)]
+      particle.style.background = color
+      particle.style.color = color // Pour le texte
+
+      if (particleText && effect.id === "matrix") {
+          particle.innerText = particleText;
+          particle.style.background = 'transparent';
+          particle.style.color = "#00ff41"; 
+          particle.style.fontWeight = "bold";
+          particle.style.fontSize = "10px"; // <--- TROP PETIT ? NON, C'EST BIEN POUR L'EFFET PLUIE
+          particle.style.fontFamily = "monospace";
+          particle.style.textShadow = "0 0 2px #00ff41";
+      }
+
+      // Cas ÉCLAIR (ZAP)
+      if (physicsClass === 'physic-zap') {
+          // On force la couleur (jaune électrique ou blanc)
+          const zapColor = Math.random() > 0.5 ? "#ffff00" : "#ffffff";
+          particle.style.background = zapColor; 
+          
+          // L'effet de glow simple qui marchait bien
+          particle.style.boxShadow = `0 0 10px ${zapColor}, 0 0 20px ${zapColor}`;
+          
+          // Rotation aléatoire simple pour varier les arcs
+          particle.style.transform = `rotate(${Math.random() * 360}deg)`;
+      }
+
+      // Cas Spéciaux
+      if (particleText) {
+          particle.innerText = particleText;
+          particle.style.background = 'transparent';
+      }
+      if (physicsClass === 'physic-ring') {
+          particle.style.width = '10px'; particle.style.height = '10px';
+          particle.style.background = 'transparent';
+          particle.style.borderColor = color;
+      }
+
+      // ... (Reste de la logique confetti/matrix inchangée) ...
       if (isConfetti) {
           particle.style.width = `${Math.random() * 8 + 4}px`;
           particle.style.height = `${Math.random() * 6 + 4}px`;
           particle.style.borderRadius = "0";
           particle.style.transform = `rotate(${Math.random() * 360}deg)`;
-      } else {
-          particle.style.width = `${Math.max(2, Math.random() * sizeBase)}px`
-          particle.style.height = particle.style.width
-      }
-
-      const color = colors[Math.floor(Math.random() * colors.length)]
-      particle.style.background = color
-
-      if (effect.id === "matrix") {
-        particle.innerText = Math.random() > 0.5 ? "1" : "0";
-        particle.style.background = "transparent";
-        particle.style.color = color;
-        particle.style.fontSize = "10px";
-        particle.style.fontWeight = "bold";
-        particle.style.fontFamily = "monospace";
-      } 
-      else if (effect.id === "explosion" || effect.id === "confetti") {
-        const angle = Math.random() * Math.PI * 2
-        const velocity = 50 + Math.random() * 200
-        particle.style.setProperty("--tx", `${Math.cos(angle) * velocity}px`)
-        particle.style.setProperty("--ty", `${Math.sin(angle) * velocity}px`)
-      }
-      else if (effect.id === "lightning") {
-        particle.style.transform = `translate(${(Math.random() - 0.5) * 50}px, ${(Math.random() - 0.5) * 50}px) rotate(${Math.random() * 360}deg)`;
-        particle.style.boxShadow = `0 0 15px ${color}`;
-      }
-
-      if (isConfetti) {
-         const drift = (Math.random() - 0.5) * 100;
-         particle.style.setProperty("--tx", `${drift}px`);
+          const angle = Math.random() * Math.PI * 2
+          const velocity = 50 + Math.random() * 200
+          particle.style.setProperty("--tx", `${Math.cos(angle) * velocity}px`)
+          particle.style.setProperty("--ty", `${Math.sin(angle) * velocity}px`)
       }
 
       document.body.appendChild(particle)
@@ -402,15 +446,27 @@ export const getStartCoordFromPolyline = (encoded: string): { lat: number, lon: 
 export const resolveCardClass = (
     hasActivity: boolean,
     isToday: boolean,
-    slotStyles: { frame?: string | null, smart?: string | null, today?: string | null, hover?: string | null }
+    slotStyles: { frame?: string | null, smart?: string | null, today?: string | null, hover?: string | null, ambiance?: string | null }
 ): string => {
     let classes = "day-cell";
-    if (isToday && slotStyles.today === "reactor_today") return `${classes} today-reactor`;
     
-    // 🔥 AJOUT ICI : Smart + Frame + HOVER (Corrigé)
+    // 1. TODAY (Priorité absolue)
+    if (isToday && slotStyles.today) classes += ` ${slotStyles.today}`;
+
+    // 2. SMART (Priorité 2)
     if (slotStyles.smart) classes += ` ${slotStyles.smart}`;
-    if (hasActivity && slotStyles.frame) classes += ` ${slotStyles.frame}`;
-    if (hasActivity && slotStyles.hover) classes += ` ${slotStyles.hover}`; // Le fix pour les effets Jelly/Glitch
+
+    // 3. ACTIVITÉ SEULEMENT
+    if (hasActivity) {
+        if (slotStyles.frame) classes += ` ${slotStyles.frame}`;
+        if (slotStyles.hover) classes += ` ${slotStyles.hover}`;
+        
+        // 🔥 CORRECTION CRITIQUE ICI :
+        // L'ambiance (Nocturne/Vélodrome) est DANS le bloc "if (hasActivity)"
+        // Donc elle ne s'appliquera JAMAIS aux cases vides.
+        if (slotStyles.ambiance === "night_ride") classes += " ambiance-night";
+        if (slotStyles.ambiance === "velodrome") classes += " ambiance-velodrome";
+    }
     
     return classes;
 };

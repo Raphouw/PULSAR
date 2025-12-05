@@ -95,6 +95,31 @@ export const SHOP_EFFECTS: ShopEffect[] = [
     name: "Cardio", description: "Battement synchronisé au cœur.",
     price: 1500, preview: "❤️", colors: ["#ef4444"], cssClass: "effect-pulse", requiresActivity: true
   },
+  { 
+    id: "carbon_fiber", slot: "FRAME",
+    name: "Fibre de Carbone", description: "Texture haut de gamme comme les cadres pros.", 
+    price: 1200, preview: "🏍️", colors: ["#222", "#444"], cssClass: "frame-carbon", requiresActivity: true 
+  },
+  { 
+    id: "chain_link", slot: "FRAME",
+    name: "Chaîne de Vélo", description: "Bordure en maillons de chaîne animés.", 
+    price: 850, preview: "⛓️", colors: ["#aaa", "#ddd"], cssClass: "effect-chain", requiresActivity: true 
+  },
+  { 
+    id: "team_sky", slot: "FRAME",
+    name: "Équipe Sky", description: "Bordure bleue signature Team Sky.", 
+    price: 1500, preview: "💙", colors: ["#00a8e8", "#0056b3"], cssClass: "effect-sky", requiresActivity: true 
+  },
+  { 
+    id: "candy_cane", slot: "FRAME",
+    name: "Sucre d'Orge", description: "Bordure rayée rouge et blanche.", 
+    price: 600, preview: "🍬", colors: ["#ff0000", "#fff"], cssClass: "effect-candy", requiresActivity: true 
+  },
+  { 
+    id: "world_champ", slot: "FRAME",
+    name: "Champion du Monde", description: "Les bandes arc-en-ciel légendaires.", 
+    price: 10000, preview: "🌈", colors: ["#0055A4", "#EF3340", "#000", "#FFD700", "#009639"], cssClass: "effect-rainbow", requiresActivity: true 
+  },
 
   // --- 2. HOVER (Effet sur la carte au survol) ---
   {
@@ -113,12 +138,32 @@ export const SHOP_EFFECTS: ShopEffect[] = [
     price: 1500, preview: "🔦", colors: ["#fff"], cssClass: "stealth-mode", requiresActivity: true 
   },
   { 
-    id: "jelly_hover", slot: "HOVER", // Ancien rubber_click
+    id: "jelly_hover", slot: "HOVER",
     name: "Jelly", description: "Texture gélatineuse au survol.", 
     price: 450, preview: "🍮", colors: ["#d04fd7"], cssClass: "effect-rubber", requiresActivity: true 
   },
+  { 
+    id: "carbon_hover", slot: "HOVER",
+    name: "Full Carbon", description: "Texture fibre de carbone tressée au survol.", 
+    price: 1500, preview: "🏁", colors: ["#222"], cssClass: "hover-carbon", requiresActivity: true 
+  },
+  { 
+    id: "wind_effect", slot: "HOVER",
+    name: "Effet Vent", description: "Rafales de vent au survol.", 
+    price: 550, preview: "💨", colors: ["#a5f3fc"], cssClass: "effect-wind", requiresActivity: true 
+  },
+  { 
+    id: "sparkle_hover", slot: "HOVER",
+    name: "Paillettes", description: "Étincelles magiques au survol.", 
+    price: 420, preview: "🌟", colors: ["#ffd700", "#fff"], cssClass: "effect-sparkle", requiresActivity: true 
+  },
+  { 
+    id: "draft_effect", slot: "HOVER",
+    name: "Effet d'Aspiration", description: "Simulation d'aspiration dans la roue.", 
+    price: 900, preview: "🌀", colors: ["#333", "#666"], cssClass: "effect-draft", requiresActivity: true 
+  },
 
-  // --- 3. TRAINÉE (Particules souris) - NOUVELLE CATÉGORIE ---
+  // --- 3. TRAINÉE (Particules souris) ---
   {
     id: "firetrail", slot: "TRAIL",
     name: "Traînée de Feu", description: "Des flammes suivent votre curseur.",
@@ -144,17 +189,37 @@ export const SHOP_EFFECTS: ShopEffect[] = [
     name: "Matrix", description: "Pluie de code binaire.",
     price: 120, preview: "01", colors: ["#00ff00", "#003300"], requiresActivity: true
   },
+  { 
+    id: "sparks_trail", slot: "TRAIL",
+    name: "Étincelles", description: "Traînée d'étincelles orange/jaune.", 
+    price: 85, preview: "✨", colors: ["#ffa500", "#ffff00"], requiresActivity: true 
+  },
+  { 
+    id: "leaf_trail", slot: "TRAIL",
+    name: "Feuilles d'Automne", description: "Feuilles tombantes derrière le curseur.", 
+    price: 70, preview: "🍂", colors: ["#8B4513", "#D2691E", "#FFD700"], requiresActivity: true 
+  },
+  { 
+    id: "reindeer_trail", slot: "TRAIL",
+    name: "Traîneau du Père Noël", description: "Traînée avec empreintes de rennes.", 
+    price: 350, preview: "🦌", colors: ["#8B4513", "#D2691E"], requiresActivity: true 
+  },
+  { 
+    id: "magic_dust", slot: "TRAIL",
+    name: "Poussière d'Étoile", description: "La magie de Noël suit votre souris.", 
+    price: 400, preview: "✨", colors: ["#ffd700", "#ff0000", "#fff"], requiresActivity: true 
+  },
 
   // --- 4. CLICS (Interaction) ---
   { 
     id: "shatter", slot: "INTERACTION",
     name: "Bris de Glace", description: "Explosion de verre.", 
-    price: 1200, preview: "🔨", colors: ["#a5f3fc"], requiresActivity: true 
+    price: 1200, preview: "🔨", colors: ["#a5f3fc"], cssClass: "anim-shatter", requiresActivity: true 
   },
   { 
     id: "black_hole", slot: "INTERACTION",
     name: "Trou Noir", description: "Implosion massive.", 
-    price: 2500, preview: "⚫", colors: ["#000", "#4b0082"], requiresActivity: true 
+    price: 2500, preview: "⚫", colors: ["#000", "#4b0082"], cssClass: "anim-blackhole", requiresActivity: true 
   },
   { 
     id: "explosion", slot: "INTERACTION",
@@ -166,7 +231,16 @@ export const SHOP_EFFECTS: ShopEffect[] = [
     name: "Fête", description: "Canon à confettis.", 
     price: 800, preview: "🎉", colors: ["#d04fd7", "#00f3ff", "#ffd700", "#ef4444"], requiresActivity: true 
   },
- 
+  { 
+    id: "bell_ring", slot: "INTERACTION",
+    name: "Sonnette", description: "Son de sonnette + onde sonore.", 
+    price: 600, preview: "🔔", colors: ["#ffd700"], cssClass: "anim-bell", requiresActivity: true 
+  },
+  { 
+    id: "gear_shift", slot: "INTERACTION",
+    name: "Changement de Vitesse", description: "Effet mécanique de dérailleur.", 
+    price: 750, preview: "⚙️", colors: ["#333", "#888"], cssClass: "anim-gear", requiresActivity: true 
+  },
 
   // --- 5. AMBIANCE ---
   { 
@@ -179,11 +253,41 @@ export const SHOP_EFFECTS: ShopEffect[] = [
     name: "Tactical Visor", description: "Analyse automatique (Grimpeur/Sprinteur).", 
     price: 3000, preview: "🧠", colors: ["#ff4500", "#10b981", "#00f3ff"], requiresActivity: true 
   },
+  { 
+    id: "night_ride", slot: "AMBIANCE",
+    name: "Nocturne", description: "Mode nuit avec éclairage de vélo.", 
+    price: 2200, preview: "🌙", colors: ["#000", "#1a1a2e"], requiresActivity: true 
+  },
+  { 
+    id: "velodrome", slot: "AMBIANCE",
+    name: "Vélodrome", description: "Ambiance de piste avec ligne de sprints.", 
+    price: 1800, preview: "🏟️", colors: ["#c0c0c0", "#333"], requiresActivity: true 
+  },
 
   // --- 6. CASE DU JOUR (TODAY) ---
   { 
     id: "reactor_today", slot: "TODAY",
     name: "Réacteur ARC", description: "Transforme la case d'aujourd'hui.", 
     price: 5000, preview: "☢️", colors: ["#00f3ff"], cssClass: "today-reactor", requiresActivity: false 
+  },
+  { 
+    id: "yellow_jersey", slot: "TODAY",
+    name: "Maillot Jaune", description: "L'aura du leader sur la case du jour.", 
+    price: 5000, preview: "💛", colors: ["#ffd700"], cssClass: "today-yellow", requiresActivity: false 
+  },
+  { 
+    id: "gift_today", slot: "TODAY",
+    name: "Cadeau du Jour", description: "Case spéciale avec ruban cadeau.", 
+    price: 1200, preview: "🎁", colors: ["#ff0000", "#00ff00"], cssClass: "today-gift", requiresActivity: false 
+  },
+  { 
+    id: "start_line", slot: "TODAY",
+    name: "Ligne de Départ", description: "Transforme la case en départ de course.", 
+    price: 950, preview: "🏁", colors: ["#00ff00"], cssClass: "today-start", requiresActivity: false 
+  },
+  { 
+    id: "snow_globe", slot: "TODAY",
+    name: "Boule à Neige", description: "Transforme le jour J en sphère hivernale.", 
+    price: 800, preview: "🔮", colors: ["#fff", "#a5f3fc"], cssClass: "today-snowglobe", requiresActivity: false 
   },
 ];

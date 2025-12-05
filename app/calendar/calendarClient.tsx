@@ -103,6 +103,12 @@ export default function CalendarClient({ activities, initialShopData }: { activi
           setWalletBalance(prev => prev - effect.price); 
           setSpentTSS(prev => prev + effect.price);
           setOwnedEffects(prev => new Set(prev).add(effect.id));
+
+          const newLoadout = { ...loadout, [effect.slot]: effect.id };
+          setLoadout(newLoadout); // Mise à jour visuelle immédiate
+          saveLoadoutToDB(newLoadout); // Sauvegarde en BDD (t
+
+
           try {
               // Appel API
               const res = await fetch('/api/shop/buy', { 

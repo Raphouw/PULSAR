@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import CalendarClient from './calendarClient';
 import { ShopData } from "./types";
 
-// Force le calcul dynamique à chaque requête (évite le cache périmé)
+// 🔥 CRITIQUE : Force le recalcul à chaque visite (sinon le Solde reste figé par le cache Vercel)
 export const dynamic = 'force-dynamic';
 
 export default async function CalendarPage() {
@@ -16,8 +16,9 @@ export default async function CalendarPage() {
     redirect('/auth/signin');
   }
 
-  // 1. Récupération des activités (VERSION LÉGÈRE)
-  // ⚠️ J'ai retiré 'streams_data' qui faisait planter le chargement
+  // 1. RÉCUPÉRATION DES ACTIVITÉS (Optimisée)
+  // ⚠️ On exclut 'streams_data' (trop lourd)
+  // ✅ On garde 'polyline' (nécessaire pour ta météo / localisation)
   const { data: activities, error } = await supabaseAdmin
     .from('activities')
     .select('id, strava_id, name, start_time, distance_km, avg_speed_kmh, elevation_gain_m, duration_s, tss, type, avg_power_w, avg_heartrate, polyline, weather_code, temp_min, temp_max, temp_avg') 
@@ -25,45 +26,47 @@ export default async function CalendarPage() {
     .order('start_time', { ascending: true });
 
   if (error) {
-    console.error("Erreur Chargement Activités:", error);
+    console.error("🔥 ERREUR SUPABASE:", error.message);
   }
 
-  // 2. Récupération du Solde & Achats
+  // 2. RÉCUPÉRATION DU VRAI SOLDE (Le Coffre-fort)
   const { data: userData } = await supabaseAdmin
     .from('users')
     .select('wallet_balance, spent_tss')
     .eq('id', session.user.id)
     .single();
 
+  // 3. RÉCUPÉRATION DE L'INVENTAIRE
   const { data: purchases } = await supabaseAdmin
     .from('shop_purchases')
     .select('effect_id')
     .eq('user_id', session.user.id);
 
-  // 3. Récupération du Loadout
+  // 4. RÉCUPÉRATION DU LOADOUT (Équipement)
   const { data: settings } = await supabaseAdmin
     .from('user_settings')
     .select('equipped_loadout')
     .eq('user_id', session.user.id)
     .single();
 
-  // Valeurs par défaut sécurisées
+  // Valeurs par défaut robustes (si user tout neuf)
   const walletBalance = userData?.wallet_balance ?? 0; 
   const spentTSS = userData?.spent_tss ?? 0;
   const ownedEffects = purchases?.map(p => p.effect_id) || [];
   const rawLoadout = settings?.equipped_loadout || {};
 
+  // Construction de l'objet ShopData
   const shopData: ShopData = {
-    serverBalance: walletBalance,
+    serverBalance: walletBalance, // Le vrai argent
     spentTSS,
     ownedEffects,
     loadout: {
-        FRAME: rawLoadout.FRAME || rawLoadout.card || null, 
-        HOVER: rawLoadout.HOVER || rawLoadout.hover || null, 
+        FRAME: rawLoadout.FRAME || null, 
+        HOVER: rawLoadout.HOVER || null, 
         TRAIL: rawLoadout.TRAIL || null,
-        INTERACTION: rawLoadout.INTERACTION || rawLoadout.click || rawLoadout.flip || null, 
-        AMBIANCE: rawLoadout.AMBIANCE || rawLoadout.passive || null, 
-        TODAY: rawLoadout.TODAY || rawLoadout.today || null, 
+        INTERACTION: rawLoadout.INTERACTION || null, 
+        AMBIANCE: rawLoadout.AMBIANCE || null, 
+        TODAY: rawLoadout.TODAY || null, 
         SPECIAL: rawLoadout.SPECIAL || null,
     }
   };

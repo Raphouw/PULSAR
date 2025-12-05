@@ -18,21 +18,14 @@ interface DayCardProps {
     streakIndex: number;
     isToday: boolean;
     loadout: UserLoadout;
-    
-    // Interactions
     flippingCells?: Set<number>;
     clickingCells?: Set<number>;
     onClick?: (e: React.MouseEvent, hasActivity: boolean) => void;
-    
-    // Options Preview & Shop
     isPreview?: boolean;
     overrideStyles?: React.CSSProperties;
     overrideClasses?: string;
     mockWeather?: any;
-    
-    // 🔥 NOUVEAU : Permet au Shop de forcer le style Smart (Cycle Vitesse/Montagne...)
     forcedSmartStyle?: { class: string; label: string; variable?: any };
-    
     showConnector?: boolean;
 }
 
@@ -51,44 +44,67 @@ export default function DayCard({
     overrideStyles,
     overrideClasses,
     mockWeather,
-    forcedSmartStyle, // Réception de la prop
+    forcedSmartStyle,
     showConnector = false
 }: DayCardProps) {
     
     const hasActivity = activities.length > 0;
     const color = getTssColor(totalTSS);
     
-    // 1. Analyse Smart (Calculée OU Forcée)
+    // 1. Analyse IA "Smart"
     let smartStyle = getSmartCardStyle(activities);
-    
-    // 🔥 FIX : Si on est en preview et qu'un style est forcé (cycle), on l'utilise
     if (isPreview && forcedSmartStyle) {
         smartStyle = forcedSmartStyle;
     }
     
-    // 2. Détection des effets actifs
+    // 2. Récupération des OBJETS effets (pour avoir leurs cssClass)
+    const frameEffect = SHOP_EFFECTS.find(e => e.id === loadout.FRAME);
+    const hoverEffect = SHOP_EFFECTS.find(e => e.id === loadout.HOVER);
+    const todayEffect = SHOP_EFFECTS.find(e => e.id === loadout.TODAY); 
+    const clickEffect = SHOP_EFFECTS.find(e => e.id === loadout.INTERACTION);
+    const ambianceEffect = loadout.AMBIANCE;
+
+    // 3. Construction des styles via l'utilitaire
     const slotStyles = {
-        frame: loadout.FRAME ? (SHOP_EFFECTS.find(e => e.id === loadout.FRAME)?.cssClass) : null,
-        hover: loadout.HOVER ? (SHOP_EFFECTS.find(e => e.id === loadout.HOVER)?.cssClass) : null,
+        frame: frameEffect?.cssClass,
+        hover: hoverEffect?.cssClass,
         smart: (loadout.AMBIANCE === "smart_analysis") ? smartStyle?.class : null,
-        today: loadout.TODAY
+        today: todayEffect?.cssClass,
+        // On ne passe pas 'ambiance' ici car on va le forcer manuellement ci-dessous pour être sûr
+        ambiance: null 
     };
 
-    // 3. Construction des classes dynamiques
     let dynamicClasses = resolveCardClass(hasActivity, isToday, slotStyles);
     
-    // Animations
+    // --- GESTION DES AMBIANCES (Force l'application si activité ou preview) ---
+    if (hasActivity || isPreview) {
+        if (ambianceEffect === "night_ride") dynamicClasses += " ambiance-night";
+        if (ambianceEffect === "velodrome") dynamicClasses += " ambiance-velodrome";
+    }
+
+    // --- ANIMATIONS ---
     const isFlipping = flippingCells?.has(dayIndex);
     const isClicking = clickingCells?.has(dayIndex);
-    const clickEffect = SHOP_EFFECTS.find(e => e.id === loadout.INTERACTION);
 
     if (isFlipping) dynamicClasses += " flipping";
-    if (isClicking && clickEffect?.cssClass) dynamicClasses += ` ${clickEffect.cssClass}`;
-    if (isFlipping && clickEffect?.id === "black_hole") dynamicClasses += " anim-blackhole";
-    if (isFlipping && clickEffect?.id === "shatter") dynamicClasses += " anim-shatter";
     
+    // 🔥 GESTION DES CLICS (Refactorisée)
+    // Si on clique et que l'effet a une classe CSS définie (ex: anim-bell, anim-gear), on l'ajoute
+    if (isClicking && clickEffect?.cssClass) {
+        dynamicClasses += ` ${clickEffect.cssClass}`;
+    }
+
+    // Gestion des animations lourdes/spécifiques qui durent longtemps (Blackhole, Shatter)
+    // Ces effets reposent souvent sur l'état 'isFlipping' pour leur durée
+    if (isFlipping) {
+        if (clickEffect?.id === "black_hole") dynamicClasses += " anim-blackhole";
+        if (clickEffect?.id === "shatter") dynamicClasses += " anim-shatter";
+    }
+    
+    // Stealth Mode (Flashlight)
     if ((hasActivity || isPreview) && loadout.HOVER === "flashlight") dynamicClasses += " stealth-mode";
     
+    // Overrides externes (ex: depuis la boutique pour la preview)
     if (overrideClasses) dynamicClasses += ` ${overrideClasses}`;
 
     // 4. Styles Inline
@@ -109,24 +125,26 @@ export default function DayCard({
         zIndex: isPreview ? 2 : 1,
         cursor: "pointer",
         transition: "transform 0.2s ease, border-color 0.2s ease",
-        
         background: (hasActivity || isPreview) ? `linear-gradient(135deg, ${color}15 0%, ${color}05 100%)` : "rgba(255, 255, 255, 0.02)",
         ...borderProps, 
-        
         ...overrideStyles
     };
 
-    // Injection variables Smart Analysis (Montagne)
+    // Injection variables Smart Analysis
     if (loadout.AMBIANCE === "smart_analysis" && smartStyle?.variable) {
         Object.assign(finalStyle, smartStyle.variable);
     }
 
+    // 🔥 FIX CAS PARTICULIERS TODAY
+    // Le "Réacteur" demande un fond transparent pour voir l'animation CSS derrière.
     if (isToday && loadout.TODAY === "reactor_today") {
         finalStyle.background = 'transparent'; 
         finalStyle.borderColor = 'transparent';
         finalStyle.borderWidth = '0px';
     }
+    // Note: Maillot Jaune, Start Line, Gift, Snowglobe sont gérés par cssClass + !important dans le CSS
 
+    // Pulse (Cardio)
     let pulseBpm: number | null = null;
     const isPulseEquipped = loadout.FRAME === "pulse";
     
@@ -145,7 +163,7 @@ export default function DayCard({
         }
     }
 
-    // Handlers Mouse
+    // Handlers Souris
     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
         if (loadout.HOVER === "flashlight" && (hasActivity || isPreview)) {
             const rect = e.currentTarget.getBoundingClientRect();
@@ -187,6 +205,7 @@ export default function DayCard({
             onClick={(e) => onClick && onClick(e, hasActivity || isPreview)}
         >
             {!isPreview && showConnector && streakConfig && <div className={streakConfig.className} />}
+            
             {!isPreview && streakConfig && (
                 <div style={{ position: "absolute", top: "0px", right: "50px", fontSize: "1.2rem", zIndex: 20, filter: "drop-shadow(0 0 8px rgba(0,0,0,0.8))", animation: "bounce 1s infinite alternate" }}>
                     {streakConfig.icon}
@@ -195,6 +214,7 @@ export default function DayCard({
 
             <div style={{ fontSize: "0.85rem", fontWeight: isToday ? 900 : 600, color: isToday ? "#00f3ff" : (hasActivity || isPreview) ? "#fff" : "#666", marginBottom: "4px", display: "flex", justifyContent: "space-between", alignItems: "center", position:'relative', zIndex:5 }}>
                 <div style={{display:'flex', alignItems:'center', gap:'4px'}}>
+                    {/* Ajout de la classe today-number pour ciblage CSS précis */}
                     <span className={isToday ? "today-number" : ""}>{dayNum}</span>
                     {pulseBpm && (
                         <span style={{ fontSize: '0.6rem', color: '#ef4444', fontWeight: 800, background: 'rgba(239,68,68,0.1)', padding:'0 3px', borderRadius:'4px', display: 'flex', alignItems: 'center', gap:'2px' }}>
@@ -228,7 +248,6 @@ export default function DayCard({
                     )
                 ))}
                 
-                {/* Le label Smart s'affiche si on est en Preview ou si calculé */}
                 {isPreview && loadout.AMBIANCE === "smart_analysis" && smartStyle?.label && (
                     <div style={{
                         marginTop:'auto', textAlign:'center', fontSize:'0.7rem', fontWeight:800, 

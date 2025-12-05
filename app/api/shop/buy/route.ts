@@ -1,3 +1,4 @@
+// Fichier : app/api/shop/buy/route.ts
 import { NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth"; // J'utilise l'alias @/ pour la robustesse
