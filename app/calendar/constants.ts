@@ -339,4 +339,162 @@ export const SHOP_EFFECTS: ShopEffect[] = [
     name: "Empereur du Bitume", description: "La couronne du leader.", 
     price: 8000, preview: "👑", colors: ["#ffd700"], cssClass: "today-king", requiresActivity: false 
   },
+
+{ 
+    id: "forest_frame", slot: "FRAME",
+    name: "Racines", description: "Cadre en bois vivant.", 
+    price: 600, preview: "🪵", colors: ["#3e2723", "#1b5e20"], cssClass: "frame-forest", requiresActivity: true 
+  },
+  { 
+    id: "forest_night", slot: "AMBIANCE",
+    name: "Nuit en Forêt", description: "Obscurité et lucioles.", 
+    price: 2500, preview: "🌲", colors: ["#051005"], cssClass: "ambiance-forest", requiresActivity: true 
+  },
+  { 
+    id: "leaf_storm", slot: "INTERACTION",
+    name: "Vent d'Automne", description: "Une bourrasque de feuilles.", 
+    price: 450, preview: "🍂", colors: ["#d35400"], cssClass: "anim-shake-leaf", requiresActivity: true 
+  },
+
+  // --- SET AURORA ---
+  { 
+    id: "aurora_frame", slot: "FRAME",
+    name: "Borealis", description: "Bordure de plasma mouvant.", 
+    price: 1800, preview: "🌌", colors: ["#10b981", "#8b5cf6"], cssClass: "frame-aurora", requiresActivity: true 
+  },
+  { 
+    id: "aurora_sky", slot: "AMBIANCE",
+    name: "Ciel Polaire", description: "Aurores boréales dynamiques.", 
+    price: 4000, preview: "✨", colors: ["#10b981"], cssClass: "ambiance-aurora", requiresActivity: true 
+  },
+{ 
+    id: "polar_click", slot: "INTERACTION",
+    name: "Onde Polaire", description: "Choc thermique.", 
+    price: 900, preview: "❄️", colors: ["#00ffcc"], cssClass: "anim-polar", requiresActivity: true 
+  },
+
+  // --- SET SAKURA ---
+  { 
+    id: "sakura_frame", slot: "FRAME",
+    name: "Hanami", description: "Cadre rose pâle apaisant.", 
+    price: 1200, preview: "🌸", colors: ["#ffb7b2"], cssClass: "frame-sakura", requiresActivity: true 
+  },
+  { 
+    id: "sakura_wind", slot: "HOVER",
+    name: "Brise de Pétales", description: "Pluie florale en arrière-plan.", 
+    price: 1500, preview: "🌸", colors: ["#ffc0cb"], cssClass: "hover-sakura", requiresActivity: true 
+  },
+
+  { 
+    id: "sakura_trail", slot: "TRAIL", // Nouveau slot !
+    name: "Sillage Sakura", description: "Des fleurs naissent sous votre souris.", 
+    price: 800, preview: "🍃", colors: ["#ffb7b2", "#ff69b4"], requiresActivity: true 
+  },
+  { 
+    id: "water_drop", slot: "INTERACTION",
+    name: "Goutte d'Eau", description: "Onde pure et zen.", 
+    price: 700, preview: "💧", colors: ["#00bfff"], cssClass: "anim-ripple", requiresActivity: true 
+  },
+
+  { 
+    id: "cosmic_orbit", slot: "FRAME",
+    name: "Orbite", description: "Juste un contour... et un satellite.", 
+    price: 1600, preview: "🪐", colors: ["#00f3ff", "#0b0d17"], cssClass: "frame-orbit", requiresActivity: true 
+  },
+  { 
+    id: "nebula_hover", slot: "HOVER",
+    name: "Nébuleuse", description: "Gaz interstellaire vivant au survol.", 
+    price: 1400, preview: "🌫️", colors: ["#8b5cf6", "#00c8ff"], cssClass: "hover-nebula", requiresActivity: true 
+  },
+  { 
+    id: "comet_trail", slot: "TRAIL",
+    name: "Comète", description: "Une vraie comète avec sa traînée.", 
+    price: 900, preview: "☄️", colors: ["#00ffff", "#ffffff"], requiresActivity: false 
+  },
+  { 
+    id: "warp_click", slot: "INTERACTION",
+    name: "Warp Speed", description: "Passage en hyperespace.", 
+    price: 1100, preview: "🚀", colors: ["#fff"], cssClass: "anim-warp", requiresActivity: true 
+  },
+  { 
+    id: "milky_way", slot: "AMBIANCE",
+    name: "Voie Lactée", description: "Une fenêtre ouverte sur l'univers.", 
+    price: 4500, preview: "🌌", colors: ["#050508", "#222"], cssClass: "ambiance-milkyway", requiresActivity: true 
+  },
+  { 
+    id: "hand_of_god", slot: "TODAY",
+    name: "Main de Dieu", description: "Les piliers de la création.", 
+    price: 9999, preview: "✋", colors: ["#ff4500", "#4b0082"], cssClass: "today-hand-god", requiresActivity: false 
+  },
+
+// --- COLLECTION SHEEPY DREAMS ---
+  // --- COLLECTION SHEEPY DREAMS ---
+{ 
+  id: "wooly_frame", 
+  slot: "FRAME",
+  name: "Laine Vierge", 
+  description: "Bordure ultra-douce avec flocons de laine", 
+  price: 800, 
+  preview: "☁️", 
+  colors: ["#f8f8ff"], 
+  cssClass: "frame-wooly", 
+  requiresActivity: true 
+},
+{ 
+  id: "softness_hover", 
+  slot: "HOVER",
+  name: "Tonte Éclair", 
+  description: "Animation complète de tonte et repousse", 
+  price: 950, 
+  preview: "✂️", 
+  colors: ["#ffb6c1", "#ffccd5"], 
+  cssClass: "hover-softness", 
+  requiresActivity: true 
+},
+{ 
+  id: "tiny_herd_trail", 
+  slot: "TRAIL",
+  name: "Troupeau Galopant", 
+  description: "File de moutons avec animations individuelles", 
+  price: 1200, 
+  preview: "🐑🐑🐑", 
+  colors: ["#ffffff"], 
+  requiresActivity: true 
+},
+{ 
+  id: "boing_click", 
+  slot: "INTERACTION",
+  name: "Super Rebond", 
+  description: "Effet élastique ultra-dynamique", 
+  price: 750, 
+  preview: "🏈", 
+  colors: ["#ffffff"], 
+  cssClass: "anim-boing", 
+  requiresActivity: true 
+},
+{ 
+  id: "counting_dreams", 
+  slot: "AMBIANCE",
+  name: "Rêverie Nocturne", 
+  description: "Ciel étoilé avec moutons sauteurs synchronisés", 
+  price: 3500, 
+  preview: "🐑", 
+  colors: ["#4a69bd"], 
+  cssClass: "ambiance-dreams", 
+  requiresActivity: true 
+},
+{ 
+  id: "golden_fleece_today", 
+  slot: "TODAY",
+  name: "Toison d'Or Royale", 
+  description: "Mouton doré avec couronne et paillettes", 
+  price: 7000, 
+  preview: "🐑", 
+  colors: ["#ffd700"], 
+  cssClass: "today-golden-fleece", 
+  requiresActivity: false 
+},
+
+
+
 ];

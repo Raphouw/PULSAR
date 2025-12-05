@@ -109,6 +109,118 @@ export const createParticles = (e: React.MouseEvent | DOMRect, effect: ShopEffec
         count = 1; 
         particleText = Math.random() > 0.5 ? "1" : "0"; 
     }
+    else if (effect.id === "sakura_trail") {
+        physicsClass = "physic-gravity"; // Ça tombe vers le bas
+        count = 6; // Plus de pétales
+        particleText = "🌸"; 
+        sizeBase = 16; // Taille visible
+    }
+
+    // Ajoutez ces cas dans la fonction createParticles :
+
+else if (effect.id === "comet_trail") {
+    physicsClass = "physic-comet";
+    count = 5; // Tête + segments de queue
+    
+    // Créer une comète avec tête brillante et queue dégradée
+    for (let i = 0; i < count; i++) {
+        const particle = document.createElement("div");
+        particle.className = `particle-base ${physicsClass}`;
+        
+        if (i === 0) {
+            // TÊTE DE LA COMÈTE
+            particle.style.width = "8px";
+            particle.style.height = "8px";
+            particle.style.background = "#ffffff";
+            particle.style.boxShadow = `
+                0 0 15px #00ffff,
+                0 0 30px #00ffff,
+                0 0 45px #0088ff
+            `;
+            particle.style.borderRadius = "50%";
+            particle.style.zIndex = "10000";
+        } else {
+            // SEGMENTS DE QUEUE
+            const size = 6 - (i * 1.2);
+            particle.style.width = `${size}px`;
+            particle.style.height = `${size}px`;
+            particle.style.background = `linear-gradient(90deg, 
+                rgba(0, 255, 255, ${0.8 - i * 0.15}) 0%,
+                rgba(0, 136, 255, ${0.6 - i * 0.12}) 100%
+            )`;
+            particle.style.opacity = `${0.7 - i * 0.1}`;
+            particle.style.borderRadius = "50%";
+            
+            // Décalage progressif pour l'effet de traînée
+            const offsetX = -i * 5;
+            const offsetY = Math.sin(Date.now() / 100 + i) * 3;
+            particle.style.left = `${originX + offsetX}px`;
+            particle.style.top = `${originY + offsetY}px`;
+        }
+        
+        // Animation de disparition progressive
+        particle.style.animation = `comet-fade ${0.5 + i * 0.1}s ease-out forwards`;
+        
+        document.body.appendChild(particle);
+        setTimeout(() => particle.remove(), 1000 + i * 100);
+    }
+    return; // Sortir car on a géré manuellement
+}
+
+else if (effect.id === "tiny_herd_trail") {
+    physicsClass = "physic-float";
+    count = 2; // Moins de moutons pour éviter la surcharge
+    
+    for (let i = 0; i < count; i++) {
+        setTimeout(() => {
+            const particle = document.createElement("div");
+            particle.className = `particle-base ${physicsClass}`;
+            particle.innerText = "🐑";
+            particle.style.fontSize = `${16 + Math.random() * 4}px`;
+            particle.style.left = `${originX - i * 15}px`;
+            particle.style.top = `${originY - i * 5}px`;
+            
+            // Animation simple
+            particle.style.animation = `sheep-trot 1.5s ease-out forwards`;
+            
+            document.body.appendChild(particle);
+            setTimeout(() => particle.remove(), 1500);
+        }, i * 200);
+    }
+    return;
+}
+
+// Ajoutez ces animations CSS :
+/*
+
+*/
+
+    else if (effect.id === "leaf_storm") {
+        physicsClass = "physic-blast"; // Explosion directionnelle
+        count = 25; // BEAUCOUP PLUS DE FEUILLES (C'était 1 avant ?)
+        const leaves = ["🍂", "🍁", "🍃"];
+        particleText = leaves[Math.floor(Math.random() * leaves.length)];
+        sizeBase = 16;
+    }
+    
+    // 💧 WATER DROP (Sakura)
+    else if (effect.id === "water_drop") {
+        physicsClass = "physic-ring"; // Utilise l'anim d'onde existante
+        count = 1;
+        // On force le style pour que ce soit bleu
+        // (Sera géré par le .style.borderColor = color plus bas)
+    }
+
+    // ❄️ POLAR CLICK (Aurora)
+    else if (effect.id === "polar_click") {
+        physicsClass = "physic-blast";
+        count = 12;
+        // On mélange flocons et étoiles
+        const icons = ["❄️", "✨", "💠"];
+        particleText = icons[Math.floor(Math.random() * icons.length)];
+        sizeBase = 14;
+    }
+
     
     // ⚡ HAUTE TENSION : Éclairs orientés
     else if (effect.id === "lightning") { 
@@ -174,11 +286,84 @@ export const createParticles = (e: React.MouseEvent | DOMRect, effect: ShopEffec
           particle.style.width = `${Math.max(2, Math.random() * sizeBase)}px`
           particle.style.height = particle.style.width
       }
-if (effect.id === "ghost_peloton") {
+      if (effect.id === "ghost_peloton") {
            particle.style.filter = "blur(1px) grayscale(100%)";
            particle.style.opacity = "0.4";
            particle.style.color = "#fff"; // Toujours blanc fantome
        }
+
+       if (effect.id === "tiny_herd_trail") {
+            // Position légèrement aléatoire autour du curseur
+            const angle = Math.random() * Math.PI * 2;
+            const radius = 5;
+            particle.style.left = `${originX + Math.cos(angle) * radius}px`;
+            particle.style.top = `${originY + Math.sin(angle) * radius}px`;
+            
+            particle.style.animation = `float-up 2s ease-out forwards`; // Flotte et disparait
+            particle.style.fontSize = `${16 + Math.random() * 4}px`;
+        }
+
+       if (effect.id === "comet_trail") {
+            const isHead = i === 0; // La première est la tête
+            
+            if (isHead) {
+                // TÊTE
+                particle.style.width = "6px";
+                particle.style.height = "6px";
+                particle.style.background = "#fff";
+                particle.style.boxShadow = "0 0 10px #00f3ff, 0 0 20px #00f3ff"; // Gros glow
+                particle.style.borderRadius = "50%";
+                particle.style.opacity = "1";
+                particle.style.zIndex = "10000"; // Au dessus
+                particle.style.animation = "fade-out 0.8s ease-out forwards"; // Dure un peu
+            } else {
+                // QUEUE
+                particle.style.width = `${Math.random() * 4 + 2}px`;
+                particle.style.height = `${Math.random() * 4 + 2}px`;
+                particle.style.background = "#00f3ff";
+                particle.style.opacity = "0.6";
+                particle.style.borderRadius = "50%";
+                
+                // On décale la queue légèrement en arrière (simulé par random pour l'instant)
+                const offsetX = (Math.random() - 0.5) * 10;
+                const offsetY = (Math.random() - 0.5) * 10;
+                particle.style.left = `${parseFloat(particle.style.left) + offsetX}px`;
+                particle.style.top = `${parseFloat(particle.style.top) + offsetY}px`;
+                
+                // La queue disparait très vite
+                particle.style.animation = "fade-out 0.4s ease-out forwards"; 
+            }
+        }
+
+
+
+
+       if (effect.id === "leaf_storm") {
+            // Rotation aléatoire
+            particle.style.transform = `rotate(${Math.random() * 360}deg)`;
+            // Vitesse variée
+            const speed = 0.5 + Math.random();
+            particle.style.transition = `all ${speed}s ease-out`;
+        }
+        
+      if (effect.id === "sakura_wind") {
+            // Rotation douce et vitesse de chute variée
+            particle.style.animationDuration = `${1 + Math.random()}s`;
+            particle.style.fontSize = `${10 + Math.random() * 10}px`;
+        }
+
+        if (effect.id === "sakura_trail") {
+        // Rotation douce et vitesse de chute variée
+        particle.style.animationDuration = `${1 + Math.random()}s`;
+        particle.style.fontSize = `${8 + Math.random() * 8}px`;
+    }
+        
+        // CUSTOM POLAR
+        if (effect.id === "polar_click") {
+             // Cyan et Violet électrique
+             particle.style.color = Math.random() > 0.5 ? "#00ffcc" : "#a855f7";
+             particle.style.textShadow = "0 0 10px currentColor";
+        }
       
 
       // Couleur

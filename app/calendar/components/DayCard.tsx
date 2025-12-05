@@ -91,7 +91,10 @@ export default function DayCard({
     if (hasActivity || isPreview) {
         if (ambianceEffect === "hell_north") innerBgClasses = "ambiance-paris-roubaix";
         if (ambianceEffect === "synthwave_grid") innerBgClasses = "ambiance-synthwave";
-
+        if (ambianceEffect === "forest_night") innerBgClasses = "ambiance-forest";
+        if (ambianceEffect === "aurora_sky") innerBgClasses = "ambiance-aurora";
+        if (ambianceEffect === "milky_way") innerBgClasses = "ambiance-milkyway";
+        if (ambianceEffect === "counting_dreams") innerBgClasses = "ambiance-dreams";
         // Pour les ambiances simples, on garde le comportement standard
         if (ambianceEffect === "night_ride") dynamicClasses += " ambiance-night";
         if (ambianceEffect === "velodrome") dynamicClasses += " ambiance-velodrome";
@@ -194,16 +197,23 @@ export default function DayCard({
     }
 
     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+        // Gestion Flashlight (Existant)
         if (loadout.HOVER === "flashlight" && (hasActivity || isPreview)) {
             const rect = e.currentTarget.getBoundingClientRect();
             e.currentTarget.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
             e.currentTarget.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
         }
+
+        // 1. Gestion des TRAILs classiques (Existant)
         const trailId = loadout.TRAIL;
         if (trailId && (hasActivity || isPreview) && Math.random() > 0.3) {
             const effect = SHOP_EFFECTS.find(ef => ef.id === trailId);
             createParticles(e, effect || null, "hover");
         }
+
+        // 2. 🔥 FIX SAKURA : Gestion du HOVER qui fait des particules
+        // On déclenche manuellement les particules si le HOVER est "sakura_wind"
+       
     };
 
     const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -236,6 +246,24 @@ export default function DayCard({
             {/* CALQUE INTERNE POUR LES EFFETS QUI DOIVENT ETRE COUPÉS (Overflow Hidden) */}
             {innerLayerClass && (
                 <div className={innerLayerClass} style={{position:'absolute', inset:0, borderRadius:'6px', zIndex:-1, pointerEvents:'none'}}></div>
+            )}
+
+            {/* MOUTONS SAUTEURS pour l'ambiance counting_dreams */}
+            {(ambianceEffect === "counting_dreams" && (hasActivity || isPreview)) && (
+                <>
+                    {/* On réajuste légèrement l'animation-delay pour un meilleur flux avec les nouvelles keyframes */}
+                    <div className="sheep-jumper" style={{ animationDelay: '0s' }}>🐑</div>
+                    <div className="sheep-jumper" style={{ animationDelay: '3s' }}>🐑</div>
+                    <div className="sheep-jumper" style={{ animationDelay: '6s' }}>🐑</div>
+                    <div className="sheep-jumper" style={{ animationDelay: '9s' }}>🐑</div>
+                </>
+            )}
+
+            {innerLayerClass && (
+                <div className={innerLayerClass} style={{ /* styles inchangés */ }}>
+                    {/* SI CIEL POLAIRE : Ajout de l'étoile filante */}
+                    {ambianceEffect === "aurora_sky" && <div className="shooting-star"></div>}
+                </div>
             )}
 
             {!isPreview && showConnector && streakConfig && <div className={streakConfig.className} />}

@@ -1269,3 +1269,854 @@ body.bg-phase-dusk { background: linear-gradient(125deg, #312e81 0%, #be185d 50%
     color: #ffd700 !important;
     text-shadow: 0 0 10px #ffd700;
 }
+
+
+/* ==========================================================================
+   13. SET NATURE (V2 - BADASS & TRANSPARENT)
+   ========================================================================== */
+
+/* --- 🌲 SET 1 : L'APPEL DE LA FORÊT --- */
+
+/* Frame : Racines (Juste le contour) */
+.frame-forest {
+  /* Le fond est transparent, la bordure est dessinée via un dégradé */
+  background: linear-gradient(#1a1510, #1a1510) padding-box, 
+              repeating-linear-gradient(45deg, #3e2723, #3e2723 10px, #2e7d32 10px, #2e7d32 20px) border-box !important;
+  border: 4px solid transparent !important;
+  border-radius: 6px !important;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+}
+
+/* Ambiance : Nuit en Forêt (Validé) */
+.ambiance-forest {
+  background: linear-gradient(to bottom, #020a02 0%, #0a1f0a 100%) !important;
+  overflow: hidden;
+}
+.ambiance-forest::before {
+  content: ''; position: absolute; width: 4px; height: 4px;
+  border-radius: 50%; background: #ccff00;
+  box-shadow: 10px 20px #ccff00, 80px 10px #ccff00, 30px 100px #ccff00;
+  opacity: 0; filter: blur(1px);
+  animation: fireflies-move 6s infinite alternate ease-in-out;
+}
+
+/* Interaction : Vent d'Automne (Secousse simple sur la carte) */
+.anim-shake-leaf {
+    animation: leaf-shake 0.5s ease-in-out !important;
+}
+@keyframes leaf-shake {
+    0%, 100% { transform: rotate(0deg); }
+    25% { transform: rotate(2deg); }
+    75% { transform: rotate(-2deg); }
+}
+
+
+/* --- 🌌 SET 2 : AURORA BOREALIS --- */
+
+/* Frame : Borealis (Transparent + Couleurs plus Aurore) */
+.frame-aurora {
+  background: linear-gradient(#0f172a, #0f172a) padding-box, 
+              linear-gradient(135deg, #00ffcc, #00ff66, #9900ff, #00ffcc) border-box !important;
+  border: 2px solid transparent !important;
+  background-size: 300% 300% !important; /* Pour animer le dégradé */
+  animation: aurora-border-flow 6s ease infinite;
+  box-shadow: 0 0 15px rgba(0, 255, 204, 0.2);
+}
+
+/* Ambiance : Ciel Polaire BADASS */
+.ambiance-aurora {
+  background: radial-gradient(circle at bottom, #0b1026 0%, #000000 100%) !important;
+  overflow: hidden !important;
+  position: relative;
+}
+
+/* 1. Les Étoiles (Fond fixe) */
+.ambiance-aurora::before {
+  content: ''; position: absolute; inset: 0;
+  background-image: 
+      radial-gradient(1px 1px at 10px 10px, white, transparent),
+      radial-gradient(1px 1px at 50px 80px, white, transparent),
+      radial-gradient(2px 2px at 120px 40px, white, transparent),
+      radial-gradient(1px 1px at 200px 150px, white, transparent);
+  background-size: 250px 250px;
+  opacity: 0.8; z-index: 0;
+}
+
+/* 2. Les Voiles d'Aurores (Animation fluide) */
+.ambiance-aurora::after {
+  content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%;
+  background: conic-gradient(
+      from 180deg, 
+      rgba(0, 255, 128, 0) 0deg, 
+      rgba(0, 255, 128, 0.3) 60deg, 
+      rgba(153, 0, 255, 0.3) 120deg, 
+      rgba(0, 255, 128, 0) 180deg
+  );
+  filter: blur(40px);
+  animation: aurora-spin 15s linear infinite reverse;
+  mix-blend-mode: screen;
+  z-index: 1;
+}
+
+/* 3. Étoile Filante (Rare) */
+.ambiance-aurora .shooting-star {
+    position: absolute; top: 0; left: 50%;
+    width: 100px; height: 1px;
+    background: linear-gradient(90deg, #fff, transparent);
+    animation: shoot 8s infinite ease-in-out;
+    transform: rotate(-45deg) translateX(0);
+    opacity: 0; z-index: 2;
+}
+
+@keyframes aurora-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+@keyframes shoot { 
+    0%, 90% { opacity: 0; transform: rotate(-45deg) translateX(-200px); }
+    92% { opacity: 1; }
+    95% { transform: rotate(-45deg) translateX(200px); opacity: 0; }
+}
+
+
+/* --- 🌸 SET 3 : SAKURA SPIRIT --- */
+
+/* Frame : Sakura (Contour rose, fond transparent) */
+.frame-sakura {
+  background: rgba(255, 255, 255, 0.05) !important; /* Très légère teinte */
+  border: 2px solid #ffb7b2 !important;
+  box-shadow: inset 0 0 15px rgba(255, 192, 203, 0.3);
+}
+/* Déco coin fleur */
+.frame-sakura::after {
+    content: '❀'; position: absolute; top: 2px; right: 2px; 
+    color: #ffb7b2; font-size: 12px; opacity: 0.8;
+}
+
+/* Hover : Brise de Pétales (UNIQUEMENT AU SURVOL) */
+.hover-sakura {
+  position: relative;
+  overflow: hidden;
+  /* Bordure transparente par défaut pour ne pas polluer l'UI */
+  border-color: transparent !important; 
+  transition: all 0.3s ease;
+  z-index: 10;
+}
+
+/* Le fond animé (Pluie de pétales flous) */
+.hover-sakura::before {
+  content: ''; 
+  position: absolute; 
+  inset: 0;
+  background-image: 
+    radial-gradient(circle, rgba(255,192,203,0.8) 10%, transparent 10%),
+    radial-gradient(circle, rgba(255,182,193,0.8) 10%, transparent 10%);
+  background-size: 20px 20px, 30px 30px;
+  background-position: 0 0, 15px 15px;
+  opacity: 0; 
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Au survol : On affiche la bordure et le fond */
+.hover-sakura:hover {
+  border-color: #ffb7b2 !important; /* La couleur apparaît ici */
+  box-shadow: 0 0 15px rgba(255, 183, 178, 0.6) !important;
+  background-color: rgba(255, 240, 245, 0.1) !important;
+}
+
+.hover-sakura:hover::before {
+  opacity: 1;
+  animation: sakura-rain 1.5s linear infinite;
+}
+
+@keyframes sakura-rain {
+  0% { background-position: 0 0, 15px 15px; }
+  100% { background-position: 10px 20px, 25px 45px; } 
+}
+
+
+.anim-polar {
+  position: relative;
+  /* Pas d'overflow hidden ici sinon l'onde est coupée si elle dépasse */
+}
+.anim-polar::after {
+  content: '';
+  position: absolute;
+  top: 50%; left: 50%;
+  width: 10px; height: 10px;
+  background: transparent;
+  border: 4px solid #00ffcc; /* Cyan Néon */
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 1;
+  /* Une onde de choc rapide et violente */
+  animation: polar-shockwave 0.6s cubic-bezier(0, 0, 0.2, 1) forwards;
+  box-shadow: 0 0 20px #8b5cf6; /* Glow Violet */
+  z-index: 50;
+  pointer-events: none;
+}
+
+@keyframes polar-shockwave {
+  0% { width: 0; height: 0; opacity: 1; border-width: 10px; }
+  100% { width: 400px; height: 400px; opacity: 0; border-width: 0px; }
+}
+
+/* Interaction : Goutte d'eau (Ripple) */
+.anim-ripple {
+  position: relative; overflow: hidden;
+}
+.anim-ripple::after {
+  content: ''; position: absolute; top: 50%; left: 50%; width: 0; height: 0;
+  border: 2px solid rgba(0, 191, 255, 0.6);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  animation: water-ripple 0.8s ease-out;
+}
+@keyframes water-ripple {
+  0% { width: 0; height: 0; opacity: 1; border-width: 4px; }
+  100% { width: 300px; height: 300px; opacity: 0; border-width: 0px; }
+}
+
+/* ==========================================================================
+   14. COLLECTION COSMIC VOYAGER (ESPACE)
+   ========================================================================== */
+
+.frame-orbit {
+  position: relative;
+  background: transparent !important; /* Fond transparent */
+  /* On crée un espace pour la bordure sans utiliser border pour pouvoir l'animer */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.1); 
+  overflow: hidden;
+  border-radius: 8px !important;
+}
+/* L'anneau qui tourne */
+.frame-orbit::before {
+  content: ''; position: absolute; inset: -2px; /* Déborde un peu */
+  background: conic-gradient(
+    from 0deg, 
+    transparent 0%, 
+    transparent 70%, 
+    rgba(0, 243, 255, 0.5) 85%, 
+    #00f3ff 100%
+  );
+  animation: orbit-rotate 4s linear infinite;
+  /* Masque magique pour ne garder QUE la bordure de 2px */
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  padding: 2px; /* Épaisseur du cadre */
+  z-index: 0;
+}
+/* La petite planète qui suit */
+.frame-orbit::after {
+  content: ''; position: absolute; inset: 0;
+  animation: orbit-rotate 4s linear infinite;
+  /* Un petit point blanc sur le trajet */
+  background: radial-gradient(circle at top center, #fff 2px, transparent 3px);
+  z-index: 1;
+}
+@keyframes orbit-rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+
+/* ✨ HOVER: NEBULA (Volumétrique) */
+.hover-nebula {
+  position: relative; overflow: hidden;
+  border-color: rgba(139, 92, 246, 0.3) !important;
+  transition: all 0.5s ease;
+}
+/* Couche 1 : Gaz Violet (Lent) */
+.hover-nebula::before {
+  content: ''; position: absolute; inset: -50%;
+  background-image: radial-gradient(circle at 50% 50%, rgba(76, 29, 149, 0.6), transparent 60%);
+  filter: blur(30px); opacity: 0;
+  transform: scale(0.5); transition: all 0.8s ease;
+}
+/* Couche 2 : Gaz Cyan (Rapide) */
+.hover-nebula::after {
+  content: ''; position: absolute; inset: -20%;
+  background-image: 
+    radial-gradient(circle at 30% 30%, rgba(0, 243, 255, 0.4), transparent 40%),
+    radial-gradient(circle at 70% 70%, rgba(255, 0, 255, 0.3), transparent 40%);
+  filter: blur(20px); opacity: 0;
+  transform: rotate(0deg) scale(0.8); transition: all 0.8s ease;
+}
+.hover-nebula:hover::before { opacity: 1; transform: scale(1.2); }
+.hover-nebula:hover::after { opacity: 1; transform: rotate(45deg) scale(1.1); }
+.hover-nebula:hover { border-color: #00f3ff !important; box-shadow: inset 0 0 20px rgba(0,0,0,1); }
+
+
+.today-hand-god {
+    /* Bordure éthérée */
+    border: 2px solid rgba(255, 200, 150, 0.5) !important;
+    box-shadow: 0 0 30px rgba(255, 100, 50, 0.3), inset 0 0 20px rgba(0,0,0,0.8) !important;
+    position: relative !important;
+    overflow: hidden !important;
+    background: #000 !important;
+    z-index: 10;
+}
+/* Les Nuages de Gaz (Nébuleuse) */
+.today-hand-god::before {
+    content: ''; position: absolute; inset: -50%;
+    background-image: 
+        radial-gradient(circle at 30% 30%, rgba(255, 150, 50, 0.4), transparent 50%),
+        radial-gradient(circle at 70% 70%, rgba(100, 0, 200, 0.4), transparent 50%),
+        radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.8), transparent 80%);
+    filter: blur(25px) contrast(1.2);
+    animation: nebula-breath 8s ease-in-out infinite alternate;
+    mix-blend-mode: screen;
+}
+/* Poussière d'étoiles brillantes */
+.today-hand-god::after {
+    content: '✨'; position: absolute; top: 5px; right: 5px;
+    font-size: 10px; color: #fff;
+    filter: drop-shadow(0 0 5px #fff);
+    animation: star-twinkle 2s infinite;
+}
+.today-hand-god .today-number {
+    color: #ffd700 !important;
+    text-shadow: 0 0 15px #ff4500;
+    position: relative; z-index: 2;
+}
+
+@keyframes nebula-breath { 0% { transform: scale(1) rotate(0deg); opacity: 0.8; } 100% { transform: scale(1.1) rotate(5deg); opacity: 1; } }
+@keyframes star-twinkle { 0%, 100% { opacity: 0.5; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1.2); } }
+
+
+/* 🌌 AMBIANCE: MILKY WAY (Fenêtre sur l'Univers) */
+.ambiance-milkyway {
+  background-color: #020204 !important;
+  position: relative; overflow: hidden;
+  /* Effet de profondeur */
+  box-shadow: inset 0 0 50px #000 !important;
+}
+/* Les Étoiles (Parallaxe simulée) */
+.ambiance-milkyway::before {
+    content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background-image: 
+        radial-gradient(1px 1px at 10px 10px, white, transparent),
+        radial-gradient(1px 1px at 30px 80px, rgba(255,255,255,0.8), transparent),
+        radial-gradient(2px 2px at 70px 40px, white, transparent),
+        radial-gradient(1px 1px at 150px 120px, rgba(200,200,255,0.6), transparent);
+    background-size: 150px 150px;
+    opacity: 0.7; 
+    animation: stars-drift 20s linear infinite;
+}
+/* La Galaxie (Gaz coloré) */
+.ambiance-milkyway::after {
+    content: ''; position: absolute; 
+    top: -100%; left: -100%; width: 300%; height: 300%;
+    background: radial-gradient(circle, rgba(60, 20, 100, 0.2) 0%, transparent 60%),
+                conic-gradient(from 0deg, transparent 0%, rgba(100, 200, 255, 0.05) 30%, transparent 60%);
+    filter: blur(30px);
+    animation: galaxy-spin 60s linear infinite;
+    mix-blend-mode: screen;
+}
+@keyframes stars-drift { 0% { background-position: 0 0; } 100% { background-position: 50px 20px; } }
+@keyframes galaxy-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+
+/* 💥 INTERACTION: WARP SPEED */
+.anim-warp { animation: warp-jump 0.5s cubic-bezier(0.1, 0.7, 1, 0.1) !important; position: relative; z-index: 50 !important; }
+@keyframes warp-jump {
+    0% { transform: scale(1); filter: brightness(1); }
+    40% { transform: scale(0.8) skewX(-20deg); filter: brightness(0.5) blur(2px); }
+    50% { transform: scale(1.5) skewX(10deg); filter: brightness(3); background: #fff !important; }
+    100% { transform: scale(1); filter: brightness(1); }
+}
+
+@keyframes fade-out {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0); opacity: 0; }
+}
+
+/* ==========================================================================
+   COLLECTION 2 : SHEEPY DREAMS (Moutons Ultra-Détaillés)
+   ========================================================================== */
+
+/* ☁️ FRAME : LAINE VIERGE (Bordure Ultra-Douce) */
+.frame-wooly {
+  --wool-color: #f8f8ff;
+  border: 5px solid transparent !important;
+  background: 
+    linear-gradient(#14141e, #14141e) padding-box,
+    repeating-linear-gradient(
+      45deg,
+      var(--wool-color) 0px,
+      var(--wool-color) 10px,
+      #e8e8ff 10px,
+      #e8e8ff 20px
+    ) border-box !important;
+  position: relative !important;
+  border-radius: 15px !important;
+  box-shadow: 
+    inset 0 0 25px rgba(255, 255, 255, 0.1),
+    0 0 30px rgba(248, 248, 255, 0.3),
+    0 8px 20px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Effet de profondeur de laine */
+.frame-wooly::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 18px;
+  background: 
+    radial-gradient(circle at 20% 30%, rgba(255, 255, 255, 0.2) 0%, transparent 50%),
+    radial-gradient(circle at 80% 70%, rgba(255, 255, 255, 0.15) 0%, transparent 50%);
+  z-index: -1;
+  animation: wool-float 6s ease-in-out infinite;
+}
+
+/* Petits "flocons" de laine */
+.frame-wooly::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: 
+    radial-gradient(3px 3px at 10% 20%, var(--wool-color) 50%, transparent 100%),
+    radial-gradient(4px 4px at 90% 40%, var(--wool-color) 50%, transparent 100%),
+    radial-gradient(2px 2px at 30% 80%, var(--wool-color) 50%, transparent 100%),
+    radial-gradient(3px 3px at 70% 10%, var(--wool-color) 50%, transparent 100%);
+  animation: wool-dust 10s linear infinite;
+}
+
+@keyframes wool-float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
+}
+
+@keyframes wool-dust {
+  0% { transform: translateY(0) rotate(0deg); }
+  100% { transform: translateY(-100px) rotate(360deg); }
+}
+
+/* ✂️ HOVER : TONTE RAPIDE (Animation Complète) */
+/* ✂️ HOVER : TONTE ÉCLAIR (Simplifié et fonctionnel) */
+.hover-softness {
+  transition: all 0.5s ease !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.hover-softness:hover {
+  background: 
+    radial-gradient(circle at var(--mouse-x, 50%) var(--mouse-y, 50%), 
+      rgba(255, 182, 193, 0.6) 0%, 
+      rgba(255, 204, 213, 0.4) 40%, 
+      transparent 80%) !important;
+  border-color: #ffccd5 !important;
+  transform: scale(1.02) !important;
+  box-shadow: 0 0 20px rgba(255, 182, 193, 0.4) !important;
+}
+
+/* Effet de tonte rapide (ciseaux + mouvement) */
+.hover-softness:hover::before {
+  content: '✂️';
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  font-size: 14px;
+  animation: shear-snip 0.8s ease-out;
+  z-index: 10;
+}
+
+/* Petits morceaux de laine qui tombent */
+.hover-softness:hover::after {
+  content: '···';
+  position: absolute;
+  top: 25px;
+  right: 10px;
+  font-size: 12px;
+  color: #f8f8ff;
+  letter-spacing: 2px;
+  animation: wool-fall-simple 1s ease-out forwards;
+}
+
+@keyframes shear-snip {
+  0% { 
+    transform: translateX(20px) rotate(0deg); 
+    opacity: 0; 
+  }
+  30% { 
+    transform: translateX(0) rotate(-30deg); 
+    opacity: 1; 
+  }
+  70% { 
+    transform: translateX(-5px) rotate(10deg); 
+  }
+  100% { 
+    transform: translateX(0) rotate(0deg); 
+    opacity: 0; 
+  }
+}
+
+@keyframes wool-fall-simple {
+  0% { 
+    transform: translateY(-10px); 
+    opacity: 0; 
+  }
+  30% { 
+    transform: translateY(0); 
+    opacity: 1; 
+  }
+  100% { 
+    transform: translateY(30px); 
+    opacity: 0; 
+  }
+}
+
+/* 🐑🐑🐑 TRAIL : LE TROUPEAU (File de Moutons) */
+/* Géré dans createParticles - Amélioré ci-dessous */
+
+/* 🏈 INTERACTION : BOING! (Rebond Ultra-Élastique) */
+.anim-boing {
+  animation: super-boinging 1.2s cubic-bezier(0.175, 0.885, 0.32, 1.6) !important;
+}
+
+@keyframes super-boinging {
+  0% { 
+    transform: scale(1) rotate(0deg);
+  }
+  15% { 
+    transform: scale(1.2, 0.8) rotate(-2deg);
+    border-radius: 20px !important;
+  }
+  30% { 
+    transform: scale(0.9, 1.1) rotate(3deg);
+    border-radius: 12px !important;
+  }
+  45% { 
+    transform: scale(1.1, 0.9) rotate(-1deg);
+    border-radius: 25px !important;
+  }
+  60% { 
+    transform: scale(0.95, 1.05) rotate(2deg);
+    border-radius: 15px !important;
+  }
+  75% { 
+    transform: scale(1.05, 0.95) rotate(-1deg);
+    border-radius: 20px !important;
+  }
+  90% { 
+    transform: scale(0.98, 1.02) rotate(0.5deg);
+  }
+  100% { 
+    transform: scale(1) rotate(0deg);
+    border-radius: inherit !important;
+  }
+}
+
+/* 🌙 AMBIANCE : COMPTEUR DE RÊVES (Nuit Animée) */
+.ambiance-dreams {
+  background: 
+    radial-gradient(ellipse at 50% 20%, #4a69bd 0%, transparent 70%),
+    radial-gradient(ellipse at 80% 80%, #6a89cc 0%, transparent 70%),
+    linear-gradient(180deg, #0c2461 0%, #1e3799 100%) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+/* Barrière en bois */
+.ambiance-dreams::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 25px;
+  background: 
+    linear-gradient(180deg, #5d4037 0%, #3e2723 100%),
+    repeating-linear-gradient(
+      90deg,
+      transparent,
+      transparent 15px,
+      #8d6e63 15px,
+      #8d6e63 20px
+    );
+  border-top: 3px solid #795548;
+  box-shadow: 0 -5px 20px rgba(0, 0, 0, 0.5);
+  z-index: 2;
+}
+
+/* Nuages doux */
+.ambiance-dreams::after {
+  content: '';
+  position: absolute;
+  top: 20px;
+  left: 10%;
+  width: 60px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 50%;
+  filter: blur(5px);
+  animation: cloud-drift 20s linear infinite;
+}
+
+/* Conteneur pour moutons sauteurs */
+.sheep-jumper {
+  position: absolute;
+  bottom: 30px; /* Commence au-dessus de la barrière */
+  left: -50px;
+  font-size: 24px;
+  animation: sheep-jump-sequence 12s infinite; /* L'animation est plus longue pour ralentir le flux */
+  z-index: 3;
+}
+
+.sheep-jumper:nth-child(1) { animation-delay: 0s; }
+.sheep-jumper:nth-child(2) { animation-delay: 3s; } /* Ecart plus grand */
+.sheep-jumper:nth-child(3) { animation-delay: 6s; }
+.sheep-jumper:nth-child(4) { animation-delay: 9s; }
+
+/* 🔥 NOUVELLE KEYFRAME PLUS DOUCE ET ÉLASTIQUE */
+@keyframes sheep-jump-sequence {
+  /* On utilise cubic-bezier pour un effet "boing" (atterrissage doux, décollage rapide) */
+  0%, 100% { 
+    transform: translateX(0) translateY(0) rotate(0deg); 
+    opacity: 0;
+  }
+  5% {
+    opacity: 1; /* Apparition rapide */
+  }
+  10% { 
+    transform: translateX(30px) translateY(-40px) rotate(-5deg); /* Point haut du premier saut */
+    animation-timing-function: cubic-bezier(0.1, 0.7, 0.5, 1); /* Décollage rapide */
+  }
+  15% {
+    transform: translateX(45px) translateY(0) rotate(0deg); /* Atterrissage doux */
+    animation-timing-function: cubic-bezier(0.1, 0, 0.9, 0); /* Début de rebond */
+  }
+  20% { 
+    transform: translateX(60px) translateY(-30px) rotate(5deg); /* Saut moyen */
+    animation-timing-function: cubic-bezier(0.1, 0.7, 0.5, 1);
+  }
+  25% {
+    transform: translateX(75px) translateY(0) rotate(0deg); 
+    animation-timing-function: cubic-bezier(0.1, 0, 0.9, 0);
+  }
+  30% { 
+    transform: translateX(90px) translateY(-20px) rotate(-3deg); /* Petit saut */
+    animation-timing-function: cubic-bezier(0.1, 0.7, 0.5, 1);
+  }
+  35% {
+    transform: translateX(105px) translateY(0) rotate(0deg); 
+    animation-timing-function: cubic-bezier(0.1, 0, 0.9, 0);
+  }
+  40% { 
+    transform: translateX(120px) translateY(-10px) rotate(3deg); /* Très petit saut */
+    animation-timing-function: cubic-bezier(0.1, 0.7, 0.5, 1);
+  }
+  45% {
+    transform: translateX(135px) translateY(0) rotate(0deg); 
+    animation-timing-function: cubic-bezier(0.1, 0, 0.9, 0);
+  }
+  50% { 
+    transform: translateX(150px) translateY(-5px) rotate(-1deg);
+    opacity: 1; /* Maintien de l'opacité au centre */
+  }
+  90% {
+    transform: translateX(350px) translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  95% {
+    opacity: 0; /* Disparition avant la réinitialisation */
+  }
+}
+
+@keyframes cloud-drift {
+  0% { transform: translateX(-100px); opacity: 0.3; }
+  50% { opacity: 0.6; }
+  100% { transform: translateX(400px); opacity: 0.3; }
+}
+
+/* Conteneur pour moutons sauteurs */
+.sheep-jumper {
+  position: absolute;
+  bottom: 30px;
+  left: -50px;
+  font-size: 24px;
+  animation: sheep-jump-sequence 12s infinite;
+  z-index: 3;
+}
+
+.sheep-jumper:nth-child(1) { animation-delay: 0s; }
+.sheep-jumper:nth-child(2) { animation-delay: 2s; }
+.sheep-jumper:nth-child(3) { animation-delay: 4s; }
+.sheep-jumper:nth-child(4) { animation-delay: 6s; }
+
+@keyframes sheep-jump-sequence {
+  0% { 
+    transform: translateX(0) translateY(0) rotate(0deg); 
+    opacity: 0;
+  }
+  10% { 
+    transform: translateX(30px) translateY(-40px) rotate(-15deg); 
+    opacity: 1;
+  }
+  20% { 
+    transform: translateX(60px) translateY(0) rotate(0deg);
+  }
+  30% { 
+    transform: translateX(90px) translateY(-35px) rotate(10deg);
+  }
+  40% { 
+    transform: translateX(120px) translateY(0) rotate(0deg);
+  }
+  50% { 
+    transform: translateX(150px) translateY(-30px) rotate(-10deg);
+  }
+  60% { 
+    transform: translateX(180px) translateY(0) rotate(0deg);
+  }
+  70% { 
+    transform: translateX(210px) translateY(-25px) rotate(8deg);
+  }
+  80% { 
+    transform: translateX(240px) translateY(0) rotate(0deg);
+  }
+  90% { 
+    transform: translateX(270px) translateY(-20px) rotate(-5deg);
+    opacity: 1;
+  }
+  100% { 
+    transform: translateX(300px) translateY(0) rotate(0deg);
+    opacity: 0;
+  }
+}
+
+@keyframes cloud-drift {
+  0% { transform: translateX(-100px); opacity: 0.3; }
+  50% { opacity: 0.6; }
+  100% { transform: translateX(400px); opacity: 0.3; }
+}
+
+/* 🏆 TODAY : LA TOISON D'OR (Mouton Doré Royal) */
+.today-golden-fleece {
+  background: 
+    radial-gradient(circle at 30% 30%, 
+      rgba(255, 215, 0, 0.2) 0%, 
+      rgba(218, 165, 32, 0.1) 30%, 
+      transparent 70%) !important;
+  
+  border: 2px solid rgba(255, 215, 0, 0.6) !important;
+  position: relative !important;
+  overflow: hidden !important;
+  
+  /* Animation subtile de brillance */
+  animation: golden-pulse 4s ease-in-out infinite !important;
+}
+
+/* Couronne flottante */
+.today-golden-fleece::before {
+  content: '👑';
+  position: absolute;
+  top: -24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 20px;
+  filter: 
+    drop-shadow(0 2px 4px rgba(0,0,0,0.5))
+    brightness(1.1);
+  animation: crown-bob 3s ease-in-out infinite;
+  z-index: 100;
+}
+
+/* Rayons dorés subtils */
+.today-golden-fleece::after {
+  content: '';
+  position: absolute;
+  inset: -20px;
+  background: 
+    radial-gradient(circle at center, 
+      rgba(255, 215, 0, 0.15) 0%, 
+      transparent 50%),
+    repeating-conic-gradient(
+      from 0deg,
+      transparent 0deg 10deg,
+      rgba(255, 215, 0, 0.05) 10deg 15deg
+    );
+  animation: sun-rays 20s linear infinite;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Animations */
+@keyframes golden-pulse {
+  0%, 100% { 
+    box-shadow: 
+      0 0 15px rgba(255, 215, 0, 0.3),
+      inset 0 0 10px rgba(255, 215, 0, 0.1);
+  }
+  50% { 
+    box-shadow: 
+      0 0 25px rgba(255, 215, 0, 0.5),
+      inset 0 0 15px rgba(255, 215, 0, 0.2);
+  }
+}
+
+@keyframes crown-bob {
+  0%, 100% { 
+    transform: translateX(-50%) translateY(0px) rotate(-3deg); 
+  }
+  50% { 
+    transform: translateX(-50%) translateY(-8px) rotate(3deg); 
+  }
+}
+
+@keyframes sun-rays {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Le chiffre en or brillant */
+.today-golden-fleece .today-number {
+  color: #ffd700 !important;
+  text-shadow: 
+    0 0 8px rgba(255, 215, 0, 0.8),
+    0 0 16px rgba(255, 215, 0, 0.4);
+  position: relative;
+  z-index: 2;
+}
+
+@keyframes golden-glow {
+  0%, 100% { 
+    box-shadow: 
+      0 0 40px #ffd700,
+      0 0 80px rgba(255, 215, 0, 0.6),
+      inset 0 0 30px rgba(255, 215, 0, 0.4);
+  }
+  50% { 
+    box-shadow: 
+      0 0 60px #ff8c00,
+      0 0 120px rgba(255, 140, 0, 0.7),
+      inset 0 0 40px rgba(255, 215, 0, 0.6);
+  }
+}
+
+@keyframes crown-float {
+  0%, 100% { transform: translateX(-50%) translateY(0px) rotate(-5deg); }
+  50% { transform: translateX(-50%) translateY(-5px) rotate(5deg); }
+}
+
+@keyframes gold-sparkle {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+@keyframes comet-fade {
+    0% { opacity: 1; transform: translateX(0); }
+    100% { opacity: 0; transform: translateX(-100px); }
+}
+
+@keyframes sheep-trot {
+    0% { transform: translate(0, 0) rotate(0deg); }
+    25% { transform: translate(10px, -5px) rotate(5deg); }
+    50% { transform: translate(20px, 0) rotate(0deg); }
+    75% { transform: translate(30px, -3px) rotate(-5deg); }
+    100% { transform: translate(40px, 0) rotate(0deg); opacity: 0; }
+}
+
+@keyframes sheep-bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-3px); }
+}
