@@ -1,8 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useMemo, useEffect } from "react"
-import Link from "next/link"
+import { useState, useMemo } from "react"
 import {
   ChevronLeft, ChevronRight, TrendingUp, Activity, Clock, Zap, Flame, Mountain,
   ArrowUpRight, Trophy, Wind, Target, Award, ShoppingBag
@@ -12,110 +11,15 @@ import "./calendar.css"
 import { CalendarActivity, ShopEffect, CalendarDay, CumulativeDataPoint, ShopData, UserLoadout } from "./types"
 import { SHOP_EFFECTS, MONTHS } from "./constants"
 import {
-  getTssColor, getStreakConfig, getTssLevelInfo, getSmartCardStyle, calculateBaseline,
-  getAdvancedFeedback, getTssLevelClass, calculateWallet, estimateTSS, resolveCardClass
+  calculateWallet, estimateTSS, calculateBaseline, getAdvancedFeedback, getTssLevelInfo, getTssLevelClass, createParticles
 } from "./utils"
 import WeatherSystem from "./WeatherSystem"
-import ActivityWeatherIcon from "./ActivityWeatherIcon"
 import ShopModal from "./components/ShopModal"
+import DayCard from "./components/DayCard"
 
-// --- EXPORT HELPER POUR SHOP MODAL ---
-// (Si tu as le temps, déplace cette fonction dans utils.ts, mais je la laisse ici exportée pour la compatibilité rapide)
-export const createParticles = (e: React.MouseEvent | DOMRect, effect: ShopEffect | null, trigger: "hover" | "flip") => {
-    if (!effect) return;
-    const colors = effect.colors || ["#fff"]
-    
-    let originX, originY;
-    if ('clientX' in e) { // C'est un MouseEvent
-        const rect = e.currentTarget.getBoundingClientRect();
-        originX = e.clientX;
-        originY = e.clientY;
-        if (trigger === "flip") {
-             originX = rect.left + rect.width / 2;
-             originY = rect.top + rect.height / 2;
-        }
-    } else { // C'est un DOMRect (utilisé par la preview auto)
-        originX = e.left + Math.random() * e.width;
-        originY = e.top + Math.random() * e.height;
-        if (effect.id === "firetrail") originY = e.bottom - 10;
-    }
-    
-    let count = trigger === "flip" ? 40 : 3;
-    let physicsClass = "physic-float"; 
-    let sizeBase = 6;
-    let isConfetti = false; // Flag pour Fête
-
-    if (effect.id === "firetrail") { physicsClass = "physic-fire"; count = 3; }
-    else if (effect.id === "snow") { physicsClass = "physic-gravity"; count = 2; }
-    else if (effect.id === "matrix") { physicsClass = "physic-gravity"; count = 1; }
-    else if (effect.id === "lightning") { physicsClass = "physic-zap"; count = 1; }
-    else if (effect.id === "explosion") { physicsClass = "physic-blast"; count = 50; } // Supernova = Explosion radiale
-    else if (effect.id === "confetti") { 
-        physicsClass = "physic-gravity"; // Fête = Gravité + Rotation
-        count = 40; 
-        isConfetti = true; 
-    }
-    else if (effect.id === "bubbles") { physicsClass = "physic-bubble"; count = 1; }
-    else if (effect.id === "shatter") { count = 20; physicsClass = "physic-gravity"; }
-    else if (effect.id === "black_hole") { physicsClass = "physic-spiral"; count = 40; }
-
-    for (let i = 0; i < count; i++) {
-      const particle = document.createElement("div")
-      particle.className = `particle-base ${physicsClass}`
-      particle.style.left = `${originX}px`
-      particle.style.top = `${originY}px`
-      particle.style.width = `${Math.max(2, Math.random() * sizeBase)}px`
-      particle.style.height = particle.style.width
-
-      if (isConfetti) {
-          // Carrés ou rectangles pour les confettis
-          particle.style.width = `${Math.random() * 8 + 4}px`;
-          particle.style.height = `${Math.random() * 6 + 4}px`;
-          particle.style.borderRadius = "0"; // Carré
-          particle.style.transform = `rotate(${Math.random() * 360}deg)`;
-      } else {
-          particle.style.width = `${Math.max(2, Math.random() * sizeBase)}px`
-          particle.style.height = particle.style.width
-      }
-
-      const color = colors[Math.floor(Math.random() * colors.length)]
-      particle.style.background = color
-
-      if (effect.id === "matrix") {
-        particle.innerText = Math.random() > 0.5 ? "1" : "0";
-        particle.style.background = "transparent";
-        particle.style.color = color;
-        particle.style.fontSize = "10px";
-        particle.style.fontWeight = "bold";
-        particle.style.fontFamily = "monospace";
-      } 
-      else if (effect.id === "explosion" || effect.id === "confetti") {
-        const angle = Math.random() * Math.PI * 2
-        const velocity = 50 + Math.random() * 200
-        particle.style.setProperty("--tx", `${Math.cos(angle) * velocity}px`)
-        particle.style.setProperty("--ty", `${Math.sin(angle) * velocity}px`)
-      }
-      else if (effect.id === "lightning") {
-        particle.style.transform = `translate(${(Math.random() - 0.5) * 50}px, ${(Math.random() - 0.5) * 50}px) rotate(${Math.random() * 360}deg)`;
-        particle.style.boxShadow = `0 0 15px ${color}`;
-      }
-
-      if (isConfetti) {
-         const drift = (Math.random() - 0.5) * 100;
-         particle.style.setProperty("--tx", `${drift}px`); // Besoin d'adapter le CSS physic-gravity pour utiliser --tx si nécessaire, ou utiliser physic-blast modifié
-         // Pour faire simple ici, on utilise physic-blast avec une gravité forcée via CSS si possible, ou on laisse l'anim par défaut
-      }
-
-      document.body.appendChild(particle)
-      setTimeout(() => particle.remove(), 1000)
-    }
-}
-
-// Styles inchangés (gardés pour compatibilité visuelle)
+// --- STYLES UTILITAIRES (Pour garder la compatibilité visuelle) ---
+// Note: Idéalement à migrer en classes CSS/Tailwind, mais gardé ici pour l'instant
 const styles = {
-  // ... (Garde exactement le même objet styles que ton fichier original, je ne le répète pas pour gagner de la place, mais il doit être présent)
-  // SI TU VEUX JE PEUX TE LE RECOPIER, MAIS C'EST LE MÊME.
-  // Pour la compilation :
   container: { display: "flex", gap: "1rem", alignItems: "flex-start", flexWrap: "wrap" as const, maxHeight: "100vh", overflow: "hidden", padding: "0.5rem" },
   calendarSection: { flex: "1 1 70%", minWidth: "0", maxHeight: "100vh", overflow: "hidden" },
   sidebarSection: { flex: "0 0 22%", display: "flex", flexDirection: "column" as const, gap: "0.75rem", maxHeight: "100vh", overflowY: "auto" as const, overflowX: "hidden" as const, scrollbarWidth: "none" as const },
@@ -126,23 +30,19 @@ const styles = {
   gridHeader: { display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", marginBottom: "0.4rem" },
   gridHeaderCell: { textAlign: "center" as const, color: "#666", fontSize: "0.7rem", fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "1px", paddingBottom: "0.4rem" },
   gridContainer: { display: "grid", gridTemplateColumns: "repeat(7, minmax(0, 1fr))", gap: "6px" },
-  dayCellBase: { minHeight: "110px", borderRadius: "8px", padding: "0.5rem", display: "flex", flexDirection: "column" as const, position: "relative" as const, overflow: "visible", zIndex: 1, cursor: "pointer", transition: "transform 0.2s ease, border-color 0.2s ease" },
-  dateNumber: (isToday: boolean, hasActivity: boolean, color: string) => ({ fontSize: "0.85rem", fontWeight: isToday ? 900 : 600, color: isToday ? "#00f3ff" : hasActivity ? "#fff" : "#666", marginBottom: "4px", display: "flex", justifyContent: "space-between", alignItems: "center" }),
-  tssBadge: (color: string) => ({ fontSize: "0.55rem", fontWeight: 800, color: "#000", background: color, padding: "2px 4px", borderRadius: "4px", boxShadow: `0 0 5px ${color}` }),
-  activityRow: { display: "flex", alignItems: "center", gap: "5px", fontSize: "0.65rem", color: "rgba(255,255,255,0.8)", marginTop: "3px", overflow: "hidden", whiteSpace: "nowrap" as const, textOverflow: "ellipsis" as const, maxWidth: "100%" },
   cyberButton: (color: string, filled: boolean = false) => ({ padding: "8px 16px", background: filled ? `linear-gradient(135deg, ${color}cc, ${color}66)` : "rgba(255, 255, 255, 0.03)", border: `1px solid ${filled ? "transparent" : color}`, borderRadius: "8px", color: filled ? "#fff" : color, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", fontSize: "0.75rem", textTransform: "uppercase" as const, letterSpacing: "1px", boxShadow: filled ? `0 4px 15px ${color}40` : "none", transition: "all 0.2s ease", backdropFilter: "blur(5px)" }),
-  compactStatRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" },
-  compactStatLabel: { fontSize: "0.7rem", color: "#888", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" },
-  compactStatValue: { fontSize: "0.85rem", fontWeight: 700, color: "#fff" },
-  sidebarLabel: { fontSize: "0.65rem", color: "#888", fontWeight: 600, textTransform: "uppercase" as const },
-  highlightValue: { fontSize: "2.2rem", fontWeight: 900, lineHeight: 1 },
-  chartContainer: { height: "80px", width: "100%", marginTop: "0.4rem" },
   progressContainer: { display: "flex", gap: "0.75rem", padding: "0.5rem", background: "rgba(255,255,255,0.02)", borderRadius: "10px", border: "1px solid rgba(255,255,255,0.05)", marginBottom: "0.75rem", flexWrap: "wrap" as const },
   progressItem: { flex: "1 1 150px", minWidth: "120px" },
   progressLabel: { fontSize: "0.65rem", color: "#888", fontWeight: 700, textTransform: "uppercase" as const, marginBottom: "4px", display: "flex", alignItems: "center", gap: "4px" },
   progressBarBg: { width: "100%", height: "8px", background: "rgba(255,255,255,0.05)", borderRadius: "10px", overflow: "hidden" as const, position: "relative" as const },
   progressBarFill: (color: string, percent: number) => ({ height: "100%", width: `${Math.min(100, percent)}%`, background: `linear-gradient(90deg, ${color}, ${color}dd)`, borderRadius: "10px", transition: "width 0.5s ease", boxShadow: `0 0 10px ${color}80` }),
   progressValue: { fontSize: "0.7rem", color: "#fff", fontWeight: 700, marginTop: "2px" },
+  compactStatRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.05)" },
+  compactStatLabel: { fontSize: "0.7rem", color: "#888", fontWeight: 600, display: "flex", alignItems: "center", gap: "6px" },
+  compactStatValue: { fontSize: "0.85rem", fontWeight: 700, color: "#fff" },
+  sidebarLabel: { fontSize: "0.65rem", color: "#888", fontWeight: 600, textTransform: "uppercase" as const },
+  highlightValue: { fontSize: "2.2rem", fontWeight: 900, lineHeight: 1 },
+  chartContainer: { height: "80px", width: "100%", marginTop: "0.4rem" },
 }
 
 export default function CalendarClient({ activities, initialShopData }: { activities: CalendarActivity[], initialShopData: ShopData }) {
@@ -153,7 +53,7 @@ export default function CalendarClient({ activities, initialShopData }: { activi
   const [loadout, setLoadout] = useState<UserLoadout>(initialShopData.loadout)
   const [shopOpen, setShopOpen] = useState(false)
 
-  // Animation States (Gardés ici car liés à la grille)
+  // Animation States
   const [flippingCells, setFlippingCells] = useState<Set<number>>(new Set())
   const [clickingCells, setClickingCells] = useState<Set<number>>(new Set())
 
@@ -163,7 +63,7 @@ export default function CalendarClient({ activities, initialShopData }: { activi
   const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1))
   const goToToday = () => setCurrentDate(new Date())
 
-  // --- LOGIQUE BOUTIQUE (Handlers) ---
+  // --- LOGIQUE BOUTIQUE ---
   const walletTotal = useMemo(() => calculateWallet(activities), [activities]);
   const currentBalance = walletTotal - spentTSS;
 
@@ -245,34 +145,34 @@ export default function CalendarClient({ activities, initialShopData }: { activi
     return { totalDist, totalElev, totalTime, totalTSS, totalKcal, climbRatio, count, weeksData, cumulativeData, avgSpeed, maxDist: 0, maxStreak, fullWeeksCount }
   }, [year, month, activities])
 
-  // --- LOGIQUE INTERACTIONS SOURIS ---
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>, hasActivity: boolean) => {
-      // 1. Gestion de la Flashlight (Slot HOVER)
-      if (loadout.HOVER === "flashlight" && hasActivity) {
-          const target = e.currentTarget;
-          const rect = target.getBoundingClientRect();
-          target.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
-          target.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
-      }
-      
-      // 2. Gestion des Particules (Slot TRAIL) - 🔥 NOUVEAU
-      const trailId = loadout.TRAIL;
-      if (trailId && hasActivity && Math.random() > 0.3) {
-          const effect = SHOP_EFFECTS.find(ef => ef.id === trailId);
-          createParticles(e, effect || null, "hover");
-      }
-  }
+  const feedback = useMemo(() => getAdvancedFeedback(stats, month, year, baseline), [stats, month, year, baseline])
+  const FeedbackIcon = feedback.icon
+  const tssLevelInfo = getTssLevelInfo(stats.totalTSS)
+  const tssLevelClass = getTssLevelClass(stats.totalTSS)
+  const isWeatherActive = loadout.AMBIANCE === "weather_dynamic";
 
-  const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>, day: CalendarDay) => {
-      const target = e.currentTarget as HTMLDivElement;
-      target.style.transform = "translateY(-2px)"
-      const effectId = loadout.HOVER;
-      if (day.acts.length > 0 && effectId && effectId !== "flashlight") {
-          const effect = SHOP_EFFECTS.find(ef => ef.id === effectId);
-          createParticles(e, effect || null, "hover")
-      }
-  }
+  // --- DATA DU MOIS ---
+  const monthData = useMemo(() => {
+    const daysInMonth = new Date(year, month + 1, 0).getDate()
+    const firstDayIndex = new Date(year, month, 1).getDay()
+    const startDayOffset = firstDayIndex === 0 ? 6 : firstDayIndex - 1
+    const days: CalendarDay[] = []
+    for (let i = 0; i < startDayOffset; i++) days.push({ dayNum: 0, acts: [], totalTSS: 0, streakIndex: 0 })
+    
+    let currentStreak = 0;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const dayActs = activities.filter((a) => {
+        const date = new Date(a.start_time)
+        return date.getDate() === d && date.getMonth() === month && date.getFullYear() === year
+      })
+      const totalTSS = dayActs.reduce((acc, a) => acc + (a.tss || estimateTSS(a)), 0)
+      if (dayActs.length > 0) currentStreak++; else currentStreak = 0;
+      days.push({ dayNum: d, acts: dayActs, totalTSS, streakIndex: currentStreak })
+    }
+    return days;
+  }, [year, month, activities])
 
+  // --- HANDLER CLIC ---
   const handleCardClick = (dayIndex: number, hasActivity: boolean, e: React.MouseEvent) => {
     if (!hasActivity) return;
     const clickId = loadout.INTERACTION;
@@ -290,34 +190,6 @@ export default function CalendarClient({ activities, initialShopData }: { activi
     }
   }
 
-  // --- DATA DU MOIS ---
-  const monthData = useMemo(() => {
-    const daysInMonth = new Date(year, month + 1, 0).getDate()
-    const firstDayIndex = new Date(year, month, 1).getDay()
-    const startDayOffset = firstDayIndex === 0 ? 6 : firstDayIndex - 1
-    const days: CalendarDay[] = []
-    
-    for (let i = 0; i < startDayOffset; i++) days.push({ dayNum: 0, acts: [], totalTSS: 0, streakIndex: 0 })
-    
-    let currentStreak = 0;
-    for (let d = 1; d <= daysInMonth; d++) {
-      const dayActs = activities.filter((a) => {
-        const date = new Date(a.start_time)
-        return date.getDate() === d && date.getMonth() === month && date.getFullYear() === year
-      })
-      const totalTSS = dayActs.reduce((acc, a) => acc + (a.tss || estimateTSS(a)), 0)
-      if (dayActs.length > 0) currentStreak++; else currentStreak = 0;
-      days.push({ dayNum: d, acts: dayActs, totalTSS, streakIndex: currentStreak })
-    }
-    return days;
-  }, [year, month, activities])
-
-  const feedback = useMemo(() => getAdvancedFeedback(stats, month, year, baseline), [stats, month, year, baseline])
-  const FeedbackIcon = feedback.icon
-  const tssLevelInfo = getTssLevelInfo(stats.totalTSS)
-  const tssLevelClass = getTssLevelClass(stats.totalTSS)
-  const isWeatherActive = loadout.AMBIANCE === "weather_dynamic";
-
   return (
     <div style={styles.container}>
       <WeatherSystem active={isWeatherActive} />
@@ -334,6 +206,7 @@ export default function CalendarClient({ activities, initialShopData }: { activi
 
       {/* --- SECTION CALENDRIER (70%) --- */}
       <div style={styles.calendarSection}>
+        {/* HEADER MOIS */}
         <div style={styles.headerRow}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
                 <h2 style={styles.monthTitle}>{MONTHS[month]} {year}</h2>
@@ -385,116 +258,22 @@ export default function CalendarClient({ activities, initialShopData }: { activi
               if (day.dayNum === 0) return <div key={`ph-${i}`} />;
 
               const isToday = new Date().getDate() === day.dayNum && new Date().getMonth() === month && new Date().getFullYear() === year;
-              const hasActivity = day.acts.length > 0;
-              const tss = day.totalTSS;
-              const color = getTssColor(tss);
               
-              const smartStyle = getSmartCardStyle(day.acts);
-              const slotStyles = {
-                  frame: loadout.FRAME ? (SHOP_EFFECTS.find(e => e.id === loadout.FRAME)?.cssClass) : null,
-                  hover: loadout.HOVER ? (SHOP_EFFECTS.find(e => e.id === loadout.HOVER)?.cssClass) : null, // 🔥 Ajout pour Jelly/Glitch
-                  smart: (loadout.AMBIANCE === "smart_analysis") ? smartStyle?.class : null,
-                  today: loadout.TODAY 
-              };
-
-              let dynamicClasses = resolveCardClass(hasActivity, isToday, slotStyles);
-              
-              if (flippingCells.has(i)) dynamicClasses += " flipping";
-              const clickEffect = SHOP_EFFECTS.find(e => e.id === loadout.INTERACTION);
-              if (clickingCells.has(i) && clickEffect?.cssClass) dynamicClasses += ` ${clickEffect.cssClass}`;
-              if (flippingCells.has(i) && clickEffect?.id === "black_hole") dynamicClasses += " anim-blackhole";
-              if (flippingCells.has(i) && clickEffect?.id === "shatter") dynamicClasses += " anim-shatter";
-              if (day.acts.length > 0 && loadout.HOVER === "flashlight") dynamicClasses += " stealth-mode";
-
-              const finalStyle: React.CSSProperties = { 
-                  ...styles.dayCellBase,
-                  background: hasActivity ? `linear-gradient(135deg, ${color}15 0%, ${color}05 100%)` : "rgba(255, 255, 255, 0.02)",
-                  borderColor: isToday ? "#00f3ff" : hasActivity ? `${color}40` : "rgba(255,255,255,0.02)",
-                  borderWidth: '1px', borderStyle: 'solid'
-              };
-              
-              if ((loadout.AMBIANCE === "smart_analysis") && smartStyle?.variable) Object.assign(finalStyle, smartStyle.variable);
-              if (isToday && loadout.TODAY === "reactor_today") { finalStyle.background = 'transparent'; finalStyle.border = 'none'; }
-              let pulseBpm: number | null = null;
-              if (hasActivity && loadout.FRAME === "pulse") {
-                  const avgBpm = day.acts[0]?.avg_heartrate || 0;
-                  if (avgBpm > 0) {
-                      pulseBpm = Math.round(avgBpm);
-                      const beatDuration = 60 / avgBpm; 
-                      
-                      // 1. On garde la méthode standard pour les cartes classiques
-                      finalStyle.animationDuration = `${beatDuration}s`;
-                      
-                      // 2. 🔥 ON AJOUTE UNE VARIABLE CSS pour forcer la main aux cartes "Intensité"
-                      // @ts-ignore (TypeScript râle parfois sur les variables CSS custom)
-                      finalStyle['--beat-duration'] = `${beatDuration}s`;
-                      
-                  } else {
-                      finalStyle.animationDuration = `1s`;
-                      // @ts-ignore
-                      finalStyle['--beat-duration'] = `1s`;
-                  }
-              }
-
-              const streakConfig = getStreakConfig(day.streakIndex);
-              const showConnector = streakConfig && i % 7 !== 0;
-              const mainActivityForWeather = day.acts.length > 0 ? day.acts[0] : null;
-
               return (
-                <div
-                  key={i}
-                  className={dynamicClasses}
-                  style={finalStyle}
-                  onMouseEnter={(e) => handleMouseEnter(e, day)}
-                  onMouseMove={(e) => handleMouseMove(e, hasActivity)}
-                  onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "translateY(0)";
-                      e.currentTarget.style.maskImage = "none";
-                      e.currentTarget.style.webkitMaskImage = "none";
-                  }}
-                  onClick={(e) => handleCardClick(i, hasActivity, e)}
-                >
-                  {showConnector && <div className={streakConfig!.className} />}
-                  {streakConfig && (
-                    <div style={{ position: "absolute", top: "0px", right: "50px", fontSize: "1.2rem", zIndex: 20, filter: "drop-shadow(0 0 8px rgba(0,0,0,0.8))", animation: "bounce 1s infinite alternate" }}>
-                        {streakConfig.icon}
-                    </div>
-                  )}
-
-                 <div style={styles.dateNumber(isToday, hasActivity, color)}>
-                    <div style={{display:'flex', alignItems:'center', gap:'4px'}}>
-                        <span className={isToday ? "today-number" : ""}>{day.dayNum}</span>
-                        
-                        {/* 🔥 AFFICHAGE BPM SI PULSE ACTIVÉ */}
-                        {pulseBpm && (
-                            <span style={{
-                                fontSize: '0.6rem', color: '#ef4444', fontWeight: 800, 
-                                background: 'rgba(239,68,68,0.1)', padding:'0 3px', borderRadius:'4px',
-                                display: 'flex', alignItems: 'center', gap:'2px'
-                            }}>
-                                {pulseBpm} <Activity size={8} />
-                            </span>
-                        )}
-                    </div>
-                    {tss > 0 && <span style={styles.tssBadge(color)}>{Math.round(tss)} TSS</span>}
-                  </div>
-
-                  <div style={{display:"flex", flexDirection:"column", gap:"2px", overflow:"hidden", flex:1, position:'relative', zIndex:2}}>
-                    {day.acts.map(act => (
-                        <Link key={act.id} href={`/activities/${act.id}`} style={{textDecoration:"none"}}>
-                            <div style={styles.activityRow}>
-                                <div style={{width:"4px", height:"4px", borderRadius:"50%", background:color}}/>
-                                <b>{act.distance_km > 0 ? Math.round(act.distance_km)+'km' : Math.round(act.duration_s/60)+"min"}</b>
-                                <span style={{opacity:0.7, overflow:"hidden", textOverflow:"ellipsis"}}>{act.name}</span>
-                            </div>
-                        </Link>
-                    ))}
-                  </div>
-
-                  {mainActivityForWeather && (
-                      <ActivityWeatherIcon activity={mainActivityForWeather} indexDelay={i} active={isWeatherActive} isBigMode={true} />
-                  )}
-                </div>
+                <DayCard
+                    key={i}
+                    dayIndex={i}
+                    dayNum={day.dayNum}
+                    activities={day.acts}
+                    totalTSS={day.totalTSS}
+                    streakIndex={day.streakIndex}
+                    isToday={isToday}
+                    loadout={loadout}
+                    flippingCells={flippingCells}
+                    clickingCells={clickingCells}
+                    onClick={(e, hasAct) => handleCardClick(i, hasAct, e)}
+                    showConnector={i % 7 !== 0} // Pas de connecteur le lundi (début de ligne)
+                />
               )
             })}
           </div>

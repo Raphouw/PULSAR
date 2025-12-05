@@ -1,28 +1,26 @@
 import { CalendarActivity, ShopEffect } from "./types";
-import {ChevronLeft,  ChevronRight,  TrendingUp,  Activity,  Clock,  Zap,  MapPin,  Flame,  Mountain,
-  ArrowUpRight,  Trophy,  BatteryCharging,  Sofa,  Heart,  Wind,  Target,  Award,  ShoppingBag,  Sparkles,
-  Check,  X,
+import {
+  ChevronLeft, ChevronRight, TrendingUp, Activity, Clock, Zap, MapPin, Flame, Mountain,
+  ArrowUpRight, Trophy, BatteryCharging, Sofa, Heart, Wind, Target, Award, ShoppingBag, Sparkles,
+  Check, X,
 } from "lucide-react"
-import {PUNCHLINES} from './constants'
+import { PUNCHLINES } from './constants'
 
+// --- CONSTANTES CSS & COLORS ---
 export const getTssColor = (tss: number) => {
   if (tss === 0) return "#333"
   if (tss < 50) return "#10b981"
   if (tss < 100) return "#00f3ff"
   if (tss < 200) return "#f59e0b"
-  
   return "#d04fd7"
 }
 
-// Dans utils.ts
-
+// --- LOGIQUE WALLET ---
 export const calculateWallet = (activities: CalendarActivity[]) => {
   let totalPoints = 0;
-  const processedWeeks: Set<string> = new Set();
   const weekCounts: Record<string, number> = {};
 
   activities.forEach(act => {
-    // 🔥 On utilise l'estimation si le vrai TSS manque
     const effectiveTSS = act.tss || estimateTSS(act);
     
     // Bonus "No Pain No Gain"
@@ -40,7 +38,7 @@ export const calculateWallet = (activities: CalendarActivity[]) => {
     weekCounts[key] = (weekCounts[key] || 0) + 1;
   });
 
-  // Bonus Constance
+  // Bonus Constance (4 sorties / semaine)
   Object.values(weekCounts).forEach(count => {
     if (count >= 4) totalPoints += 150;
   });
@@ -49,40 +47,122 @@ export const calculateWallet = (activities: CalendarActivity[]) => {
 };
 
 export const estimateTSS = (act: CalendarActivity): number => {
-  // Si Strava a déjà donné le TSS ou l'Intensity Factor, on prend.
   if (act.tss && act.tss > 0) return act.tss;
 
   const hours = act.duration_s / 3600;
   if (hours <= 0) return 0;
 
-  // Cas A : On a la Fréquence Cardiaque (FC)
-  // Formule simplifiée TRIMP : On estime l'intensité basée sur la FC moyenne
-  // Hypothèse : FC Max standard 190 si inconnue.
   if (act.avg_heartrate && act.avg_heartrate > 0) {
      const hrMax = act.max_heartrate || 190; 
      const intensity = act.avg_heartrate / hrMax;
      
-     // Formule approximative : TSS = (sec x IF x IF) / (3600 x 100) * 100 (Facteur ajusté)
-     // On simule un IF (Intensity Factor) linéaire par rapport à la FC
-     let estimatedIF = 0.5; // Balade
-     if (intensity > 0.6) estimatedIF = 0.6; // Endurance
-     if (intensity > 0.7) estimatedIF = 0.7; // Tempo
-     if (intensity > 0.8) estimatedIF = 0.85; // Seuil
-     if (intensity > 0.9) estimatedIF = 0.95; // VO2
+     let estimatedIF = 0.5;
+     if (intensity > 0.6) estimatedIF = 0.6;
+     if (intensity > 0.7) estimatedIF = 0.7;
+     if (intensity > 0.8) estimatedIF = 0.85;
+     if (intensity > 0.9) estimatedIF = 0.95;
 
      return Math.round(100 * hours * (estimatedIF * estimatedIF));
   }
 
-  // Cas B : On a juste la vitesse/distance (Pas précis, mais mieux que rien)
-  // On attribue un score forfaitaire bas (TSS 30-40 / heure pour du roulage moyen)
   const speed = act.avg_speed_kmh || 0;
-  let tssPerHour = 30; // Balade cool
+  let tssPerHour = 30;
   if (speed > 25) tssPerHour = 50;
-  if (speed > 30) tssPerHour = 70; // Ça commence à appuyer
+  if (speed > 30) tssPerHour = 70;
 
   return Math.round(hours * tssPerHour);
 };
 
+// --- PARTICULES & FX ---
+export const createParticles = (e: React.MouseEvent | DOMRect, effect: ShopEffect | null, trigger: "hover" | "flip") => {
+    if (!effect) return;
+    const colors = effect.colors || ["#fff"]
+    
+    let originX, originY;
+    if ('clientX' in e) { 
+        const rect = e.currentTarget.getBoundingClientRect();
+        originX = e.clientX;
+        originY = e.clientY;
+        if (trigger === "flip") {
+             originX = rect.left + rect.width / 2;
+             originY = rect.top + rect.height / 2;
+        }
+    } else { 
+        originX = e.left + Math.random() * e.width;
+        originY = e.top + Math.random() * e.height;
+        if (effect.id === "firetrail") originY = e.bottom - 10;
+    }
+    
+    let count = trigger === "flip" ? 40 : 3;
+    let physicsClass = "physic-float"; 
+    let sizeBase = 6;
+    let isConfetti = false;
+
+    if (effect.id === "firetrail") { physicsClass = "physic-fire"; count = 3; }
+    else if (effect.id === "snow") { physicsClass = "physic-gravity"; count = 2; }
+    else if (effect.id === "matrix") { physicsClass = "physic-gravity"; count = 1; }
+    else if (effect.id === "lightning") { physicsClass = "physic-zap"; count = 1; }
+    else if (effect.id === "explosion") { physicsClass = "physic-blast"; count = 50; }
+    else if (effect.id === "confetti") { 
+        physicsClass = "physic-gravity"; 
+        count = 40; 
+        isConfetti = true; 
+    }
+    else if (effect.id === "bubbles") { physicsClass = "physic-bubble"; count = 1; }
+    else if (effect.id === "shatter") { count = 20; physicsClass = "physic-gravity"; }
+    else if (effect.id === "black_hole") { physicsClass = "physic-spiral"; count = 40; }
+
+    for (let i = 0; i < count; i++) {
+      const particle = document.createElement("div")
+      particle.className = `particle-base ${physicsClass}`
+      particle.style.left = `${originX}px`
+      particle.style.top = `${originY}px`
+      particle.style.width = `${Math.max(2, Math.random() * sizeBase)}px`
+      particle.style.height = particle.style.width
+
+      if (isConfetti) {
+          particle.style.width = `${Math.random() * 8 + 4}px`;
+          particle.style.height = `${Math.random() * 6 + 4}px`;
+          particle.style.borderRadius = "0";
+          particle.style.transform = `rotate(${Math.random() * 360}deg)`;
+      } else {
+          particle.style.width = `${Math.max(2, Math.random() * sizeBase)}px`
+          particle.style.height = particle.style.width
+      }
+
+      const color = colors[Math.floor(Math.random() * colors.length)]
+      particle.style.background = color
+
+      if (effect.id === "matrix") {
+        particle.innerText = Math.random() > 0.5 ? "1" : "0";
+        particle.style.background = "transparent";
+        particle.style.color = color;
+        particle.style.fontSize = "10px";
+        particle.style.fontWeight = "bold";
+        particle.style.fontFamily = "monospace";
+      } 
+      else if (effect.id === "explosion" || effect.id === "confetti") {
+        const angle = Math.random() * Math.PI * 2
+        const velocity = 50 + Math.random() * 200
+        particle.style.setProperty("--tx", `${Math.cos(angle) * velocity}px`)
+        particle.style.setProperty("--ty", `${Math.sin(angle) * velocity}px`)
+      }
+      else if (effect.id === "lightning") {
+        particle.style.transform = `translate(${(Math.random() - 0.5) * 50}px, ${(Math.random() - 0.5) * 50}px) rotate(${Math.random() * 360}deg)`;
+        particle.style.boxShadow = `0 0 15px ${color}`;
+      }
+
+      if (isConfetti) {
+         const drift = (Math.random() - 0.5) * 100;
+         particle.style.setProperty("--tx", `${drift}px`);
+      }
+
+      document.body.appendChild(particle)
+      setTimeout(() => particle.remove(), 1000)
+    }
+}
+
+// --- VISUELS & LOGIQUE ---
 export const getStreakConfig = (streakIndex: number) => {
   if (streakIndex < 3) return null
   if (streakIndex === 3)
@@ -244,68 +324,17 @@ export const getAdvancedFeedback = (stats: any, monthIndex: number, year: number
       })
   }
 
-  if (avgPwr > 230)
-    candidates.push({
-      title: "WATTS MONSTER",
-      text: getStablePhrase(PUNCHLINES.HIGH_WATTS, "MOTIV", seed),
-      color: "#d04fd7",
-      icon: Zap,
-    })
-  if (maxDist > 150)
-    candidates.push({
-      title: "ULTRA RIDER",
-      text: getStablePhrase(PUNCHLINES.BIG_DIST, "MOTIV", seed),
-      color: "#00f3ff",
-      icon: MapPin,
-    })
-  if (avgSpeed > 30)
-    candidates.push({
-      title: "FUSÉE",
-      text: getStablePhrase(PUNCHLINES.SPEED_VIBE, "MOTIV", seed),
-      color: "#00f3ff",
-      icon: TrendingUp,
-    })
-  if (avgHr > 165)
-    candidates.push({
-      title: "ZONE ROUGE",
-      text: getStablePhrase(PUNCHLINES.HR_VIBE, "MOTIV", seed),
-      color: "#ef4444",
-      icon: Heart,
-    })
+  if (avgPwr > 230) candidates.push({ title: "WATTS MONSTER", text: getStablePhrase(PUNCHLINES.HIGH_WATTS, "MOTIV", seed), color: "#d04fd7", icon: Zap })
+  if (maxDist > 150) candidates.push({ title: "ULTRA RIDER", text: getStablePhrase(PUNCHLINES.BIG_DIST, "MOTIV", seed), color: "#00f3ff", icon: MapPin })
+  if (avgSpeed > 30) candidates.push({ title: "FUSÉE", text: getStablePhrase(PUNCHLINES.SPEED_VIBE, "MOTIV", seed), color: "#00f3ff", icon: TrendingUp })
+  if (avgHr > 165) candidates.push({ title: "ZONE ROUGE", text: getStablePhrase(PUNCHLINES.HR_VIBE, "MOTIV", seed), color: "#ef4444", icon: Heart })
+  if (avgPwr > 0 && avgPwr < 130) candidates.push({ title: "MODE ÉCO", text: getStablePhrase(PUNCHLINES.LOW_VIBE, "PUNCH", seed), color: "#10b981", icon: BatteryCharging })
+  if (count < 4) candidates.push({ title: "TOURISTE", text: getStablePhrase(PUNCHLINES.VOLUME_MONTH, "PUNCH", seed), color: "#ef4444", icon: Sofa })
+  if (avgSpeed > 0 && avgSpeed < 22) candidates.push({ title: "PANIER DE CRABES", text: getStablePhrase(PUNCHLINES.SPEED_VIBE, "PUNCH", seed), color: "#aaa", icon: ArrowUpRight })
 
-  if (avgPwr > 0 && avgPwr < 130)
-    candidates.push({
-      title: "MODE ÉCO",
-      text: getStablePhrase(PUNCHLINES.LOW_VIBE, "PUNCH", seed),
-      color: "#10b981",
-      icon: BatteryCharging,
-    })
-  if (count < 4)
-    candidates.push({
-      title: "TOURISTE",
-      text: getStablePhrase(PUNCHLINES.VOLUME_MONTH, "PUNCH", seed),
-      color: "#ef4444",
-      icon: Sofa,
-    })
-  if (avgSpeed > 0 && avgSpeed < 22)
-    candidates.push({
-      title: "PANIER DE CRABES",
-      text: getStablePhrase(PUNCHLINES.SPEED_VIBE, "PUNCH", seed),
-      color: "#aaa",
-      icon: ArrowUpRight,
-    })
+  if (candidates.length > 0) return candidates[seed % candidates.length]
 
-  if (candidates.length > 0) {
-    return candidates[seed % candidates.length]
-  }
-
-  if (count > 8)
-    return {
-      title: "RÉGULIER",
-      text: getStablePhrase(PUNCHLINES.REGULAR, "MOTIV", seed),
-      color: "#10b981",
-      icon: Activity,
-    }
+  if (count > 8) return { title: "RÉGULIER", text: getStablePhrase(PUNCHLINES.REGULAR, "MOTIV", seed), color: "#10b981", icon: Activity }
 
   return { title: "SOLIDE", text: "Le travail paie. Continue d'empiler les briques.", color: "#fff", icon: Activity }
 }
@@ -314,15 +343,6 @@ export const getSmartCardStyle = (activities: CalendarActivity[]) => {
   if (!activities || activities.length === 0) return null;
 
   const mainAct = [...activities].sort((a, b) => (b.tss || 0) - (a.tss || 0))[0];
-
-  console.log(`Activity: ${mainAct.name}`, {
-      speed: mainAct.avg_speed_kmh,
-      elevation: mainAct.elevation_gain_m,
-      distance: mainAct.distance_km,
-      duration: mainAct.duration_s
-  });
-
-
   const tss = mainAct.tss || 0;
   const durationHours = (mainAct.duration_s || 0) / 3600;
   const distance = mainAct.distance_km || 0;
@@ -331,34 +351,25 @@ export const getSmartCardStyle = (activities: CalendarActivity[]) => {
 
   // Ratios
   const tssPerHour = durationHours > 0 ? tss / durationHours : 0;
-  const climbRatio = distance > 0 ? elevation / distance : 0; // m/km
+  const climbRatio = distance > 0 ? elevation / distance : 0;
 
-  // --- ARBRE DE DÉCISION CORRIGÉ --- //
-
-  // 1. INTENSITÉ (Seuil augmenté à 90 pour laisser de la place aux autres)
+  // 1. INTENSITÉ
   if (tssPerHour > 98) {
-    return { class: "smart-heat" };
+    return { class: "smart-heat", label: "INTENSITÉ 🔥" };
   }
 
-  // 2. VITESSE (PRIORITÉ SUR LA MONTAGNE si c'est "roulant")
-  // Si ça va vite (> 28km/h) ET que ce n'est pas un col (> 20m/km), c'est de la vitesse.
-  // Avant, le ratio > 15 bloquait tout.
+  // 2. VITESSE
   if (speed > 28 && climbRatio < 15) {
-    return { class: "smart-speed" };
+    return { class: "smart-speed", label: "VITESSE ⚡" };
   }
 
   // 3. MONTAGNE
-  // On augmente le seuil à 20m/km (2%) pour ne garder que les vraies côtes
   if (climbRatio > 15) {
-   
-    elevation
-    const percent = Math.min(90, Math.max(30, 
-      (elevation / (5000) * (50 - 30) + 30)
-));
-
+    const percent = Math.min(90, Math.max(30, (elevation / (5000) * (50 - 30) + 30)));
     return { 
         class: "smart-climb", 
-        variable: { "--climb-h": `${Math.round(percent)}%` } // On arrondit pour être propre
+        label: "MONTAGNE ⛰️",
+        variable: { "--climb-h": `${Math.round(percent)}%` } 
     };
   }
 
@@ -367,12 +378,7 @@ export const getSmartCardStyle = (activities: CalendarActivity[]) => {
 
 export const getStartCoordFromPolyline = (encoded: string): { lat: number, lon: number } | null => {
   if (!encoded) return null;
-  
   let index = 0, lat = 0, lng = 0;
-  
-  // On ne décode que le premier point pour gagner du temps CPU
-  // (Pas besoin de boucler sur toute la trace)
-  
   let b, shift = 0, result = 0;
   do {
     b = encoded.charCodeAt(index++) - 63;
@@ -381,7 +387,6 @@ export const getStartCoordFromPolyline = (encoded: string): { lat: number, lon: 
   } while (b >= 0x20);
   const dlat = ((result & 1) ? ~(result >> 1) : (result >> 1));
   lat += dlat;
-
   shift = 0;
   result = 0;
   do {
@@ -391,34 +396,21 @@ export const getStartCoordFromPolyline = (encoded: string): { lat: number, lon: 
   } while (b >= 0x20);
   const dlng = ((result & 1) ? ~(result >> 1) : (result >> 1));
   lng += dlng;
-
   return { lat: lat * 1e-5, lon: lng * 1e-5 };
 };
 
 export const resolveCardClass = (
     hasActivity: boolean,
     isToday: boolean,
-    slotStyles: { frame?: string | null, smart?: string | null, today?: string | null }
+    slotStyles: { frame?: string | null, smart?: string | null, today?: string | null, hover?: string | null }
 ): string => {
-    let classes = "day-cell"; // Classe de base
-
-    // Priorité 1 : Le Réacteur (Today) écrase tout
-    if (isToday && slotStyles.today === "reactor_today") {
-        return `${classes} today-reactor`;
-    }
-
-    // Priorité 2 : Style "Smart" (Analyse IA) SI pas de cosmétique cadre forcé
-    // OU si on veut que le cosmétique cadre s'ajoute au smart (à décider, ici on sépare)
-    if (slotStyles.smart) {
-        classes += ` ${slotStyles.smart}`;
-    }
-
-    // Priorité 3 : Cadre Cosmétique (Acheté)
-    // S'ajoute par dessus le smart (ex: bordure néon sur une carte "montagne")
-    if (hasActivity && slotStyles.frame) {
-        classes += ` ${slotStyles.frame}`;
-    }
-
+    let classes = "day-cell";
+    if (isToday && slotStyles.today === "reactor_today") return `${classes} today-reactor`;
+    
+    // 🔥 AJOUT ICI : Smart + Frame + HOVER (Corrigé)
+    if (slotStyles.smart) classes += ` ${slotStyles.smart}`;
+    if (hasActivity && slotStyles.frame) classes += ` ${slotStyles.frame}`;
+    if (hasActivity && slotStyles.hover) classes += ` ${slotStyles.hover}`; // Le fix pour les effets Jelly/Glitch
+    
     return classes;
 };
-

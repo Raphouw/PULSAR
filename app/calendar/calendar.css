@@ -159,6 +159,12 @@ body.bg-phase-dusk {
 .today-reactor::after { content: ''; position: absolute; z-index: -1; inset: 2px; background: #14141e; border-radius: 6px; }
 .today-number { text-shadow: 0 0 10px #00f3ff; }
 
+
+
+
+
+
+
 /* MERCURE CORRIGÉ */
 @keyframes mercury-flow { 
   0% { background-position: 0% 50%; } 
@@ -196,9 +202,32 @@ body.bg-phase-dusk {
 
 
 /* PRISME */
-.effect-prism { border: 1px solid rgba(255,255,255,0.5) !important; position: relative; overflow: hidden; background: rgba(255, 255, 255, 0.05) !important; backdrop-filter: contrast(1.2); }
-.effect-prism::before { content: ''; position: absolute; inset: -50%; background: conic-gradient(from 0deg, transparent 0deg, rgba(255, 0, 0, 0.2) 40deg, rgba(255, 255, 0, 0.2) 80deg, rgba(0, 255, 0, 0.2) 120deg, rgba(0, 255, 255, 0.2) 160deg, rgba(0, 0, 255, 0.2) 200deg, rgba(255, 0, 255, 0.2) 240deg, transparent 360deg); opacity: 0; transition: opacity 0.3s, transform 0.3s; transform: rotate(0deg); mix-blend-mode: color-dodge; pointer-events: none; }
-.effect-prism:hover::before { opacity: 1; transform: rotate(180deg) scale(1.2); }
+.effect-prism { 
+  border: 1px solid rgba(255,255,255,0.5) !important; 
+  position: relative !important; /* Indispensable pour contenir l'enfant absolu */
+  overflow: hidden !important;   /* Indispensable pour couper ce qui dépasse */
+  background: rgba(255, 255, 255, 0.05) !important; 
+  backdrop-filter: contrast(1.2); 
+  z-index: 1;
+}
+
+.effect-prism::before { 
+  content: ''; 
+  position: absolute; 
+  inset: -50%; /* Dépasse largement pour la rotation */
+  background: conic-gradient(from 0deg, transparent 0deg, rgba(255, 0, 0, 0.2) 40deg, rgba(255, 255, 0, 0.2) 80deg, rgba(0, 255, 0, 0.2) 120deg, rgba(0, 255, 255, 0.2) 160deg, rgba(0, 0, 255, 0.2) 200deg, rgba(255, 0, 255, 0.2) 240deg, transparent 360deg); 
+  opacity: 0; 
+  transition: opacity 0.3s, transform 0.3s; 
+  transform: rotate(0deg); 
+  mix-blend-mode: color-dodge; 
+  pointer-events: none; 
+  z-index: -1; /* Derrière le contenu */
+}
+
+.effect-prism:hover::before { 
+  opacity: 1; 
+  transform: rotate(180deg) scale(1.2); 
+}
 
 /* HOLO, DIVINE, NEON, MAGMA, GLITCH, PULSE (Existants) */
 @keyframes holo-shine { 0% { background-position: 200% center; opacity: 0.3; } 100% { background-position: -200% center; opacity: 0.3; } }

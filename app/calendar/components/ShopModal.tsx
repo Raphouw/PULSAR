@@ -1,11 +1,11 @@
 "use client"
 
-import React, { useState, useRef, useEffect } from "react";
-import { ShoppingBag, X, Sparkles, Check, Backpack, Trash2, MousePointerClick, Activity } from "lucide-react";
-import { ShopData, ShopEffect, EffectSlot } from "../types";
+import React, { useState, useEffect } from "react";
+import { ShoppingBag, X, Sparkles, Check, Backpack, Trash2, MousePointerClick } from "lucide-react";
+import { ShopData, ShopEffect, EffectSlot, CalendarActivity, UserLoadout } from "../types";
 import { SHOP_EFFECTS } from "../constants";
-import ActivityWeatherIcon from "../ActivityWeatherIcon";
-import { createParticles } from "../calendarClient"; 
+import { createParticles } from "../utils"; 
+import DayCard from "./DayCard"; 
 
 type ShopTab = { id: EffectSlot, label: string, icon: string }
 
@@ -19,20 +19,24 @@ const SHOP_TABS: ShopTab[] = [
     { id: 'SPECIAL', label: 'Spécial', icon: '🎁' },
 ];
 
-// Données Mock Météo COMPLÈTES (Avec Températures)
 const MOCK_WEATHER_CYCLE = [
-    { code: 0, min: 18, max: 28, avg: 24, label: "Ensoleillé", bgClass: "sky-noon" },
-    { code: 63, min: 8, max: 13, avg: 11, label: "Pluvieux", bgClass: "sky-gray" },
-    { code: 71, min: -5, max: 2, avg: -1, label: "Neige", bgClass: "sky-dawn" },
-    { code: 95, min: 15, max: 22, avg: 19, label: "Orage", bgClass: "sky-storm" }
+    { code: 0, min: 18, max: 28, avg: 24, label: "Ensoleillé", bgClass: "sky-noon", bpm: 140 },
+    { code: 63, min: 8, max: 13, avg: 11, label: "Pluvieux", bgClass: "sky-gray", bpm: 165 },
+    { code: 71, min: -5, max: 2, avg: -1, label: "Neige", bgClass: "sky-dawn", bpm: 110 },
+    { code: 95, min: 15, max: 22, avg: 19, label: "Orage", bgClass: "sky-storm", bpm: 180 }
 ];
 
-// Données Mock Visor
-const MOCK_VISOR_CYCLE = [
-    { class: 'smart-heat', label: 'INTENSITÉ 🔥' },
-    { class: 'smart-speed', label: 'VITESSE ⚡' },
-    // On force une hauteur de montagne visible
-    { class: 'smart-climb', label: 'MONTAGNE ⛰️', style: { "--climb-h": "50%" } } 
+// 🔥 NOUVEAU : Cycle pour le Tactical Visor
+const MOCK_SMART_CYCLE = [
+    { label: "INTENSITÉ 🔥", class: "smart-heat" },
+    { label: "VITESSE ⚡", class: "smart-speed" },
+    { label: "MONTAGNE ⛰️", class: "smart-climb", variable: { "--climb-h": "60%" } }
+];
+
+const MOCK_ACTIVITIES: CalendarActivity[] = [
+    { id: 991, name: "Sortie SAS...", distance_km: 4, duration_s: 1200, tss: 10, start_time: "", elevation_gain_m: 50, avg_speed_kmh: 25, avg_heartrate: 0, type: "Ride", max_heartrate: 190, avg_power_w: 150 },
+    { id: 992, name: "Étape du tour...", distance_km: 117, duration_s: 14400, tss: 250, start_time: "", elevation_gain_m: 2000, avg_speed_kmh: 28, avg_heartrate: 0, type: "Ride", max_heartrate: 190, avg_power_w: 220 },
+    { id: 993, name: "Récupération", distance_km: 16, duration_s: 3600, tss: 40, start_time: "", elevation_gain_m: 100, avg_speed_kmh: 22, avg_heartrate: 0, type: "Ride", max_heartrate: 190, avg_power_w: 110 },
 ];
 
 interface ShopModalProps {
@@ -53,42 +57,24 @@ export default function ShopModal({
     const [activeTab, setActiveTab] = useState<EffectSlot>("FRAME");
     const [selectedEffect, setSelectedEffect] = useState<ShopEffect | null>(null);
     const [hoveredEffect, setHoveredEffect] = useState<ShopEffect | null>(null);
-    
     const [previewCycle, setPreviewCycle] = useState(0);
     const [animClass, setAnimClass] = useState<string>(""); 
-    const previewCardRef = useRef<HTMLDivElement>(null);
+    
+    useEffect(() => {
+        const interval = setInterval(() => setPreviewCycle(prev => prev + 1), 3000); 
+        return () => clearInterval(interval);
+    }, []);
 
     const { ownedEffects, loadout } = shopData;
     const ownedSet = new Set(ownedEffects || []);
     const displayEffect = hoveredEffect || selectedEffect;
 
-    // Cycle 3 secondes
-    useEffect(() => {
-        if (!displayEffect) return;
-        const interval = setInterval(() => setPreviewCycle(prev => prev + 1), 3000); 
-        return () => clearInterval(interval);
-    }, [displayEffect]);
-
-    // Handlers interaction preview
-    const handlePreviewMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (!displayEffect) return;
-        if (displayEffect.id === "flashlight") {
-            const rect = e.currentTarget.getBoundingClientRect();
-            e.currentTarget.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
-            e.currentTarget.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
-        }
-        if (displayEffect.slot === "TRAIL" && Math.random() > 0.3) {
-            createParticles(e, displayEffect, "hover");
-        }
-    };
-
-    const handlePreviewClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const handlePreviewClick = (e: React.MouseEvent, hasActivity: boolean) => {
         if (!displayEffect) return;
         if (displayEffect.slot === "INTERACTION") {
             createParticles(e, displayEffect, "flip");
             let cssAnim = displayEffect.id === "shockwave_click" ? "anim-active" : 
                           (displayEffect.cssClass || "flipping");
-            
             if (displayEffect.id === "black_hole") cssAnim = "anim-blackhole";
             if (displayEffect.id === "shatter") cssAnim = "anim-shatter";
 
@@ -98,130 +84,30 @@ export default function ShopModal({
         }
     };
 
-    // --- VARIABLES DE CYCLE ---
+    // Cycles Variables
     const weatherStep = MOCK_WEATHER_CYCLE[previewCycle % MOCK_WEATHER_CYCLE.length];
-    const visorStep = MOCK_VISOR_CYCLE[previewCycle % MOCK_VISOR_CYCLE.length];
-    
-    const isWeatherActive = displayEffect?.id === "weather_dynamic";
+    const smartStep = MOCK_SMART_CYCLE[previewCycle % MOCK_SMART_CYCLE.length];
 
-    // --- RENDU CARTE ---
-    const renderPreviewCard = () => {
-        const effect = displayEffect;
-        
-        // Flags
-        const isReactor = effect?.id === "reactor_today";
-        const isSmart = effect?.id === "smart_analysis";
-        const isFlashlight = effect?.id === "flashlight";
-        const isPulse = effect?.id === "pulse";
-        const isJelly = effect?.id === "jelly_hover";
-        
-        const isNeon = effect?.slot === "FRAME";
-        const isHover = effect?.slot === "HOVER";
-
-        // Styles Base
-        let classes = `day-cell`;
-        let style: React.CSSProperties = { 
-            width: '100%', maxWidth: '180px', minHeight: '140px', 
-            position: 'relative', display: 'flex', flexDirection: 'column', padding: '0.5rem',
-            background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius:'8px',
-            margin: '0 auto', cursor: 'pointer', userSelect: 'none', overflow: 'hidden',
-            zIndex: 2 // Devant le fond météo du container
-        };
-
-        if (effect?.cssClass && (isNeon || isHover)) classes += ` ${effect.cssClass}`;
-        if (isFlashlight) classes += ` stealth-mode`;
-        if (animClass) classes += ` ${animClass}`;
-
-        // Logique spécifique
-        if (isWeatherActive) {
-            style.background = "rgba(0,0,0,0.3)"; // Légèrement transparent pour voir le fond
-            style.backdropFilter = "blur(2px)";
-        }
-
-        let smartLabel = "";
-        if (isSmart) {
-            classes += ` ${visorStep.class}`;
-            if (visorStep.style) Object.assign(style, visorStep.style);
-            smartLabel = visorStep.label;
-        }
-
-        if (isReactor) {
-            classes += " today-reactor";
-            style.background = "transparent"; style.border = "none";
-        }
-
-        let bpm = 0;
-        if (isPulse) {
-            const bpms = [60, 110, 165, 85];
-            bpm = bpms[previewCycle % bpms.length];
-            style.animationDuration = `${60 / bpm}s`;
-        }
-
-        // Styles Internes
-        const rowStyle: React.CSSProperties = { display: "flex", alignItems: "center", gap: "5px", fontSize: "0.65rem", color: "rgba(255,255,255,0.9)", marginTop: "3px", overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis", maxWidth: "100%", zIndex: 5, textShadow: '0 1px 2px rgba(0,0,0,0.5)' };
-        const dotStyle = (color: string) => ({ width:"4px", height:"4px", borderRadius:"50%", background:color, boxShadow: '0 0 4px '+color });
-
-        return (
-            <div 
-                ref={previewCardRef} className={classes} style={style}
-                onMouseMove={handlePreviewMouseMove} onClick={handlePreviewClick}
-                onMouseEnter={(e) => !isJelly && (e.currentTarget.style.transform = "translateY(-2px)")}
-                onMouseLeave={(e) => !isJelly && (e.currentTarget.style.transform = "translateY(0)")}
-            >
-                {/* HEADER */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px', position:'relative', zIndex:5 }}>
-                    <div style={{display:'flex', alignItems:'center', gap:'4px'}}>
-                        <span style={{ fontSize: "0.85rem", fontWeight: 600, color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>2</span>
-                        {isPulse && (
-                            <span style={{ fontSize: '0.6rem', color: '#ef4444', fontWeight: 800, background: 'rgba(0,0,0,0.5)', padding:'0 3px', borderRadius:'4px', display: 'flex', alignItems: 'center', gap:'2px' }}>
-                                {bpm} <Activity size={8} />
-                            </span>
-                        )}
-                    </div>
-                    <span style={{ fontSize: "0.55rem", fontWeight: 800, color: "#000", background: "#d04fd7", padding: "2px 4px", borderRadius: "4px", boxShadow: `0 0 5px #d04fd7` }}>435</span>
-                </div>
-                
-                {/* CONTENU ACTIVITÉS (Toujours visible et devant la montagne) */}
-                <div style={{display:"flex", flexDirection:"column", gap:"2px", overflow:"hidden", flex:1, position:'relative', zIndex:5}}>
-                    <div style={rowStyle}><div style={dotStyle("#d04fd7")} /><b>4km</b><span style={{opacity:0.8}}>Sortie SAS...</span></div>
-                    <div style={rowStyle}><div style={dotStyle("#d04fd7")} /><b>117km</b><span style={{opacity:0.8}}>Étape du tour...</span></div>
-                    <div style={rowStyle}><div style={dotStyle("#d04fd7")} /><b>16km</b><span style={{opacity:0.8}}>Récupération</span></div>
-                    
-                    {/* Label Smart Analysis en bas si actif */}
-                    {isSmart && (
-                        <div style={{
-                            marginTop:'auto', textAlign:'center', fontSize:'0.7rem', fontWeight:800, 
-                            color:'#fff', textShadow:'0 0 4px rgba(0,0,0,1)', background:'rgba(0,0,0,0.4)',
-                            padding:'2px', borderRadius:'4px'
-                        }}>
-                            {smartLabel}
-                        </div>
-                    )}
-                </div>
-
-                {/* ICONE MÉTÉO (Simulation ActivityWeatherIcon) */}
-                {isWeatherActive && (
-                    <div style={{position:'absolute', bottom:4, left:4, zIndex: 10}}>
-                        <ActivityWeatherIcon 
-                            activity={{ 
-                                weather_code: weatherStep.code, 
-                                temp_avg: weatherStep.avg,
-                                temp_min: weatherStep.min,
-                                temp_max: weatherStep.max 
-                            }} 
-                            indexDelay={0} active={true} isBigMode={true} 
-                        />
-                    </div>
-                )}
-            </div>
-        );
+    // Loadout Temporaire
+    let previewLoadout: UserLoadout = { 
+        FRAME: null, HOVER: null, TRAIL: null, INTERACTION: null, 
+        AMBIANCE: null, TODAY: null, SPECIAL: null 
     };
+
+    if (displayEffect) {
+        previewLoadout[displayEffect.slot] = displayEffect.id;
+    } else {
+        previewLoadout = { ...loadout };
+    }
+
+    const isWeatherActive = previewLoadout.AMBIANCE === "weather_dynamic";
+    // 🔥 Check si c'est le tactical visor
+    const isSmartActive = previewLoadout.AMBIANCE === "smart_analysis";
 
     return (
         <div className="modal-overlay" onClick={onClose}>
           <div className="modal-content" style={{ maxWidth: '1100px', width:'95%', padding: '0', overflow: 'hidden', display:'flex', flexDirection:'column', background: '#121218', border: '1px solid #333' }} onClick={(e) => e.stopPropagation()}>
             
-            {/* HEADER */}
             <div style={{ padding: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)' }}>
                 <div>
                     <h2 style={{ fontSize: "1.8rem", fontWeight: 900, color: "#fff", display: "flex", gap: "0.8rem", alignItems: 'center', margin: 0, letterSpacing:'-1px' }}>
@@ -242,27 +128,35 @@ export default function ShopModal({
                 </div>
             </div>
 
-            {/* LAYOUT */}
             <div className="shop-layout">
-                
-                {/* 1. PANNEAU GAUCHE */}
                 <div className="shop-preview-panel">
-                    
-                    {/* ZONE DE PREVIEW + FOND MÉTÉO */}
                     <div className="preview-card-container">
-                        {/* FOND MÉTÉO (Container Level) */}
                         {isWeatherActive && (
                             <div className={`weather-container-bg ${weatherStep.bgClass}`} />
                         )}
                         
-                        {renderPreviewCard()}
-                        
+                        <div style={{ width: '100%', maxWidth: '180px', margin: '0 auto', position:'relative', zIndex: 10 }}>
+                            <DayCard 
+                                dayNum={2}
+                                activities={MOCK_ACTIVITIES}
+                                totalTSS={435}
+                                streakIndex={0}
+                                isToday={displayEffect?.slot === "TODAY"}
+                                loadout={previewLoadout}
+                                isPreview={true}
+                                mockWeather={weatherStep}
+                                overrideClasses={animClass}
+                                // 🔥 FIX : On passe le style forcé si l'effet est Smart Analysis
+                                forcedSmartStyle={isSmartActive ? smartStep : undefined}
+                                onClick={handlePreviewClick}
+                            />
+                        </div>
+
                         <div style={{ textAlign: 'center', marginTop: '10px', fontSize: '0.65rem', color: '#666', fontStyle: 'italic', zIndex: 5 }}>
                             {displayEffect?.slot === "INTERACTION" ? "Cliquez sur la carte pour tester !" : "Survolez pour voir l'effet"}
                         </div>
                     </div>
 
-                    {/* Description */}
                     <div style={{ minHeight: '140px', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.05)', display:'flex', flexDirection:'column', justifyContent:'space-between', flexShrink: 0 }}>
                         {selectedEffect ? (
                             <>
@@ -293,7 +187,6 @@ export default function ShopModal({
                         )}
                     </div>
 
-                    {/* Inventaire */}
                     <div className="loadout-container">
                         <div className="loadout-header">
                             <div className="loadout-title"><Backpack size={12}/> COSMÉTIQUES</div>
@@ -313,7 +206,6 @@ export default function ShopModal({
                     </div>
                 </div>
 
-                {/* 2. PANNEAU DROITE */}
                 <div className="shop-catalog-panel" style={{ padding: '1.5rem', background: '#121218' }}>
                     <div className="shop-tabs-container">
                         {SHOP_TABS.map(tab => (
