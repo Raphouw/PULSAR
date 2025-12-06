@@ -268,7 +268,7 @@ const ClimbFinderProfile = ({ climb, currentDist }: { climb: Climb, currentDist:
     const gradientId = `climbGrad-${climb.id}`;
     
     const gradientStops = useMemo(() => {
-        const stops: JSX.Element[] = [];
+        const stops: React.ReactElement[] = [];
         const totalDist = climb.distance;
         let prevOffset = 0;
         climb.profile.forEach((pt, i) => {
