@@ -266,17 +266,20 @@ export default function ActivityClient({
     
     if (allActivities.length === 0) return badges;
 
-    const maxPower = Math.max(...allActivities.map(a => a.avg_power_w ?? 0));
+    const longActivities = allActivities.filter(a => (a.duration_s ?? 0) >= 3600);
+    const maxPower = Math.max(...longActivities.map(a => a.avg_power_w ?? 0));
     const maxSpeed = Math.max(...allActivities.map(a => a.avg_speed_kmh ?? 0)); 
     const maxDistance = Math.max(...allActivities.map(a => a.distance_km ?? 0));
     const maxElevation = Math.max(...allActivities.map(a => a.elevation_gain_m ?? 0));
     const maxTSS = Math.max(...allActivities.map(a => a.tss ?? 0));
 
     allActivities.forEach(activity => {
-      if (activity.avg_power_w && activity.avg_power_w === maxPower && maxPower > 0 && activity.duration_s > 3600) {
-        badges.set(String(activity.id), { label: 'Watt Max', color: '#FF3C00', icon: '⚡', category: 'special' });
-      }
-      else if (activity.avg_speed_kmh && activity.avg_speed_kmh === maxSpeed && maxSpeed > 0) {
+      if (
+        (activity.avg_power_w && activity.avg_power_w === maxPower && maxPower > 0) &&
+        (activity.duration_s ?? 0) >= 3600 // S'assurer que le record est bien sur une activité longue
+      ) {
+        badges.set(String(activity.id), { label: 'Watt Max', color: '#FF3C00', icon: '⚡', category: 'special' });
+      } else if (activity.avg_speed_kmh && activity.avg_speed_kmh === maxSpeed && maxSpeed > 0) {
         badges.set(String(activity.id), { label: 'Fusée', color: '#00FF87', icon: '🚀', category: 'special' });
       }
       else if (activity.distance_km && activity.distance_km === maxDistance && maxDistance > 0) {

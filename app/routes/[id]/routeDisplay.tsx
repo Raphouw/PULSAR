@@ -164,7 +164,7 @@ const analyzeRoute = (route: Route, points: [number, number, number][]) => {
         climb: { km: 0, ele: 0 }, hard: { km: 0, ele: 0 }, extreme: { km: 0, ele: 0 }
     };
     const distributionMap = new Map<number, number>();
-    for (let i = -15; i <= 20; i++) distributionMap.set(i, 0);
+    for (let i = -20; i <= 25; i++) distributionMap.set(i, 0);
 
     let rawGradients: number[] = [];
     const MIN_DIST_STEP = 30; 
@@ -197,7 +197,7 @@ const analyzeRoute = (route: Route, points: [number, number, number][]) => {
             else if (gradient < 12) { slopeStats.hard.km += dDistKm; slopeStats.hard.ele += accumEleDiff; }
             else { slopeStats.extreme.km += dDistKm; slopeStats.extreme.ele += accumEleDiff; }
 
-            const clampedGradient = Math.max(-15, Math.min(20, Math.round(gradient)));
+            const clampedGradient = Math.max(-20, Math.min(25, Math.round(gradient)));
             distributionMap.set(clampedGradient, (distributionMap.get(clampedGradient) || 0) + dDistKm);
             accumDist = 0; accumEleDiff = 0;
         }
@@ -509,7 +509,7 @@ export default function RouteDisplay({ route }: { route: Route }) {
                     <div style={styles.panel}>
                         <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
                             <h3 style={{...styles.panelTitle, margin:0}}><BarChart3 size={16} /> Topologie Détaillée</h3>
-                            <div onClick={() => setShowTopologyModal(true)} style={{cursor:'pointer', opacity:0.8, display:'flex', alignItems:'center', gap:'5px', fontSize:'0.7rem', color:'var(--accent)'}}><Activity size={14} /> ANALYSE DE DISTRIBUTION</div>
+                            <div onClick={() => setShowTopologyModal(true)} style={{cursor:'pointer', opacity:0.8, display:'flex', alignItems:'center', gap:'5px', fontSize:'0.7rem', color:'var(--accent)'}}><Activity size={14} /> DISTRIBUTION</div>
                         </div>
                         <div style={{paddingTop: '0.5rem'}}>
                             <SlopeBar label="Mur en Descente (< -10%)" data={analytics.slopeStats.steepDescent} totalKm={route.distance_km} color="#1e3a8a" />
@@ -685,16 +685,16 @@ export default function RouteDisplay({ route }: { route: Route }) {
                         <AreaChart data={analytics.gradientDistribution} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
                             <defs>
                                 <linearGradient id="splitColor" x1="0" y1="0" x2="1" y2="0">
-                                    <stop offset={(0 - (-15)) / (20 - (-15))} stopColor="#3b82f6" stopOpacity={1} />
-                                    <stop offset={(0 - (-15)) / (20 - (-15))} stopColor="#d04fd7" stopOpacity={1} />
+                                    <stop offset={(0 - (-20)) / (25 - (-20))} stopColor="#3b82f6" stopOpacity={1} />
+                                    <stop offset={(0 - (-20)) / (25 - (-20))} stopColor="#d04fd7" stopOpacity={1} />
                                 </linearGradient>
                                 <linearGradient id="splitColorFill" x1="0" y1="0" x2="1" y2="0">
-                                    <stop offset={(0 - (-15)) / (20 - (-15))} stopColor="#3b82f6" stopOpacity={0.3} />
-                                    <stop offset={(0 - (-15)) / (20 - (-15))} stopColor="#d04fd7" stopOpacity={0.4} />
+                                    <stop offset={(0 - (-20)) / (25 - (-20))} stopColor="#3b82f6" stopOpacity={0.3} />
+                                    <stop offset={(0 - (-20)) / (25 - (-20))} stopColor="#d04fd7" stopOpacity={0.4} />
                                 </linearGradient>
                             </defs>
                             <CartesianGrid strokeDasharray="3 3" stroke="#333" vertical={false} />
-                            <XAxis dataKey="grade" stroke="#888" tickFormatter={(val) => `${val}%`} type="number" domain={[-15, 20]} tick={{fontSize: 10}} padding={{ left: 0, right: 0 }} />
+                            <XAxis dataKey="grade" stroke="#888" tickFormatter={(val) => `${val}%`} type="number" domain={[-20, 25]} tick={{fontSize: 10}} padding={{ left: 0, right: 0 }} />
                             <YAxis stroke="#888" tick={{fontSize: 10}} unit="km" />
                             <RechartsTooltip contentStyle={{ backgroundColor: '#000', border: '1px solid #333', borderRadius: '8px' }} labelStyle={{ color: '#fff', fontWeight: 'bold' }} formatter={(value: number) => [`${value.toFixed(1)} km`, 'Distance']} labelFormatter={(label) => `Pente : ${label}%`} />
                             <ReferenceLine x={0} stroke="#fff" strokeDasharray="3 3" opacity={0.5} />
@@ -702,7 +702,7 @@ export default function RouteDisplay({ route }: { route: Route }) {
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
-                <p style={{textAlign: 'center', fontSize: '0.8rem', color: '#888', marginTop: '1rem'}}>Cette courbe représente la "personnalité" du parcours. <br/><span style={{color: '#3b82f6'}}>Gauche (Bleu)</span> = Descente / <span style={{color: '#d04fd7'}}> Droite (Violet)</span> = Montée.</p>
+                <p style={{textAlign: 'center', fontSize: '0.8rem', color: '#888', marginTop: '1rem'}}>Distribution de pente du parcours <br/><span style={{color: '#3b82f6'}}>Descente </span> VS <span style={{color: '#d04fd7'}}>Montée</span> </p>
             </Modal>
 
 

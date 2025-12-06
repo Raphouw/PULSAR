@@ -10,7 +10,7 @@ import {
   Thermometer
 } from 'lucide-react';
 import { 
-  ComposedChart, Area, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
+  ComposedChart, Area, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, AreaChart 
 } from 'recharts';
 
 import ClimbProfileChart from './climbProfileChart';
@@ -191,6 +191,207 @@ const DetailRow = ({ label, value, color = "#fff", subValue }: any) => (
         </div>
     </div>
 );
+
+const GradientDistributionChart = ({ streams }: { streams: ActivityStreams }) => {
+    
+    // Logique de calcul et lissage des données
+    const { data, gradientOffset } = useMemo(() => {
+        const distArr = safeArray<number>(streams.distance);
+        const altArr = safeArray<number>(streams.altitude);
+        
+        if (distArr.length < 100) return { data: [], gradientOffset: 0 };
+
+        // 1. Extraction des pentes brutes
+        const rawGradients: number[] = [];
+        const rawDistances: number[] = []; // Distance parcourue à cette pente
+        
+        // On lisse un peu l'entrée (sur 5 points) pour éviter le bruit extrême
+        const STEP = 5; 
+        for (let i = STEP; i < distArr.length; i += STEP) {
+            const d = distArr[i] - distArr[i-STEP];
+            const e = altArr[i] - altArr[i-STEP];
+            if (d > 5) { // Minimum 5m pour éviter les divisions par zéro aberrantes
+                const grade = (e / d) * 100;
+                // On garde uniquement les valeurs réalistes (-25% à +25%)
+                if (grade > -25 && grade < 25) {
+                    rawGradients.push(grade);
+                    rawDistances.push(d);
+                }
+            }
+        }
+
+        // 2. Création des "Bins" (Paniers) pour l'histogramme
+        // On crée des tranches de 0.5% pour avoir une bonne résolution
+        const BIN_SIZE = 1; 
+        const minBin = -20;
+        const maxBin = 20;
+        const bins = new Map<number, number>();
+
+        // Initialiser tous les bins à 0 pour éviter les trous dans la courbe
+        for (let b = minBin; b <= maxBin; b += BIN_SIZE) {
+            bins.set(b, 0);
+        }
+
+        // Remplir les bins
+        rawGradients.forEach((g, i) => {
+            // Arrondir au bin le plus proche
+            const bin = Math.floor(g / BIN_SIZE) * BIN_SIZE;
+            if (bin >= minBin && bin <= maxBin) {
+                const currentDist = bins.get(bin) || 0;
+                bins.set(bin, currentDist + rawDistances[i]);
+            }
+        });
+
+        // 3. Conversion en Tableau + LISSAGE (Smoothing)
+        // C'est ici qu'on transforme les barres en courbe fluide
+        let chartData: { grad: number; dist: number }[] = [];
+        bins.forEach((dist, grad) => chartData.push({ grad, dist }));
+        chartData.sort((a, b) => a.grad - b.grad);
+
+        // Algorithme de lissage simple (Moyenne mobile sur 3 points)
+        // On le passe 2 fois pour être bien smooth
+        const smooth = (arr: any[]) => {
+            return arr.map((point, i, a) => {
+                const prev = a[i - 1] || point;
+                const next = a[i + 1] || point;
+                // Pondération : 20% prev, 60% current, 20% next
+                const newDist = (prev.dist * 0.2) + (point.dist * 0.6) + (next.dist * 0.2);
+                return { ...point, dist: newDist };
+            });
+        };
+
+        chartData = smooth(chartData); // Passe 1
+        chartData = smooth(chartData); // Passe 2
+
+        // 4. Calcul de l'offset pour le dégradé (Où est le 0% ?)
+        const minVal = Math.min(...chartData.map(d => d.grad));
+        const maxVal = Math.max(...chartData.map(d => d.grad));
+        // Formule magique Recharts pour centrer le dégradé
+        const offset = (0 - minVal) / (maxVal - minVal);
+
+        return { data: chartData, gradientOffset: offset };
+    }, [streams]);
+
+    return (
+        <div style={{ width: '100%', height: '300px', marginTop: '1rem' }}>
+            <ResponsiveContainer>
+                <AreaChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                        <linearGradient id="splitColor" x1="0" y1="0" x2="1" y2="0">
+                            <stop offset={gradientOffset} stopColor="#3b82f6" stopOpacity={0.6} /> {/* Bleu Descente */}
+                            <stop offset={gradientOffset} stopColor="#d04fd7" stopOpacity={0.6} /> {/* Violet Montée */}
+                        </linearGradient>
+                    </defs>
+                    
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                    
+                    <XAxis 
+                        dataKey="grad" 
+                        stroke="#666" 
+                        fontSize={10} 
+                        tickFormatter={(v) => `${v}%`} 
+                        type="number"
+                        domain={[-15, 15]} // On zoom sur la partie intéressante
+                    />
+                    
+                    <YAxis stroke="#666" fontSize={10} tickFormatter={(v) => `${(v/1000).toFixed(1)}km`} />
+                    
+                    <Tooltip 
+                        contentStyle={{ background: '#141419', border: '1px solid #444', borderRadius: '8px' }}
+                        labelFormatter={(v) => `Pente : ${v}%`}
+                        formatter={(val: number) => [`${(val/1000).toFixed(2)} km`, 'Distance']}
+                    />
+                    
+                    <Area 
+                        type="monotone" // La clé pour la courbe arrondie
+                        dataKey="dist" 
+                        stroke="url(#splitColor)" // Petite astuce : contour coloré aussi
+                        strokeWidth={2}
+                        fill="url(#splitColor)" 
+                        animationDuration={1500}
+                    />
+                    
+                    {/* Ligne pointillée verticale à 0% */}
+                    <ReferenceLine x={0} stroke="#fff" strokeDasharray="3 3" opacity={0.5} />
+                    
+                </AreaChart>
+            </ResponsiveContainer>
+            
+            {/* Légende minimaliste */}
+            <div style={{ display:'flex', justifyContent:'center', gap:'20px', marginTop:'-10px', fontSize:'0.75rem' }}>
+                 <span style={{color:'#3b82f6', fontWeight:700}}>● Descente</span>
+                 <span style={{color:'#d04fd7', fontWeight:700}}>● Montée</span>
+            </div>
+        </div>
+    );
+};
+
+const TerrainCard = ({ label, stats, color }: { label: string, stats: any, color: string }) => {
+    // Si la distance est insignifiante, on affiche une case vide grisée
+    if (stats.dist < 0.1) return (
+        <div style={{flex:1, textAlign:'center', background:'rgba(255,255,255,0.02)', padding:'10px', borderRadius:'12px', opacity: 0.3}}>
+             <div style={{fontSize:'0.6rem', color:'#666', fontWeight: 700}}>{label}</div>
+             <div style={{fontSize:'0.7rem', color:'#444'}}>--</div>
+        </div>
+    );
+
+    return (
+        <div style={{
+            flex:1, 
+            background: `linear-gradient(180deg, rgba(255,255,255,0.03) 0%, ${color}08 100%)`, // Léger dégradé vers la couleur
+            border: `1px solid ${color}30`, // Bordure colorée subtile
+            padding: '10px 12px', 
+            borderRadius: '12px',
+            display: 'flex', flexDirection: 'column', gap: '8px',
+            boxShadow: `0 4px 10px -4px ${color}10`
+        }}>
+            {/* Header: Titre + Distance */}
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'baseline'}}>
+                <span style={{fontSize:'0.65rem', color: color, fontWeight: 800, letterSpacing:'1px', opacity: 0.8}}>{label}</span>
+                <span style={{fontSize:'0.85rem', fontWeight: 700, color:'#fff'}}>
+                    {stats.dist.toFixed(1)} <span style={{fontSize:'0.6rem', color:'#666'}}>km</span>
+                </span>
+            </div>
+
+            {/* Ligne Principale : Vitesse & Puissance (Même couleur) */}
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end'}}>
+                {/* Vitesse */}
+                <div style={{display:'flex', flexDirection:'column'}}>
+                    <span style={{fontSize:'1.1rem', color: color, fontWeight: 800, lineHeight: 1}}>
+                        {stats.speed.toFixed(1)}
+                    </span>
+                    <span style={{fontSize:'0.6rem', color: color, opacity: 0.6, fontWeight: 600}}>KM/H</span>
+                </div>
+
+                {/* Puissance */}
+                <div style={{textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end'}}>
+                    <span style={{fontSize:'1.1rem', color: color, fontWeight: 800, lineHeight: 1}}>
+                        {Math.round(stats.avgPower)}
+                    </span>
+                    <span style={{fontSize:'0.6rem', color: color, opacity: 0.6, fontWeight: 600}}>WATTS</span>
+                </div>
+            </div>
+
+            {/* Footer : Ratio Pédalage (Barre de la même couleur) */}
+            <div style={{marginTop:'4px'}}>
+                <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.6rem', color:'#888', marginBottom:'3px'}}>
+                    <span>{Math.round(stats.avgCadence)} rpm</span>
+                    <span style={{color: color, fontWeight: 600}}>{Math.round(stats.pedalingRatio)}% actif</span>
+                </div>
+                {/* Barre de progression monochrome */}
+                <div style={{height:'4px', width:'100%', background:'rgba(255,255,255,0.1)', borderRadius:'2px', overflow:'hidden'}}>
+                    <div style={{
+                        height:'100%', 
+                        width: `${stats.pedalingRatio}%`, 
+                        background: color, 
+                        boxShadow: `0 0 10px ${color}`, // Petit effet néon
+                        borderRadius:'2px'
+                    }} />
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const RatioBar = ({ labelLeft, labelRight, valueLeft, color }: any) => (
     <div style={{marginTop: '8px'}}>
@@ -767,6 +968,7 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
     const [localStreams, setLocalStreams] = useState<ActivityStreams | null>(activity.streams_data);
     const [isLoading, setIsLoading] = useState(false);
     const [globalFlipState, setGlobalFlipState] = useState(false);
+    const [showDistribution, setShowDistribution] = useState(false);
     
     // NOUVEAUX ÉTATS POUR LA TÉLÉMÉTRIE NARRATIVE (Onglet 'extra')
     const [narrative, setNarrative] = useState<string | null>(null);
@@ -906,28 +1108,54 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
                                     <RatioBar labelLeft="Pédalage" labelRight="Roue libre" valueLeft={advanced.percentPedaling} color="#10b981" />
                                 </div>
                             </div>
-                            <div style={styles.glassCard}>
-                                <h3 style={styles.sectionTitle}><ActivityIcon size={16} color="#00f3ff" /> DYNAMIQUE & TERRAIN</h3>
+                           <div style={styles.glassCard}>
+    {/* HEADER AVEC BOUTON */}
+    <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: '1.5rem'}}>
+        <h3 style={styles.sectionTitle}><ActivityIcon size={16} color="#00f3ff" /> DYNAMIQUE & TERRAIN</h3>
+        
+                    {/* BOUTON TOGGLE TOPOLOGIE */}
+                    <button 
+                        onClick={() => setShowDistribution(!showDistribution)}
+                        style={{
+                            background: showDistribution ? 'rgba(255,255,255,0.1)' : 'transparent',
+                            color: showDistribution ? '#fff' : '#888',
+                            border: showDistribution ? '1px solid rgba(255,255,255,0.2)' : '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: '6px',
+                            padding: '4px 10px',
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            display: 'flex', alignItems: 'center', gap: '6px',
+                            transition: 'all 0.2s'
+                        }}
+                    >
+                        <Mountain size={14} />
+                        {showDistribution ? 'MASQUER TOPOLOGIE' : 'VOIR TOPOLOGIE'}
+                    </button>
+                </div>
+
+                {/* Zonne d'affichage conditionnel du graphique TOPOLOGIE */}
+                {showDistribution && localStreams ? (
+                    <div style={{
+                        marginBottom: '2rem', 
+                        paddingBottom: '1rem', 
+                        borderBottom: '1px solid rgba(255,255,255,0.1)',
+                        animation: 'fadeIn 0.5s ease-out'
+                    }}>
+                        <h4 style={{fontSize:'0.8rem', color:'#ccc', textAlign:'center', marginBottom:'0'}}>Distribution Pente / Distance</h4>
+                        <GradientDistributionChart streams={localStreams} />
+                    </div>
+                ) : null}                          
+
+
                                 <div style={{marginTop: '1.5rem'}}>
                                     <DetailRow label="Vitesse Moy." value={`${activity.avg_speed_kmh.toFixed(1)} km/h`} color="#00f3ff" />
                                     <DetailRow label="Vit. Moy. (Écoulé)" value={`${(advanced.vMoyElapsed ?? 0).toFixed(1)} km/h`} />
                                     <DetailRow label="Vitesse Max (Lissée)" value={`${advanced.vMaxSmooth.toFixed(1)} km/h`} />
-                                    <div style={{marginTop:'1rem', display:'flex', gap:'10px'}}>
-                                        <div style={{flex:1, textAlign:'center', background:'rgba(255,255,255,0.03)', padding:'8px', borderRadius:'8px'}}>
-                                            <div style={{fontSize:'0.6rem', color:'#888'}}>MONTÉE</div>
-                                            <div style={{fontWeight:700}}>{advanced.terrain.climb.dist.toFixed(1)} km</div>
-                                            <div style={{fontSize:'0.8rem', color:'#f59e0b'}}>{advanced.terrain.climb.speed.toFixed(1)} km/h</div>
-                                        </div>
-                                        <div style={{flex:1, textAlign:'center', background:'rgba(255,255,255,0.03)', padding:'8px', borderRadius:'8px'}}>
-                                            <div style={{fontSize:'0.6rem', color:'#888'}}>PLAT</div>
-                                            <div style={{fontWeight:700}}>{advanced.terrain.flat.dist.toFixed(1)} km</div>
-                                            <div style={{fontSize:'0.8rem', color:'#10b981'}}>{advanced.terrain.flat.speed.toFixed(1)} km/h</div>
-                                        </div>
-                                        <div style={{flex:1, textAlign:'center', background:'rgba(255,255,255,0.03)', padding:'8px', borderRadius:'8px'}}>
-                                            <div style={{fontSize:'0.6rem', color:'#888'}}>DESC.</div>
-                                            <div style={{fontWeight:700}}>{advanced.terrain.descent.dist.toFixed(1)} km</div>
-                                            <div style={{fontSize:'0.8rem', color:'#3b82f6'}}>{advanced.terrain.descent.speed.toFixed(1)} km/h</div>
-                                        </div>
+                                    <div style={{marginTop:'1.5rem', display:'flex', gap:'12px'}}>
+                                        <TerrainCard label="MONTÉE" stats={advanced.terrain.climb} color="#f59e0b" />
+                                        <TerrainCard label="PLAT" stats={advanced.terrain.flat} color="#10b981" />
+                                        <TerrainCard label="DESC." stats={advanced.terrain.descent} color="#3b82f6" />
                                     </div>
                                     <div style={{marginTop:'1rem'}}>
                                          <DetailRow label="Altitude Min" value={`${advanced.altMin} m`} />
