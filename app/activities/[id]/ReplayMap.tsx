@@ -32,7 +32,7 @@ export default function ReplayMap({ polyline, currentPosition }: { polyline: [nu
                C'est souvent plus joli que CartoDB 
             */}
             <TileLayer
-                url="https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png"
+                url='https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png'
             />
             
             {/* Le Tracé : Plus épais et plus coloré (Violet foncé) */}

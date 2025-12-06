@@ -13,6 +13,8 @@ import {
   ComposedChart, Area, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, AreaChart 
 } from 'recharts';
 
+import ReplayRace from './ReplayRace';
+
 import ClimbProfileChart from './climbProfileChart';
 import { Activity } from './page'; 
 import { ActivityStreams } from '../../../types/next-auth.d';
@@ -1076,7 +1078,7 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
 
             <div style={styles.mainGrid}>
                 <div style={{gridColumn: '1 / -1'}}>
-                    <SimpleTabs activeTab={activeTab} onChange={setActiveTab} tabs={[{ id: 'summary', label: 'Résumé' }, { id: 'analysis', label: 'Analyse & Carte' }, { id: 'extra', label: 'Infos' }]} />
+                    <SimpleTabs activeTab={activeTab} onChange={setActiveTab} tabs={[{ id: 'summary', label: 'Résumé' }, { id: 'analysis', label: 'Analyse & Carte' }, { id: 'extra', label: 'Infos' }, { id: 'replay', label: 'Replay' }]} />
                 </div>
 
                 {activeTab === 'summary' && (
@@ -1103,6 +1105,8 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
                                 </div>
                             </div>
                         </div>
+
+            
 
                         <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem'}}>
                             <div style={styles.glassCard}>
@@ -1207,6 +1211,33 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
                         </div>
                     </div>
                 )}
+
+ {/* TAB REPLAY */}
+{activeTab === 'replay' && (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+        {localStreams ? (
+            <div style={styles.glassCard}>
+                <div style={{ marginBottom: '1rem' }}>
+                    <h3 style={styles.sectionTitle}>Rejouer la Course</h3>
+                </div>
+                <ReplayRace 
+                    streams={localStreams} 
+                    ftp={advanced.ftpCurrent || 250} 
+                    userWeight={activity.user_weight || 75} 
+                />
+            </div>
+        ) : (
+            <div style={styles.glassCard}>
+                <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
+                    Chargement des données GPS...
+                </div>
+            </div>
+        )}
+    </div>
+)}
+
+                
+                 
 
                 {/* TAB ANALYSIS (FINAL) */}
                 {activeTab === 'analysis' && (
