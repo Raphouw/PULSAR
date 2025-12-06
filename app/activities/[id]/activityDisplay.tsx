@@ -327,7 +327,6 @@ const GradientDistributionChart = ({ streams }: { streams: ActivityStreams }) =>
 };
 
 const TerrainCard = ({ label, stats, color }: { label: string, stats: any, color: string }) => {
-    // Si la distance est insignifiante, on affiche une case vide grisée
     if (stats.dist < 0.1) return (
         <div style={{flex:1, textAlign:'center', background:'rgba(255,255,255,0.02)', padding:'10px', borderRadius:'12px', opacity: 0.3}}>
              <div style={{fontSize:'0.6rem', color:'#666', fontWeight: 700}}>{label}</div>
@@ -338,8 +337,8 @@ const TerrainCard = ({ label, stats, color }: { label: string, stats: any, color
     return (
         <div style={{
             flex:1, 
-            background: `linear-gradient(180deg, rgba(255,255,255,0.03) 0%, ${color}08 100%)`, // Léger dégradé vers la couleur
-            border: `1px solid ${color}30`, // Bordure colorée subtile
+            background: `linear-gradient(180deg, rgba(255,255,255,0.03) 0%, ${color}08 100%)`, 
+            border: `1px solid ${color}30`, 
             padding: '10px 12px', 
             borderRadius: '12px',
             display: 'flex', flexDirection: 'column', gap: '8px',
@@ -353,9 +352,8 @@ const TerrainCard = ({ label, stats, color }: { label: string, stats: any, color
                 </span>
             </div>
 
-            {/* Ligne Principale : Vitesse & Puissance (Même couleur) */}
+            {/* Ligne Principale : Vitesse & Puissance */}
             <div style={{display:'flex', justifyContent:'space-between', alignItems:'flex-end'}}>
-                {/* Vitesse */}
                 <div style={{display:'flex', flexDirection:'column'}}>
                     <span style={{fontSize:'1.1rem', color: color, fontWeight: 800, lineHeight: 1}}>
                         {stats.speed.toFixed(1)}
@@ -363,7 +361,6 @@ const TerrainCard = ({ label, stats, color }: { label: string, stats: any, color
                     <span style={{fontSize:'0.6rem', color: color, opacity: 0.6, fontWeight: 600}}>KM/H</span>
                 </div>
 
-                {/* Puissance */}
                 <div style={{textAlign:'right', display:'flex', flexDirection:'column', alignItems:'flex-end'}}>
                     <span style={{fontSize:'1.1rem', color: color, fontWeight: 800, lineHeight: 1}}>
                         {Math.round(stats.avgPower)}
@@ -372,19 +369,33 @@ const TerrainCard = ({ label, stats, color }: { label: string, stats: any, color
                 </div>
             </div>
 
-            {/* Footer : Ratio Pédalage (Barre de la même couleur) */}
+            {/* Footer : Cardio & Cadence & Ratio */}
             <div style={{marginTop:'4px'}}>
-                <div style={{display:'flex', justifyContent:'space-between', fontSize:'0.6rem', color:'#888', marginBottom:'3px'}}>
-                    <span>{Math.round(stats.avgCadence)} rpm</span>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:'0.6rem', color:'#888', marginBottom:'3px'}}>
+                    
+                    {/* 🔥 GAUCHE : Cardio + Cadence */}
+                    <div style={{display:'flex', gap:'8px'}}>
+                        <span style={{display:'flex', alignItems:'center', gap:'2px'}}>
+                           <Heart size={10} color={color} /> 
+                           <span style={{fontWeight:600, color:'#bbb'}}>{Math.round(stats.avgHeartRate)}</span>
+                        </span>
+                        <span style={{display:'flex', alignItems:'center', gap:'2px'}}>
+                           <Repeat size={10} color="#666" /> 
+                           <span>{Math.round(stats.avgCadence)}</span>
+                        </span>
+                    </div>
+
+                    {/* DROITE : % Actif */}
                     <span style={{color: color, fontWeight: 600}}>{Math.round(stats.pedalingRatio)}% actif</span>
                 </div>
-                {/* Barre de progression monochrome */}
+
+                {/* Barre de progression */}
                 <div style={{height:'4px', width:'100%', background:'rgba(255,255,255,0.1)', borderRadius:'2px', overflow:'hidden'}}>
                     <div style={{
                         height:'100%', 
                         width: `${stats.pedalingRatio}%`, 
                         background: color, 
-                        boxShadow: `0 0 10px ${color}`, // Petit effet néon
+                        boxShadow: `0 0 10px ${color}`, 
                         borderRadius:'2px'
                     }} />
                 </div>

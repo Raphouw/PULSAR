@@ -23,9 +23,9 @@ export type PowerRecordDetail = {
 };
 
 export type TerrainStats = {
-  climb: { dist: number; speed: number; time: number; avgPower: number; avgCadence: number; pedalingRatio: number };
-  flat: { dist: number; speed: number; time: number; avgPower: number; avgCadence: number; pedalingRatio: number };
-  descent: { dist: number; speed: number; time: number; avgPower: number; avgCadence: number; pedalingRatio: number };
+  climb: { dist: number; speed: number; time: number; avgPower: number; avgCadence: number; avgHeartRate: number; pedalingRatio: number };
+  flat: { dist: number; speed: number; time: number; avgPower: number; avgCadence: number; avgHeartRate: number; pedalingRatio: number };
+  descent: { dist: number; speed: number; time: number; avgPower: number; avgCadence: number; avgHeartRate: number; pedalingRatio: number };
 };
 
 export type DetectedClimb = {
@@ -146,24 +146,25 @@ export const calculateCardiacDrift = (wattsIn: number[], hrIn: number[]) => {
 };
 
 export const calculateTerrainStats = (streams: any): TerrainStats => {
-  // Définition du résultat vide enrichi
-  const empty = { dist: 0, speed: 0, time: 0, avgPower: 0, avgCadence: 0, pedalingRatio: 0 }; 
+  // Définition du résultat vide
+  const empty = { dist: 0, speed: 0, time: 0, avgPower: 0, avgCadence: 0, avgHeartRate: 0, pedalingRatio: 0 }; 
   
   const distArr = safeArray<number>(streams?.distance);
   const altArr = safeArray<number>(streams?.altitude);
   const timeArr = safeArray<number>(streams?.time);
   const wattsArr = safeArray<number>(streams?.watts);
   const cadenceArr = safeArray<number>(streams?.cadence);
+  const hrArr = safeArray<number>(streams?.heartrate); // 🔥 AJOUTÉ
 
   if (distArr.length === 0 || altArr.length === 0 || timeArr.length === 0) {
     return { climb: empty, flat: empty, descent: empty };
   }
 
-  // Structure pour accumuler
+  // Structure pour accumuler (Ajout de totalHeartRate et countHeartRate)
   const accumulator = {
-    climb: { dist: 0, time: 0, totalWatts: 0, countWatts: 0, totalCadence: 0, countCadence: 0, totalSamples: 0 },
-    flat: { dist: 0, time: 0, totalWatts: 0, countWatts: 0, totalCadence: 0, countCadence: 0, totalSamples: 0 },
-    descent: { dist: 0, time: 0, totalWatts: 0, countWatts: 0, totalCadence: 0, countCadence: 0, totalSamples: 0 }
+    climb: { dist: 0, time: 0, totalWatts: 0, countWatts: 0, totalCadence: 0, countCadence: 0, totalHeartRate: 0, countHeartRate: 0, totalSamples: 0 },
+    flat: { dist: 0, time: 0, totalWatts: 0, countWatts: 0, totalCadence: 0, countCadence: 0, totalHeartRate: 0, countHeartRate: 0, totalSamples: 0 },
+    descent: { dist: 0, time: 0, totalWatts: 0, countWatts: 0, totalCadence: 0, countCadence: 0, totalHeartRate: 0, countHeartRate: 0, totalSamples: 0 }
   };
 
   for (let i = 5; i < distArr.length; i++) {
@@ -171,74 +172,67 @@ export const calculateTerrainStats = (streams: any): TerrainStats => {
     const timeSegment = Number(timeArr[i] ?? 0) - Number(timeArr[i-1] ?? 0);
     
     const speedInst = timeSegment > 0 ? (distSegment / timeSegment) * 3.6 : 0;
-    // Seuil de mouvement strict à 3.8 km/h comme demandé
-    const isMoving = speedInst > 3.8;
+    const isMoving = speedInst > 3.8; // Seuil de mouvement
 
     const distSmooth = Number(distArr[i] ?? 0) - Number(distArr[i-5] ?? 0);
     const eleSmooth = Number(altArr[i] ?? 0) - Number(altArr[i-5] ?? 0);
     
     const wattsInst = Number(wattsArr[i] ?? 0);
     const cadenceInst = Number(cadenceArr[i] ?? 0);
+    const hrInst = Number(hrArr[i] ?? 0); // 🔥 AJOUTÉ
 
     let target: keyof typeof accumulator | null = null;
     
+    // Seuils à 2% comme demandé
     if (distSmooth > 0) {
       const grade = (eleSmooth / distSmooth) * 100;
-      if (grade > 2.5) target = 'climb';
-      else if (grade < -2.5) target = 'descent';
+      if (grade > 2.0) target = 'climb';
+      else if (grade < -2.0) target = 'descent';
       else target = 'flat';
     }
     
     if (target) {
       accumulator[target].dist += distSegment;
-      accumulator[target].totalSamples += 1; // On compte chaque point valide dans ce terrain
+      accumulator[target].totalSamples += 1;
 
       if(isMoving) {
           accumulator[target].time += timeSegment;
-          
-          // 🔥 MODIF RAPHAËL : On inclut les 0 watts si on bouge (> 3.8km/h)
           accumulator[target].totalWatts += wattsInst;
           accumulator[target].countWatts += 1; 
       }
       
-      // Cadence : On accumule la somme pour la moyenne, et on compte les coups de pédale
       if (cadenceInst > 0) {
         accumulator[target].totalCadence += cadenceInst;
-        accumulator[target].countCadence += 1; // Nombre d'échantillons où on pédale
+        accumulator[target].countCadence += 1;
+      }
+
+      // 🔥 AJOUT LOGIQUE CARDIO
+      if (hrInst > 0) {
+        accumulator[target].totalHeartRate += hrInst;
+        accumulator[target].countHeartRate += 1;
       }
     }
   }
 
   const calcSpeed = (d: number, t: number) => t > 0 ? (d / t) * 3.6 : 0;
   const calcAvg = (total: number, count: number) => count > 0 ? Math.round(total / count) : 0;
-  // Calcul du ratio : échantillons pédalés / échantillons totaux sur ce terrain
   const calcRatio = (pedaled: number, total: number) => total > 0 ? (pedaled / total) * 100 : 0;
 
+  // Fonction helper pour construire l'objet final
+  const buildStats = (acc: any) => ({
+      dist: acc.dist / 1000, 
+      speed: calcSpeed(acc.dist, acc.time), 
+      time: acc.time,
+      avgPower: calcAvg(acc.totalWatts, acc.countWatts),
+      avgCadence: calcAvg(acc.totalCadence, acc.countCadence),
+      avgHeartRate: calcAvg(acc.totalHeartRate, acc.countHeartRate), // 🔥 AJOUTÉ
+      pedalingRatio: calcRatio(acc.countCadence, acc.totalSamples)
+  });
+
   return {
-    climb: { 
-      dist: accumulator.climb.dist / 1000, 
-      speed: calcSpeed(accumulator.climb.dist, accumulator.climb.time), 
-      time: accumulator.climb.time,
-      avgPower: calcAvg(accumulator.climb.totalWatts, accumulator.climb.countWatts),
-      avgCadence: calcAvg(accumulator.climb.totalCadence, accumulator.climb.countCadence),
-      pedalingRatio: calcRatio(accumulator.climb.countCadence, accumulator.climb.totalSamples)
-    },
-    flat: { 
-      dist: accumulator.flat.dist / 1000, 
-      speed: calcSpeed(accumulator.flat.dist, accumulator.flat.time), 
-      time: accumulator.flat.time,
-      avgPower: calcAvg(accumulator.flat.totalWatts, accumulator.flat.countWatts),
-      avgCadence: calcAvg(accumulator.flat.totalCadence, accumulator.flat.countCadence),
-      pedalingRatio: calcRatio(accumulator.flat.countCadence, accumulator.flat.totalSamples)
-    },
-    descent: { 
-      dist: accumulator.descent.dist / 1000, 
-      speed: calcSpeed(accumulator.descent.dist, accumulator.descent.time), 
-      time: accumulator.descent.time,
-      avgPower: calcAvg(accumulator.descent.totalWatts, accumulator.descent.countWatts),
-      avgCadence: calcAvg(accumulator.descent.totalCadence, accumulator.descent.countCadence),
-      pedalingRatio: calcRatio(accumulator.descent.countCadence, accumulator.descent.totalSamples)
-    }
+    climb: buildStats(accumulator.climb),
+    flat: buildStats(accumulator.flat),
+    descent: buildStats(accumulator.descent)
   };
 };
 export const NPformulaCoggan = (wattsIn: number[]) => {
