@@ -13,9 +13,13 @@ type TrainingLoadChartProps = {
 export const TrainingLoadChart: React.FC<TrainingLoadChartProps> = ({ dailyTSS }) => {
     const [showInfo, setShowInfo] = useState(false);
 
+    // 🔥 CORRECTION : On ajoute le jour (numeric) pour différencier les deux "samedi"
     const formattedData = dailyTSS.map(item => ({
         ...item,
-        name: new Date(item.date).toLocaleDateString('fr-FR', { weekday: 'short' }),
+        // Avant : "sam."
+        // Après : "sam. 14" (beaucoup plus clair)
+        name: new Date(item.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric' }),
+        fullDate: new Date(item.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
     }));
 
     return (
@@ -111,7 +115,8 @@ export const TrainingLoadChart: React.FC<TrainingLoadChartProps> = ({ dailyTSS }
                             stroke="var(--text-secondary)" 
                             tickLine={false} 
                             axisLine={false} 
-                            style={{ fontSize: 12 }} 
+                            style={{ fontSize: 10 }} 
+                            interval="preserveStartEnd" // Assure qu'on voit le début et la fin
                         />
                         <YAxis 
                             dataKey="tss" 
@@ -119,12 +124,18 @@ export const TrainingLoadChart: React.FC<TrainingLoadChartProps> = ({ dailyTSS }
                             tickLine={false} 
                             axisLine={false} 
                             domain={[0, 'dataMax + 20']} 
-                            style={{ fontSize: 12 }} 
+                            style={{ fontSize: 10 }} 
                             tickFormatter={(value) => `${value}`}
                         />
                         <Tooltip 
                             contentStyle={{ backgroundColor: 'var(--surface)', border: '1px solid var(--secondary)', borderRadius: '5px' }}
-                            labelFormatter={(label) => `Jour: ${label}`}
+                            // 🔥 CORRECTION : On affiche la date complète pour être sûr
+                            labelFormatter={(label, payload) => {
+                                if (payload && payload.length > 0) {
+                                    return payload[0].payload.fullDate;
+                                }
+                                return label;
+                            }}
                             formatter={(value: number) => [`${value} TSS`, 'Load']}
                         />
                         <Area 
