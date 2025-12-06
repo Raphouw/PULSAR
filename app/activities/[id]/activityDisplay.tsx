@@ -1218,7 +1218,7 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
         {localStreams ? (
             <div style={styles.glassCard}>
                 <div style={{ marginBottom: '1rem' }}>
-                    <h3 style={styles.sectionTitle}>Rejouer la Course</h3>
+                    <h3 style={styles.sectionTitle}>Replay parcours</h3>
                 </div>
                 <ReplayRace 
                     streams={localStreams} 

@@ -1,74 +1,108 @@
-// Fichier : app/activities/[id]/ReplayMap.tsx
+// Fichier : app/activities/[id]/activityMap.tsx
 'use client';
 
-import { MapContainer, TileLayer, Polyline, CircleMarker, useMap } from 'react-leaflet';
+import React, { useEffect } from 'react';
+import { MapContainer, TileLayer, Polyline, useMap } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { useEffect } from 'react';
+import L from 'leaflet';
 
-function RecenterMap({ center }: { center: [number, number] }) {
+// --- UTILITAIRE DE DÉCODAGE (Google Polyline Algorithm) ---
+// Permet de transformer la string "encodedPolyline" en tableau de coordonnées [lat, lng]
+// Fichier : app/activities/[id]/activityMap.tsx
+
+function decodePolyline(str: string, precision?: number): [number, number][] {
+    let index = 0,
+        lat = 0,
+        lng = 0,
+        coordinates: [number, number][] = [],
+        shift = 0,
+        result = 0,
+        byte = 0, // 🔥 CORRECTION : 0 au lieu de null
+        latitude_change,
+        longitude_change,
+        factor = Math.pow(10, precision || 5);
+
+    while (index < str.length) {
+        byte = 0; // 🔥 CORRECTION : On reset à 0, pas à null
+        shift = 0;
+        result = 0;
+
+        do {
+            byte = str.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20);
+
+        latitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+
+        shift = result = 0;
+
+        do {
+            byte = str.charCodeAt(index++) - 63;
+            result |= (byte & 0x1f) << shift;
+            shift += 5;
+        } while (byte >= 0x20);
+
+        longitude_change = ((result & 1) ? ~(result >> 1) : (result >> 1));
+
+        lat += latitude_change;
+        lng += longitude_change;
+
+        coordinates.push([lat / factor, lng / factor]);
+    }
+
+    return coordinates;
+}
+
+// --- COMPOSANT POUR RECENTRER LA CARTE AUTOMATIQUEMENT ---
+function FitBounds({ positions }: { positions: [number, number][] }) {
     const map = useMap();
+    
     useEffect(() => {
-        if (center) {
-            map.panTo(center, { animate: true, duration: 0.5 });
+        if (positions && positions.length > 0) {
+            const bounds = L.latLngBounds(positions);
+            map.fitBounds(bounds, { padding: [50, 50] });
         }
-    }, [center, map]);
+    }, [map, positions]);
+
     return null;
 }
 
-export default function ReplayMap({ polyline, currentPosition }: { polyline: [number, number][], currentPosition: [number, number] | null }) {
-    if (!polyline || polyline.length === 0) return null;
+// --- COMPOSANT PRINCIPAL ---
+export default function ActivityMap({ encodedPolyline }: { encodedPolyline: string }) {
+    // 1. Décodage de la polyline
+    const positions = React.useMemo(() => {
+        if (!encodedPolyline) return [];
+        return decodePolyline(encodedPolyline);
+    }, [encodedPolyline]);
 
-    const startPos = polyline[0];
+    if (!positions || positions.length === 0) {
+        return <div style={{height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666'}}>Données GPS invalides</div>;
+    }
 
     return (
         <MapContainer 
-            center={startPos} 
+            center={positions[0]} 
             zoom={13} 
-            style={{ height: '100%', width: '100%', background: '#09090b' }} // Fond très noir pour éviter le flash blanc
+            style={{ height: '100%', width: '100%', background: '#09090b' }} 
             zoomControl={false}
             attributionControl={false}
         >
-            {/* OPTION 1 : Dark Mode plus contrasté (Stadia) 
-               C'est souvent plus joli que CartoDB 
-            */}
+            {/* Fond de carte sombre (Stadia Dark ou CartoDB Dark) */}
             <TileLayer
-                url="https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png"
+                url='https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png'
             />
             
-            {/* Le Tracé : Plus épais et plus coloré (Violet foncé) */}
+            {/* Tracé GPS en couleur Néon */}
             <Polyline 
-                positions={polyline} 
-                color="#5b21b6" // Violet foncé pour le chemin non parcouru
-                weight={5} 
-                opacity={0.6}
+                positions={positions} 
+                color="#00f3ff" // Cyan électrique
+                weight={4} 
+                opacity={0.8}
             />
 
-            {/* Le Tracé Parcouru (Effet de traînée) - Optionnel mais stylé */}
-            {/* Pour l'instant on garde juste le curseur pour la perf */}
-
-            {currentPosition && (
-                <>
-                    {/* Halo extérieur pulsant */}
-                    <CircleMarker 
-                        center={currentPosition} 
-                        radius={15} 
-                        color="transparent" 
-                        fillColor="#d04fd7" 
-                        fillOpacity={0.2} 
-                        weight={0} 
-                    />
-                    {/* Point central blanc */}
-                    <CircleMarker 
-                        center={currentPosition} 
-                        radius={6} 
-                        color="#fff" 
-                        fillColor="#d04fd7" 
-                        fillOpacity={1} 
-                        weight={2} 
-                    />
-                    <RecenterMap center={currentPosition} />
-                </>
-            )}
+            {/* Ajustement automatique du zoom */}
+            <FitBounds positions={positions} />
         </MapContainer>
     );
 }
