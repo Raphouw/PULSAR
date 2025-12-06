@@ -11,6 +11,7 @@ import {
   calculateStressBalance, 
 } from "../../lib/physics";
 
+// 🔥 IMPORTANT : Force le recalcul à chaque chargement de page
 export const dynamic = 'force-dynamic';
 
 // --- Helpers pour les Dates ---
@@ -31,7 +32,7 @@ const getMonthBoundaries = (): { start: string; prevStart: string; prevEnd: stri
   return { start, prevStart, prevEnd };
 };
 
-// --- Helper Stats ---
+// --- Types et Helpers Stats ---
 type StatBlock = {
   distance: number;
   elevation: number;
@@ -50,12 +51,16 @@ function computePeriodScore(current: StatBlock, previous: StatBlock): number {
     const prevValue = previous[m] as number;
     const currValue = current[m] as number;
 
+    // Bonus de reprise si on part de 0
     if (prevValue === 0) {
       return currValue > 0 ? 1.5 : 1.0;
     }
     
+    // Calcul de la variation
     const variation = (currValue - prevValue) / prevValue;
     let score = 1.0 + variation;
+    
+    // On borne le score entre 0 et 200%
     return Math.min(2.0, Math.max(0, score));
   });
 
@@ -160,22 +165,24 @@ async function checkStravaConnection(userId: string): Promise<boolean> {
   }
 }
 
+// --- MAIN DATA FETCHING ---
 async function getDashboardData(userId: string): Promise<DashboardData> {
   if (!userId || userId === 'undefined' || userId === 'null') {
     throw new Error('Identifiant utilisateur invalide');
   }
 
+  // On regarde 180 jours en arrière pour le Fitness (CTL)
   const fetchLimitDate = getISODateXDaysAgo(180); 
 
   try {
-    // 0. 🔥 ON RÉCUPÈRE LA "VÉRITÉ" EN BDD (Ton W' de référence)
+    // 0. 🔥 PROFIL UTILISATEUR (Pour W' et FTP) + Date de dernière update
     const { data: userProfile } = await supabaseAdmin
         .from('users')
-        .select('w_prime, ftp')
+        .select('w_prime, ftp, updated_at')
         .eq('id', userId)
         .single();
 
-    // 1. Récupérer activités
+    // 1. Récupérer toutes les activités
     const { data: activities, error: activitiesError } = await supabaseAdmin
       .from('activities')
       .select('id, name, distance_km, elevation_gain_m, start_time, duration_s, tss, avg_power_w')
@@ -190,7 +197,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 
     const allActivities = activities || [];
 
-    // 2. FITNESS
+    // 2. FITNESS & TSS (Calcul des courbes de forme)
     const tssMap = new Map<string, number>();
     allActivities.forEach(act => {
         if (act.start_time) {
@@ -218,14 +225,14 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     const fitnessData = calculateStressBalance(dailyTSSArray);
     const dailyTSS = dailyTSSArray.slice(-8);
 
-    // 3. Records pour le calcul théorique
+    // 3. Records (90j glissants) pour le modèle de puissance
     const { data: records } = await supabaseAdmin
       .from('records')
       .select('type, duration_s, value')
       .eq('user_id', userId)
       .gte('date_recorded', getISODateXDaysAgo(90));
 
-    // 4. Stats Globales
+    // 4. STATS GLOBALES (Total carrière)
     const { data: allStatsData } = await supabaseAdmin
       .from('activities')
       .select('distance_km, elevation_gain_m, duration_s, avg_power_w, tss') 
@@ -233,13 +240,14 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 
     const allTimeStats = calculateStats(allStatsData || []);
     
-    // 5. Filtrage temporel (inchangé)
+    // 5. FILTRAGE TEMPOREL POUR LES CARTES STATS
     const date_7_ago = new Date(getISODateXDaysAgo(7));
     const date_14_ago = new Date(getISODateXDaysAgo(14));
     const date_30_ago = new Date(getISODateXDaysAgo(30));
     const date_60_ago = new Date(getISODateXDaysAgo(60));
     const date_90_ago = new Date(getISODateXDaysAgo(90));
     const date_180_ago = new Date(getISODateXDaysAgo(180));
+    
     const monthBounds = getMonthBoundaries();
     const date_month_start = new Date(monthBounds.start);
     const date_prev_month_start = new Date(monthBounds.prevStart);
@@ -265,7 +273,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
       prev90: calculateStats(statsPrev90),
     };
 
-    // 6. CALCUL ET SYNCHRO W'
+    // 6. 🔥 MODÈLE BIOLOGIQUE AVEC DÉCROISSANCE (Time Decay)
     const cpCurveObj: { [key: string]: number } = {};
     (records || []).forEach(r => {
         if (!cpCurveObj[r.type] || r.value > cpCurveObj[r.type]) {
@@ -273,50 +281,72 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
         }
     });
 
-    const getBestRecordForDuration = (sec: number) => {
-        const matchingRecords = records?.filter(r => r.duration_s === sec);
-        if (matchingRecords && matchingRecords.length > 0) {
-            return Math.max(...matchingRecords.map(r => r.value));
-        }
-        return 0;
+    const getBestRecord = (sec: number) => {
+        const matches = records?.filter(r => r.duration_s === sec);
+        return matches && matches.length > 0 ? Math.max(...matches.map(r => r.value)) : 0;
     };
     
-    // Calcul basé sur les 90 derniers jours
-    const p3m = getBestRecordForDuration(180) || cpCurveObj['CP3'] || 250;
-    const p12m = getBestRecordForDuration(720) || cpCurveObj['CP12'] || 200;
+    // Calcul de la "Vérité Terrain" des 90 derniers jours
+    const p3m = getBestRecord(180) || cpCurveObj['CP3'] || 250;
+    const p12m = getBestRecord(720) || cpCurveObj['CP12'] || 200;
     const calculated = calculateCP_WPrime(p3m, p12m);
     
-    // --- 🔥 LA LOGIQUE INTELLIGENTE ICI ---
-    const dbWPrime = userProfile?.w_prime || 0; // Ta réf en base (ex: 20400)
-    const calcWPrime = calculated.WPrime;       // Ton niveau calculé récent (ex: 10600)
+    const dbWPrime = userProfile?.w_prime || 0; 
+    const calcWPrime = calculated.WPrime;
+    const updatedAt = userProfile?.updated_at ? new Date(userProfile.updated_at) : new Date();
 
-    // Par défaut, on affiche TOUJOURS la valeur BDD (car on suppose qu'elle est juste ou historique)
     let finalWPrime = dbWPrime;
 
-    // SAUF SI le calcul récent est MEILLEUR que la BDD (tu as progressé !)
-    if (calcWPrime > dbWPrime) {
-        // Alors on met à jour la BDD pour la prochaine fois
+    // CAS 1 : PROGRESSION (Calcul > BDD) -> Mise à jour immédiate
+    if (calcWPrime > dbWPrime + 100) {
+        console.log(`[W'] Progression détectée ! ${dbWPrime} -> ${calcWPrime}`);
         await supabaseAdmin
             .from('users')
-            .update({ w_prime: calcWPrime })
+            .update({ w_prime: calcWPrime, updated_at: new Date() })
             .eq('id', userId);
-        
-        // Et on affiche cette nouvelle valeur glorieuse
         finalWPrime = calcWPrime;
     }
+    // CAS 2 : S'ENTRAÎNE COOL (Calcul < BDD) -> Érosion temporelle
+    else if (calcWPrime < dbWPrime) {
+        // Combien de jours depuis la dernière update ?
+        const now = new Date();
+        const diffMs = now.getTime() - updatedAt.getTime();
+        const diffDays = diffMs / (1000 * 60 * 60 * 24);
+
+        // Si la valeur a plus de 24h, on applique l'érosion
+        if (diffDays >= 1) {
+            // Taux de décroissance : 0.5% par jour (soit ~15% par mois sans effort max)
+            const decayRate = 0.005; 
+            const decayAmount = Math.floor(dbWPrime * decayRate * diffDays);
+            
+            // La nouvelle valeur érodée ne peut pas descendre sous la réalité calculée (plancher)
+            const decayedWPrime = Math.max(calcWPrime, dbWPrime - decayAmount);
+
+            if (decayedWPrime < dbWPrime) {
+                console.log(`[W'] Érosion naturelle (-${decayAmount}J) : ${dbWPrime} -> ${decayedWPrime}`);
+                // On met à jour la BDD pour acter la baisse
+                await supabaseAdmin
+                    .from('users')
+                    .update({ w_prime: decayedWPrime, updated_at: new Date() })
+                    .eq('id', userId);
+                finalWPrime = decayedWPrime;
+            }
+        }
+    }
     
-    // Si BDD (20400) > Calcul (10600), on garde 20400.
-    // Si BDD est vide (0), on prend le calcul.
+    // Safety : si BDD vide, on prend le calcul
     if (finalWPrime === 0) finalWPrime = calcWPrime;
 
-    const CP = calculated.CP; // Le CP, lui, peut fluctuer, c'est moins grave.
-    const WPrime = finalWPrime;
+    const CP = calculated.CP; // CP reste 100% dynamique selon la forme du moment
+    const WPrime = finalWPrime; // W' est stabilisé
 
-    // Génération courbe
+    // Génération courbe de puissance théorique
     const curvePoints: { label: string, sec: number }[] = [ { label: '30s', sec: 30 } ];
-    for (let min = 1; min <= 5; min += 0.5) curvePoints.push({ label: `${min}m`, sec: min * 60 });
-    for (let min = 6; min <= 9; min += 1) curvePoints.push({ label: `${min}m`, sec: min * 60 });
-    for (let min = 10; min <= 180; min += 5) curvePoints.push({ label: `${min}m`, sec: min * 60 });
+    const minutesToAdd = [1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 45, 60, 90, 120, 180];
+    
+    minutesToAdd.forEach(min => {
+        curvePoints.push({ label: `${min}m`, sec: min * 60 });
+    });
 
     const powerCurveData = curvePoints.map(pt => {
         const model = pt.sec > 0 ? CP + (WPrime / pt.sec) : CP;
@@ -328,7 +358,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
         };
     });
 
-    // 7. Activités récentes
+    // 7. Activités Récentes (14j pour l'affichage liste)
     const twoWeeksAgoISO = getISODateXDaysAgo(14);
     const { data: recentActivitiesData } = await supabaseAdmin
       .from("activities")
@@ -338,7 +368,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
       .order("start_time", { ascending: false })
       .limit(20);
 
-    // 8. Scores
+    // 8. Calcul des Scores
     const score7j = computePeriodScore(processedStats.last7, processedStats.prev7);
     const scoreMonth = computePeriodScore(processedStats.month, processedStats.prevMonth);
     const score30j = computePeriodScore(processedStats.last30, processedStats.prev30);
@@ -362,6 +392,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
   }
 }
 
+// --- Page Serveur ---
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions);
   if (!session) redirect('/auth/signin');
