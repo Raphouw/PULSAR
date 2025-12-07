@@ -14,7 +14,7 @@ export interface FitnessHistoryItem {
   w_prime_value: number | null;
   cp3_value: number | null;
   model_cp3: number | null;
-  model_cp12: number | null; // Ajouté explicitement
+  model_cp12: number | null; 
   vo2max_value: number | null;
 }
 
@@ -23,6 +23,7 @@ const RANGES = [
   { label: '3M', days: 90 },
   { label: '6M', days: 180 },
   { label: '1AN', days: 365 },
+  { label: 'ACTIF', days: -1 }, // 🔥 Nouveau mode "Smart Crop"
   { label: 'TOUT', days: 9999 }
 ];
 
@@ -39,10 +40,11 @@ const METRICS = [
 const DAILY_DECAY = 0.006; 
 
 export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) => {
-  const [range, setRange] = useState(180); 
+  // On met "ACTIF" par défaut pour que ce soit beau direct !
+  const [range, setRange] = useState(-1); 
   const [activeMetrics, setActiveMetrics] = useState<string[]>(['ftp_value', 'w_prime_value', 'vo2max_value']);
 
-  // 1. Filtrage, Tri et "Healing" des données manquantes
+  // 1. Filtrage, Tri et "Healing"
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
     
@@ -50,19 +52,16 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
     const sorted = [...data].sort((a, b) => new Date(a.date_calculated).getTime() - new Date(b.date_calculated).getTime());
     
     // B. Data Healing (Réparation des NULLs historiques)
-    // On propage la dernière valeur connue si un champ est null (Zero-Order Hold)
     const sanitizedData = sorted.map((item, index) => {
         const cleanItem = { ...item };
         METRICS.forEach(m => {
             const key = m.id as keyof FitnessHistoryItem;
-            // Si la valeur est null ou 0, on regarde en arrière
             if (!cleanItem[key]) {
-                // On cherche le dernier point valide
                 let lookbackIndex = index - 1;
                 while (lookbackIndex >= 0) {
                     const prevVal = sorted[lookbackIndex][key];
                     if (prevVal) {
-                        // @ts-ignore : On force le type number car on sait qu'on a trouvé une valeur
+                        // @ts-ignore
                         cleanItem[key] = prevVal; 
                         break;
                     }
@@ -77,11 +76,29 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
     const now = new Date();
     now.setHours(0,0,0,0); 
     
-    const cutoff = new Date(now);
-    cutoff.setDate(cutoff.getDate() - range);
+    let cutoff = new Date(now);
+
+    // 🔥 LOGIQUE DU FILTRE "ACTIF"
+    if (range === -1) {
+        // On cherche le premier point "significatif"
+        // Critère : Avoir un CP3 > 10 watts (ce qui exclut les 0 ou nulls initiaux)
+        const firstActivePoint = sanitizedData.find(d => (d.model_cp3 || 0) > 10);
+        
+        if (firstActivePoint) {
+            cutoff = new Date(firstActivePoint.date_calculated);
+            // On enlève 1 jour pour que le graph commence "proprement" sur la montée
+            cutoff.setDate(cutoff.getDate() - 7);
+        } else {
+            // Fallback si tout est à 0 : on montre les 30 derniers jours
+            cutoff.setDate(cutoff.getDate() - 30);
+        }
+    } else {
+        // Mode classique (30J, 6M...)
+        cutoff.setDate(cutoff.getDate() - range);
+    }
 
     // On ne garde que les points sources dans la plage (+ tampon)
-    const relevantData = sanitizedData.filter(d => new Date(d.date_calculated).getTime() >= cutoff.getTime() - (86400000 * 30));
+    const relevantData = sanitizedData.filter(d => new Date(d.date_calculated).getTime() >= cutoff.getTime() - (86400000 * 5));
 
     if (relevantData.length === 0) return [];
 
@@ -112,26 +129,24 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
         if (new Date(prevPoint.date_calculated).toDateString() === d.toDateString()) {
             METRICS.forEach(m => dayItem[m.id] = prevPoint[m.id as keyof FitnessHistoryItem]);
         }
-        // CAS 2: Interpolation entre deux points existants
+        // CAS 2: Interpolation
         else if (nextPoint) {
             const tStart = new Date(prevPoint.date_calculated).getTime();
             const tEnd = new Date(nextPoint.date_calculated).getTime();
             const progress = (time - tStart) / (tEnd - tStart);
 
             METRICS.forEach(m => {
-                // Ici, valStart et valEnd sont garantis non-null grâce au Data Healing étape B
                 const valStart = (prevPoint[m.id as keyof FitnessHistoryItem] as number) || 0;
                 const valEnd = (nextPoint[m.id as keyof FitnessHistoryItem] as number) || 0;
                 
-                // Si l'une des valeurs est 0 malgré le healing, on évite l'interpolation vers 0
                 if (valStart > 0 && valEnd > 0) {
                     dayItem[m.id] = Math.round(valStart + (valEnd - valStart) * progress);
                 } else {
-                    dayItem[m.id] = valStart || valEnd; // Fallback sécurisé
+                    dayItem[m.id] = valStart || valEnd;
                 }
             });
         }
-        // CAS 3: Projection future (Décroissance)
+        // CAS 3: Projection future
         else {
             dayItem.isProjected = true;
             const daysSinceLast = (time - new Date(prevPoint.date_calculated).getTime()) / (1000 * 3600 * 24);
@@ -143,6 +158,7 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
             });
         }
         
+        // On ne push que si on est après le vrai cutoff visuel
         if (time >= cutoff.getTime()) {
             filledData.push(dayItem);
         }
@@ -186,7 +202,6 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
           
           {payload.map((p: any) => {
             const metricConfig = METRICS.find(m => m.id === p.dataKey);
-            // On ne montre pas si valeur est 0 (bug graphique évité)
             if (!p.value) return null;
 
             return (
@@ -218,7 +233,7 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
         <div style={{ display: 'flex', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '4px', border: '1px solid rgba(255,255,255,0.05)' }}>
           {RANGES.map(r => (
             <button
-              key={r.days}
+              key={r.label}
               onClick={() => setRange(r.days)}
               style={{
                 background: range === r.days ? 'var(--primary)' : 'transparent',
@@ -304,7 +319,6 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
                   dot={false} 
                   activeDot={{ r: 6, strokeWidth: 0, fill: m.color }}
                   animationDuration={500}
-                  // Astuce : connectNulls aide aussi si le data healing en a raté un
                   connectNulls={true} 
                 />
               )
