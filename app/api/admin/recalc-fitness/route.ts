@@ -5,7 +5,7 @@ import { analyzeAndSaveActivity } from "../../../../lib/analysisEngine";
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; 
 
-const BATCH_SIZE = 50; // On augmente un peu car on va skipper vite les sans-watts
+const BATCH_SIZE = 50; 
 
 interface ReportItem {
     userId: number | string;
@@ -15,14 +15,26 @@ interface ReportItem {
     details?: string[];
 }
 
+// État physiologique complet pour le tracking
+interface PhysioState {
+    ftp: number;
+    w_prime: number;
+    cp3: number;
+    cp12: number;
+    model_cp3: number;
+    model_cp12: number;
+    vo2max: number;
+    tte: number;
+}
+
 export async function GET(req: Request) {
   const startTime = Date.now();
-  console.log(`[Sequencer] 🚀 Démarrage Séquentiel (Smart Watt Detection)...`);
+  console.log(`[Sequencer] 🚀 Démarrage Séquentiel (Smart Persistence V2)...`);
 
   try {
     const { data: allUsers } = await supabaseAdmin
         .from('users')
-        .select('id, name, weight, ftp')
+        .select('id, name, weight, ftp, w_prime, vo2max, TTE, CP3, CP12') // On charge tout le profil
         .order('id', { ascending: true });
 
     if (!allUsers) throw new Error("Aucun user trouvé");
@@ -38,27 +50,37 @@ export async function GET(req: Request) {
 
         console.log(`\n[Sequencer] 👤 Analyse de ${user.name} (ID: ${user.id})...`);
 
-        // Récup dernière date
+        // 1. Récupération du dernier état CONNU en base (History)
         const { data: lastHistory } = await supabaseAdmin
             .from('user_fitness_history')
-            .select('date_calculated, ftp_value')
+            .select('*') // On prend tout
             .eq('user_id', user.id)
             .order('date_calculated', { ascending: false })
             .limit(1)
             .maybeSingle();
 
         let lastDateISO = '2000-01-01T00:00:00.000Z';
-        let currentFtp = user.ftp || 200; 
+        
+        // Initialisation de l'état courant (Priorité : History > User Profile > Defaults)
+        let currentState: PhysioState = {
+            ftp: lastHistory?.ftp_value ?? user.ftp ?? 200,
+            w_prime: lastHistory?.w_prime_value ?? user.w_prime ?? 20000,
+            cp3: lastHistory?.cp3_value ?? user.CP3 ?? 0,
+            cp12: lastHistory?.cp12_value ?? user.CP12 ?? 0,
+            model_cp3: lastHistory?.model_cp3 ?? 0,
+            model_cp12: lastHistory?.model_cp12 ?? 0,
+            vo2max: lastHistory?.vo2max_value ?? user.vo2max ?? 45,
+            tte: lastHistory?.tte_value ?? user.TTE ?? 3600
+        };
 
         if (lastHistory) {
             lastDateISO = lastHistory.date_calculated;
-            currentFtp = lastHistory.ftp_value;
             console.log(`[Sequencer]    Reprise après le ${new Date(lastDateISO).toLocaleDateString()}`);
         } else {
             console.log(`[Sequencer]    Démarrage à zéro.`);
         }
 
-        // Récupération Activités Futures
+        // 2. Récupération Activités Futures
         const { data: nextActivities } = await supabaseAdmin
             .from('activities')
             .select('id, name, start_time')
@@ -78,6 +100,7 @@ export async function GET(req: Request) {
         const logs: string[] = [];
 
         for (const partialAct of nextActivities) {
+            // Watchdog (max 250s execution pour Vercel)
             if (Date.now() - startTime > 250 * 1000) break;
 
             const { data: fullAct } = await supabaseAdmin
@@ -86,43 +109,57 @@ export async function GET(req: Request) {
                 .eq('id', partialAct.id)
                 .single();
 
-            // 1. CHECK STREAMS EXISTENCE
+            // A. CHECK STREAMS
             if (!fullAct?.streams_data) {
-                await recordHistorySkip(user.id, partialAct.id, partialAct.start_time, currentFtp);
+                // On propage l'état actuel sans changement
+                await recordHistorySkip(user.id, partialAct.id, partialAct.start_time, currentState);
                 logs.push(`⚠️ Ignoré (Pas de GPS) : ${partialAct.start_time}`);
                 continue;
             }
 
-            // 2. CHECK WATTS (CRUCIAL)
-            // On vérifie si le tableau 'watts' existe et n'est pas vide
+            // B. CHECK WATTS
             const streams = fullAct.streams_data as any;
             const hasWatts = (streams.watts && Array.isArray(streams.watts) && streams.watts.length > 0);
 
             if (!hasWatts) {
-                // Pas de puissance = Pas de calcul de FTP possible.
-                // On enregistre quand même l'historique pour "passer" cette date.
-                await recordHistorySkip(user.id, partialAct.id, partialAct.start_time, currentFtp);
+                // Pas de puissance = On propage l'état actuel
+                await recordHistorySkip(user.id, partialAct.id, partialAct.start_time, currentState);
                 logs.push(`⏩ Skipped (Pas de Watts) : ${partialAct.start_time}`);
                 continue; 
             }
 
-            // 3. ANALYSE (Seulement si Watts présents)
+            // C. ANALYSE & UPDATE
             const result = await analyzeAndSaveActivity(
                 partialAct.id,
-                0,
+                0, // eventId (non utilisé ici)
                 streams,
                 user.weight || 75,
-                currentFtp
+                currentState.ftp
             );
 
             if (result.success && result.fitnessUpdate?.success) {
-                const { newFtp } = result.fitnessUpdate;
-                currentFtp = newFtp;
+                // MISE À JOUR DE L'ÉTAT COURANT
+                const up = result.fitnessUpdate;
+                
+                // On met à jour l'objet d'état avec les nouvelles valeurs (ou on garde les anciennes si undefined)
+                currentState = {
+                    ftp: up.newFtp ?? currentState.ftp,
+                    w_prime: up.newWPrime ?? currentState.w_prime,
+                    cp3: up.newCp3 ?? currentState.cp3,
+                    cp12: up.newCp12 ?? currentState.cp12,
+                    // Si l'engine ne renvoie pas les modèles brutes, on garde les anciens ou on estime
+                    model_cp3: up.newCp3 ?? currentState.model_cp3, 
+                    model_cp12: up.newCp12 ?? currentState.model_cp12,
+                    vo2max: up.newVo2Max ?? currentState.vo2max,
+                    tte: up.newTte ?? currentState.tte
+                };
+
                 const dateStr = new Date(partialAct.start_time).toLocaleDateString();
-                logs.push(`✅ [${dateStr}] FTP -> ${newFtp}W`);
+                logs.push(`✅ [${dateStr}] FTP -> ${currentState.ftp}W`);
             } else {
                 const reason = result.fitnessUpdate?.message || "Erreur interne";
-                await recordHistorySkip(user.id, partialAct.id, partialAct.start_time, currentFtp);
+                // En cas d'échec calcul, on propage l'ancien état pour ne pas casser la timeline
+                await recordHistorySkip(user.id, partialAct.id, partialAct.start_time, currentState);
                 logs.push(`❌ Échec (${reason}) : ${partialAct.start_time}`);
             }
         }
@@ -152,13 +189,21 @@ export async function GET(req: Request) {
   }
 }
 
-// Helper pour insérer l'historique "Skip" et faire avancer le curseur de date
-async function recordHistorySkip(userId: number | string, actId: number, dateISO: string, ftp: number) {
+// Helper pour insérer l'historique "Skip" en conservant TOUTES les valeurs précédentes
+// C'est ça qui empêche les trous (NULLs) dans la base
+async function recordHistorySkip(userId: number | string, actId: number, dateISO: string, state: PhysioState) {
     await supabaseAdmin.from('user_fitness_history').insert({
         user_id: userId,
         date_calculated: dateISO,
-        ftp_value: ftp, 
-        w_prime_value: 20000, // Valeur par défaut
-        source_activity_id: actId
+        source_activity_id: actId,
+        // On copie tout l'état
+        ftp_value: state.ftp, 
+        w_prime_value: state.w_prime,
+        cp3_value: state.cp3,
+        cp12_value: state.cp12,
+        model_cp3: state.model_cp3,
+        model_cp12: state.model_cp12,
+        vo2max_value: state.vo2max,
+        tte_value: state.tte
     });
 }

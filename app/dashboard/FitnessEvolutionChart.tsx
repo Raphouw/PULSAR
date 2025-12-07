@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo } from 'react';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart, ReferenceArea
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ComposedChart
 } from 'recharts';
 
 // Types basés sur ta BDD
@@ -14,6 +14,7 @@ export interface FitnessHistoryItem {
   w_prime_value: number | null;
   cp3_value: number | null;
   model_cp3: number | null;
+  model_cp12: number | null; // Ajouté explicitement
   vo2max_value: number | null;
 }
 
@@ -41,39 +42,59 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
   const [range, setRange] = useState(180); 
   const [activeMetrics, setActiveMetrics] = useState<string[]>(['ftp_value', 'w_prime_value', 'vo2max_value']);
 
-  // 1. Filtrage, Tri et "Remplissage" des jours vides
+  // 1. Filtrage, Tri et "Healing" des données manquantes
   const chartData = useMemo(() => {
     if (!data || data.length === 0) return [];
     
-    // 1. Tri Chronologique
+    // A. Tri Chronologique
     const sorted = [...data].sort((a, b) => new Date(a.date_calculated).getTime() - new Date(b.date_calculated).getTime());
     
-    // 2. Préparation des bornes temporelles
+    // B. Data Healing (Réparation des NULLs historiques)
+    // On propage la dernière valeur connue si un champ est null (Zero-Order Hold)
+    const sanitizedData = sorted.map((item, index) => {
+        const cleanItem = { ...item };
+        METRICS.forEach(m => {
+            const key = m.id as keyof FitnessHistoryItem;
+            // Si la valeur est null ou 0, on regarde en arrière
+            if (!cleanItem[key]) {
+                // On cherche le dernier point valide
+                let lookbackIndex = index - 1;
+                while (lookbackIndex >= 0) {
+                    const prevVal = sorted[lookbackIndex][key];
+                    if (prevVal) {
+                        // @ts-ignore : On force le type number car on sait qu'on a trouvé une valeur
+                        cleanItem[key] = prevVal; 
+                        break;
+                    }
+                    lookbackIndex--;
+                }
+            }
+        });
+        return cleanItem;
+    });
+
+    // C. Préparation des bornes temporelles
     const now = new Date();
-    // On met 'now' à minuit pour comparer proprement
     now.setHours(0,0,0,0); 
     
     const cutoff = new Date(now);
     cutoff.setDate(cutoff.getDate() - range);
 
-    // On ne garde que les points sources dans la plage (plus un tampon avant pour l'interpolation)
-    const relevantData = sorted.filter(d => new Date(d.date_calculated).getTime() >= cutoff.getTime() - (86400000 * 30));
+    // On ne garde que les points sources dans la plage (+ tampon)
+    const relevantData = sanitizedData.filter(d => new Date(d.date_calculated).getTime() >= cutoff.getTime() - (86400000 * 30));
 
     if (relevantData.length === 0) return [];
 
-    // 3. Génération jour par jour
+    // D. Génération jour par jour (Interpolation)
     const filledData: any[] = [];
     const startDate = new Date(relevantData[0].date_calculated);
-    const endDate = now; // On va jusqu'à aujourd'hui !
+    const endDate = now;
 
-    let currentPointer = 0; // Pointeur dans le tableau relevantData
+    let currentPointer = 0;
 
-    // Boucle sur chaque jour du premier jour à aujourd'hui
     for (let d = new Date(startDate); d <= endDate; d.setDate(d.getDate() + 1)) {
         const time = d.getTime();
         
-        // Trouver les points "réels" qui encadrent ce jour
-        // On avance le pointeur si besoin
         while (currentPointer < relevantData.length - 1 && new Date(relevantData[currentPointer + 1].date_calculated).getTime() <= time) {
             currentPointer++;
         }
@@ -98,28 +119,30 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
             const progress = (time - tStart) / (tEnd - tStart);
 
             METRICS.forEach(m => {
+                // Ici, valStart et valEnd sont garantis non-null grâce au Data Healing étape B
                 const valStart = (prevPoint[m.id as keyof FitnessHistoryItem] as number) || 0;
                 const valEnd = (nextPoint[m.id as keyof FitnessHistoryItem] as number) || 0;
-                // Interpolation linéaire simple
-                dayItem[m.id] = Math.round(valStart + (valEnd - valStart) * progress);
+                
+                // Si l'une des valeurs est 0 malgré le healing, on évite l'interpolation vers 0
+                if (valStart > 0 && valEnd > 0) {
+                    dayItem[m.id] = Math.round(valStart + (valEnd - valStart) * progress);
+                } else {
+                    dayItem[m.id] = valStart || valEnd; // Fallback sécurisé
+                }
             });
         }
-        // CAS 3: Projection future (Décroissance depuis la dernière activité)
+        // CAS 3: Projection future (Décroissance)
         else {
             dayItem.isProjected = true;
             const daysSinceLast = (time - new Date(prevPoint.date_calculated).getTime()) / (1000 * 3600 * 24);
             
             METRICS.forEach(m => {
                 const lastVal = (prevPoint[m.id as keyof FitnessHistoryItem] as number) || 0;
-                // Formule de décroissance simplifiée (Linéaire capée comme le moteur)
-                // Attention : Le moteur utilise une décroissance relative à la durée. 
-                // Ici on simule visuellement la perte journalière.
                 const decayAmount = lastVal * DAILY_DECAY * daysSinceLast;
                 dayItem[m.id] = Math.round(Math.max(0, lastVal - decayAmount));
             });
         }
         
-        // On ajoute le point si on est dans la plage demandée par l'utilisateur
         if (time >= cutoff.getTime()) {
             filledData.push(dayItem);
         }
@@ -163,6 +186,9 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
           
           {payload.map((p: any) => {
             const metricConfig = METRICS.find(m => m.id === p.dataKey);
+            // On ne montre pas si valeur est 0 (bug graphique évité)
+            if (!p.value) return null;
+
             return (
               <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1.5rem', marginBottom: '0.4rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -213,7 +239,7 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
         </div>
       </div>
 
-      {/* METRICS */}
+      {/* METRICS TOGGLE */}
       <div style={{ display: 'flex', gap: '0.8rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
         {METRICS.map(m => (
           <button
@@ -250,7 +276,7 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
               dataKey="timestamp" 
               type="number"
               scale="time"
-              domain={['dataMin', 'dataMax']} // Auto-scale
+              domain={['dataMin', 'dataMax']} 
               stroke="var(--text-secondary)" 
               tickFormatter={dateFormatter}
               tick={{ fontSize: 11, fill: '#888' }} 
@@ -266,9 +292,6 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
 
             <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.2)', strokeWidth: 1 }} />
 
-            {/* Zone de projection future (optionnel, pour griser le futur) */}
-            {/* Vous pourriez ajouter un ReferenceArea ici si vous vouliez marquer la zone "estimée" */}
-
             {METRICS.map(m => (
               activeMetrics.includes(m.id) && (
                 <Line
@@ -278,9 +301,11 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
                   dataKey={m.id}
                   stroke={m.color}
                   strokeWidth={2.5}
-                  dot={false} // Pas de points visibles, sauf au survol
+                  dot={false} 
                   activeDot={{ r: 6, strokeWidth: 0, fill: m.color }}
                   animationDuration={500}
+                  // Astuce : connectNulls aide aussi si le data healing en a raté un
+                  connectNulls={true} 
                 />
               )
             ))}
