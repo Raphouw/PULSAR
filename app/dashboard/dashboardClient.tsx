@@ -15,6 +15,7 @@ import { PowerModelChart } from './PowerModelChart';
 import { useAnalysis } from '../context/AnalysisContext'; 
 import NewRecordModal from './NewRecordModal';
 import { useBackfill } from '../context/BackfillContext';
+import { FitnessEvolutionChart } from './FitnessEvolutionChart';
 
 // --- Constantes et Helpers ---
 const REFRESH_COOLDOWN_MS = 60 * 1000; // 1 minute
@@ -45,6 +46,20 @@ export interface ActivityCardData {
   tss: number | null;
   polyline: { polyline: string } | null;
   np_w: number | null;
+}
+
+export interface graphdata{
+id:number;
+user_id:number;
+date_calculated:string;
+ftp_value:number | null;
+w_prime_value:number | null;
+cp3_value:number | null;
+cp12_value:number | null;
+vo2max_value:number | null;
+tte_value:number | null;
+model_cp3:number | null;
+model_cp12:number | null;
 }
 
 // --- HEADER SECTION (Nettoyé) ---
@@ -417,7 +432,7 @@ const specialBadgesMap: Map<string, Badge> = new Map([
   ['tss', { label: 'Tu stresses ?', color: '#7c3aed', icon: '💪', category: 'special' }],
 ]);
 
-type TabType = 'overview' | 'stats';
+type TabType = 'overview' | 'stats' | 'graph';
 
 const TabButton = ({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode; }) => {
   const [isHovered, setIsHovered] = useState(false);
@@ -608,6 +623,8 @@ export default function DashboardClient({ data, session: serverSession, hasStrav
     <div style={tabContainerStyle}>
       <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}>Vue d'ensemble</TabButton>
       <TabButton active={activeTab === 'stats'} onClick={() => setActiveTab('stats')}>Statistiques complètes</TabButton>
+      <TabButton active={activeTab === 'graph'} onClick={() => setActiveTab('graph')}>Graphiques</TabButton>
+
     </div>
 
     <div style={{ padding: '0 1.5rem' }}>
@@ -680,6 +697,9 @@ export default function DashboardClient({ data, session: serverSession, hasStrav
         </div>
       )}
 
+
+
+
       {activeTab === 'stats' && (
         <div>
           <h2 style={{...sectionTitleStyle, marginTop: '2rem'}}>7 Jours</h2>
@@ -725,6 +745,20 @@ export default function DashboardClient({ data, session: serverSession, hasStrav
             <StatCard title="Régularité (30j)" value={score30j_val} unit="%" comparison={score30j_comp} />
             <StatCard title="Régularité (90j)" value={score90j_val} unit="%" comparison={score90j_comp} />
           </div>
+        </div>
+      )}
+
+
+      {activeTab === 'graph' && (
+        <div style={{ marginTop: '2rem' }}>
+          
+          {/* GRAPHIQUE D'ÉVOLUTION PHYSIO */}
+          <div style={{ marginBottom: '2rem' }}>
+             <FitnessEvolutionChart data={data.fitnessHistory} />
+          </div>
+
+         
+
         </div>
       )}
 

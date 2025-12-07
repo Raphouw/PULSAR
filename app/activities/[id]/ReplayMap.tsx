@@ -75,7 +75,7 @@ export default function ReplayMap({
             />
             <Polyline 
                 positions={polyline} 
-                color="#8b5cf6" // Violet clair pour le dessus
+                color="#8b5cf6" // Violet clair pour -le dessus
                 weight={3} 
                 opacity={0.8}
             />

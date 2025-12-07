@@ -34,14 +34,14 @@ function ActivityCard({ activity, specialBadges, onDelete }: { activity: Activit
   const getDistanceBadge = (distanceKm: number): Badge => {
     if (distanceKm < 50) return { label: 'Courte', color: '#00F5FF', category: 'distance' };
     if (distanceKm < 100) return { label: 'Moyenne', color: '#00FF8F', category: 'distance' };
-    if (distanceKm < 250 ) return { label: 'Longue', color: '#F8FF00', category: 'distance' };
+    if (distanceKm < 250 ) return { label: 'Longue', color: '#ff9d00ff', category: 'distance' };
     return { label: 'Ultra', color: '#FF00E0', category: 'distance' };
   };
 
   const getElevationBadge = (elevationM: number, distanceKm: number): Badge => {
     const elevationPerKm = distanceKm > 0 ? elevationM / distanceKm : 0;
     if (elevationPerKm < 10) return { label: 'Plate', color: '#00FFBF', category: 'elevation' };
-    if (elevationPerKm < 20) return { label: 'Accidentée', color: '#F7FF00', category: 'elevation' };
+    if (elevationPerKm < 20) return { label: 'Accidentée', color: '#ffa200ff', category: 'elevation' };
     return { label: 'Montagneuse', color: '#FF0066', category: 'elevation' };
   };
 

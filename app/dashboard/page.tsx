@@ -123,6 +123,7 @@ export type DashboardData = {
     curve: { duration: string; seconds: number; real: number | null; model: number }[];
   };
   fitnessData: { date: string; ctl: number; atl: number; tsb: number }[];
+  fitnessHistory: any[]; // ou typé proprement avec FitnessHistoryItem[]
 };
 
 function getEmptyDashboardData(): DashboardData {
@@ -145,7 +146,8 @@ function getEmptyDashboardData(): DashboardData {
     dailyTSS: [],
     recentActivities: [],
     powerModel: { metrics: { CP: 0, WPrime: 0 }, curve: [] },
-    fitnessData: []
+    fitnessData: [],
+    fitnessHistory: []
   };
 }
 
@@ -375,6 +377,13 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     const score90j = computePeriodScore(processedStats.last90, processedStats.prev90);
     const globalScore = (1*score7j + 1*scoreMonth + 4*score30j + 12*score90j) / 18;
 
+
+      const { data: graphdata } = await supabaseAdmin
+      .from("user_fitness_history")
+      .select(`id, user_id, date_calculated, ftp_value, w_prime_value, cp3_value, cp12_value, vo2max_value, tte_value, source_activity_id, model_cp3, model_cp12`)
+      .eq("user_id", userId)
+      .order("date_calculated", { ascending: false }); // On garde Descending pour la BDD, on triera en JS pour le graph
+
     return {
       allTimeStats,
       stats: processedStats,
@@ -383,7 +392,9 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
       dailyTSS,
       recentActivities: (recentActivitiesData as RecentActivity[]) || [],
       powerModel: { metrics: { CP, WPrime }, curve: powerCurveData },
-      fitnessData
+      fitnessData,
+      // 👇 IMPORTANT : C'est ici qu'on passe les données au client !
+      fitnessHistory: graphdata || []
     };
 
   } catch (error) {
