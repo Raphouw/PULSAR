@@ -279,7 +279,7 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
                   stroke={m.color}
                   strokeWidth={2.5}
                   dot={false} // Pas de points visibles, sauf au survol
-                  activeDot={{ r: 6, strokeWidth: 0, fill: m.color, boxShadow: `0 0 10px ${m.color}` }}
+                  activeDot={{ r: 6, strokeWidth: 0, fill: m.color }}
                   animationDuration={500}
                 />
               )
