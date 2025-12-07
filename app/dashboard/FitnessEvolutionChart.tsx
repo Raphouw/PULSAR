@@ -62,7 +62,7 @@ export const FitnessEvolutionChart = ({ data }: { data: FitnessHistoryItem[] }) 
     if (relevantData.length === 0) return [];
 
     // 3. Génération jour par jour
-    const filledData = [];
+    const filledData: any[] = [];
     const startDate = new Date(relevantData[0].date_calculated);
     const endDate = now; // On va jusqu'à aujourd'hui !
 
