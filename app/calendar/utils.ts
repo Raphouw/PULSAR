@@ -116,6 +116,19 @@ export const createParticles = (e: React.MouseEvent | DOMRect, effect: ShopEffec
         sizeBase = 16; // Taille visible
     }
 
+    else if (effect.id === "elf_dust") {
+        physicsClass = "physic-float"; 
+        count = 4;
+        sizeBase = 5;
+        // On mélange rond et étoiles
+        particleText = Math.random() > 0.5 ? "✦" : ""; 
+    }
+    else if (effect.id === "snowball_splat") {
+        physicsClass = "physic-heavy"; 
+        count = 25; // Un peu plus de matière
+        sizeBase = 8; 
+    }
+
     // Ajoutez ces cas dans la fonction createParticles :
 
 else if (effect.id === "comet_trail") {
@@ -291,6 +304,22 @@ else if (effect.id === "tiny_herd_trail") {
            particle.style.opacity = "0.4";
            particle.style.color = "#fff"; // Toujours blanc fantome
        }
+       if (effect.id === "snowball_splat") {
+          const angle = Math.random() * Math.PI * 2;
+          // Vitesse beaucoup plus élevée (50 à 150px de projection)
+          const velocity = 50 + Math.random() * 100; 
+          
+          const tx = Math.cos(angle) * velocity;
+          const ty = Math.sin(angle) * velocity;
+          
+          particle.style.setProperty("--tx", `${tx}px`);
+          particle.style.setProperty("--ty", `${ty}px`);
+          
+          // Variation de taille plus extrême (gros morceaux et fine poudre)
+          const size = 3 + Math.random() * 8;
+          particle.style.width = `${size}px`;
+          particle.style.height = `${size}px`;
+      }
 
        if (effect.id === "tiny_herd_trail") {
             // Position légèrement aléatoire autour du curseur

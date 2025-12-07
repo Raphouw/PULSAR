@@ -51,56 +51,84 @@ export default function DayCard({
     const hasActivity = activities.length > 0;
     const color = getTssColor(totalTSS);
     
-    // Détection Virtual (Zwift/Indoor) pour le fond hachuré par défaut
+    // Détection Virtual (Zwift/Indoor)
     const isVirtual = activities.some(a => a.type === "VirtualRide" || a.type === "IndoorCycling" || a.type === "E-Bike Ride");
 
-    // 1. Analyse IA "Smart"
-    let smartStyle = getSmartCardStyle(activities);
-    if (isPreview && forcedSmartStyle) {
-        smartStyle = forcedSmartStyle;
-    }
+    // =========================================================================
+    // 🔥 LOGIQUE DE PRIORITÉ ABSOLUE (LE FIX EST ICI)
+    // =========================================================================
     
-    // 2. Récupération des OBJETS effets
-    const frameEffect = SHOP_EFFECTS.find(e => e.id === loadout.FRAME);
-    const hoverEffect = SHOP_EFFECTS.find(e => e.id === loadout.HOVER);
-    const todayEffect = SHOP_EFFECTS.find(e => e.id === loadout.TODAY); 
-    const clickEffect = SHOP_EFFECTS.find(e => e.id === loadout.INTERACTION);
-    const ambianceEffect = loadout.AMBIANCE;
-    const auraEffect = SHOP_EFFECTS.find(e => e.id === loadout.AURA); // 🔥 NOUVEAU
+    // 1. Est-ce qu'on a un effet "TODAY" actif sur cette case ?
+    const activeTodayId = isToday ? loadout.TODAY : null;
 
-    // 3. Construction des styles via l'utilitaire
+    // 2. Si OUI, on force les autres slots visuels à NULL pour ne pas polluer
+    // On garde INTERACTION (clic) et TRAIL (souris) car ils ne changent pas le look statique
+    const frameId    = activeTodayId ? null : loadout.FRAME;
+    const hoverId    = activeTodayId ? null : loadout.HOVER;
+    const ambianceId = activeTodayId ? null : loadout.AMBIANCE;
+    const auraId     = activeTodayId ? null : loadout.AURA;
+
+    // =========================================================================
+
+    // 3. Récupération des OBJETS effets (basée sur les IDs filtrés)
+    const frameEffect = SHOP_EFFECTS.find(e => e.id === frameId);
+    const hoverEffect = SHOP_EFFECTS.find(e => e.id === hoverId);
+    const todayEffect = SHOP_EFFECTS.find(e => e.id === activeTodayId); 
+    const clickEffect = SHOP_EFFECTS.find(e => e.id === loadout.INTERACTION); // On garde toujours le clic
+    const auraEffect  = SHOP_EFFECTS.find(e => e.id === auraId); 
+    
+    // Pour l'ambiance, on utilise la variable filtrée
+    const ambianceEffect = ambianceId; 
+
+    // 4. Analyse IA "Smart" (Désactivée si Today est prioritaire)
+    let smartStyle = getSmartCardStyle(activities);
+    if (activeTodayId) smartStyle = null; // Force null si Today actif
+    else if (isPreview && forcedSmartStyle) smartStyle = forcedSmartStyle;
+    
+    // 5. Construction des styles
     const slotStyles = {
         frame: frameEffect?.cssClass,
         hover: hoverEffect?.cssClass,
-        smart: (loadout.AMBIANCE === "smart_analysis") ? smartStyle?.class : null,
+        smart: (ambianceEffect === "smart_analysis") ? smartStyle?.class : null,
         today: todayEffect?.cssClass,
         ambiance: null 
     };
 
     let dynamicClasses = resolveCardClass(hasActivity, isToday, slotStyles);
-    let innerBgClasses = ""; // Pour le fond clippé
+    let innerBgClasses = ""; 
 
-    // GESTION SPECIALE KING (On sépare les couches)
-    if (isToday && loadout.TODAY === "king_road") {
-        // 1. Le parent gère la bordure et la couronne (qui dépasse)
+    // GESTION SPECIALE KING & CHIMNEY (Today Effects)
+    if (isToday && activeTodayId === "king_road") {
         dynamicClasses += " today-king-container"; 
-        // 2. L'enfant gère le fond noir et les rayons (qui sont coupés)
         innerBgClasses = "today-king-bg"; 
+    }
+    // 🔥 AJOUT : Gestion Cheminée (Today)
+    if (isToday && activeTodayId === "santa_chimney") {
+        // La classe est déjà appliquée via slotStyles.today, mais si tu as besoin
+        // d'un background interne spécifique (ex: pour le feu derrière le texte), c'est ici.
+        // Pour l'instant, ton CSS today-chimney gère tout sur le parent, donc c'est bon.
     }
 
     if ((hasActivity || isPreview) && auraEffect?.cssClass) {
         dynamicClasses += ` ${auraEffect.cssClass}`;
     }
 
-    // GESTION SPECIALE SYNTHWAVE & PAVÉS (On met tout dans le fond clippé)
-    if (hasActivity || isPreview) {
+    // GESTION SPECIALE AMBIANCES (Seulement si ambianceEffect n'est pas null)
+    if ((hasActivity || isPreview) && ambianceEffect) {
         if (ambianceEffect === "hell_north") innerBgClasses = "ambiance-paris-roubaix";
         if (ambianceEffect === "synthwave_grid") innerBgClasses = "ambiance-synthwave";
+        
+        // Silent Night sur le parent (corrigé précédemment)
+       if (ambianceEffect === "silent_night") {
+            innerBgClasses = "ambiance-silent-night"; // Visuels (Neige/Sapins) dans le fond
+            dynamicClasses += " theme-dark-mode";     // Texte blanc sur le parent
+        }
+        
         if (ambianceEffect === "forest_night") innerBgClasses = "ambiance-forest";
         if (ambianceEffect === "aurora_sky") innerBgClasses = "ambiance-aurora";
         if (ambianceEffect === "milky_way") innerBgClasses = "ambiance-milkyway";
         if (ambianceEffect === "counting_dreams") innerBgClasses = "ambiance-dreams";
-        // Pour les ambiances simples, on garde le comportement standard
+        
         if (ambianceEffect === "night_ride") dynamicClasses += " ambiance-night";
         if (ambianceEffect === "velodrome") dynamicClasses += " ambiance-velodrome";
     }
@@ -117,16 +145,14 @@ export default function DayCard({
         if (clickEffect?.id === "shatter") dynamicClasses += " anim-shatter";
     }
     
-    if ((hasActivity || isPreview) && loadout.HOVER === "flashlight") dynamicClasses += " stealth-mode";
+    if ((hasActivity || isPreview) && hoverId === "flashlight") dynamicClasses += " stealth-mode";
     if (overrideClasses) dynamicClasses += ` ${overrideClasses}`;
 
-    // 4. Styles Inline du Background
-    // Par défaut : Dégradé simple avec la couleur du TSS
+    // 6. Styles Inline du Background
     let backgroundStyle = (hasActivity || isPreview) 
         ? `linear-gradient(135deg, ${color}15 0%, ${color}05 100%)` 
         : "rgba(255, 255, 255, 0.02)";
 
-    // Si Virtuel : Motif Hachuré (Rayures 45°) avec la couleur du TSS
     if (isVirtual && (hasActivity || isPreview)) {
         backgroundStyle = `repeating-linear-gradient(
             -45deg,
@@ -151,10 +177,8 @@ export default function DayCard({
         flexDirection: "column",
         position: "relative",
         
-        // 🔥 LE FIX EST ICI :
-        // Si c'est le King, on autorise le dépassement (pour la couronne).
-        // Sinon, on clip tout (pour que ce soit propre).
-        overflow: (isToday && loadout.TODAY === "king_road") ? "visible" : "hidden",
+        // Si c'est le King ou d'autres effets Today qui dépassent, on laisse visible
+        overflow: (isToday && (activeTodayId === "king_road")) ? "visible" : "hidden",
         
         zIndex: isPreview ? 2 : 1,
         cursor: "pointer",
@@ -164,27 +188,24 @@ export default function DayCard({
         ...overrideStyles
     };
     
-    // Gère le calque interne pour les ambiances qui doivent être coupées (Rayons, Grilles)
-    // On ajoute une div interne pour ça
     let innerLayerClass = "";
-    if (isToday && loadout.TODAY === "king_road") innerLayerClass = "today-king-bg";
+    if (isToday && activeTodayId === "king_road") innerLayerClass = "today-king-bg";
     if ((hasActivity || isPreview) && ambianceEffect === "synthwave_grid") innerLayerClass = "ambiance-synthwave"; 
-    // Note: Pour synthwave, on l'applique à l'intérieur pour le clipping, mais on garde la classe externe pour la bordure si besoin
 
-    if (loadout.AMBIANCE === "smart_analysis" && smartStyle?.variable) {
+    if (ambianceEffect === "smart_analysis" && smartStyle?.variable) {
         Object.assign(finalStyle, smartStyle.variable);
     }
 
     // Fix Réacteur Today
-    if (isToday && loadout.TODAY === "reactor_today") {
+    if (isToday && activeTodayId === "reactor_today") {
         finalStyle.background = 'transparent'; 
         finalStyle.borderColor = 'transparent';
         finalStyle.borderWidth = '0px';
     }
 
-    // Pulse
+    // Pulse (Seulement si Frame est active, donc pas si Today est actif)
     let pulseBpm: number | null = null;
-    const isPulseEquipped = loadout.FRAME === "pulse";
+    const isPulseEquipped = frameId === "pulse";
     
     if ((hasActivity || isPreview) && isPulseEquipped) {
         const avgBpm = isPreview ? (mockWeather?.bpm || 140) : (activities[0]?.avg_heartrate || 0);
@@ -202,30 +223,24 @@ export default function DayCard({
     }
 
     const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-        // Gestion Flashlight (Existant)
-        if (loadout.HOVER === "flashlight" && (hasActivity || isPreview)) {
+        if (hoverId === "flashlight" && (hasActivity || isPreview)) {
             const rect = e.currentTarget.getBoundingClientRect();
             e.currentTarget.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
             e.currentTarget.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
         }
 
-        // 1. Gestion des TRAILs classiques (Existant)
-        const trailId = loadout.TRAIL;
+        const trailId = loadout.TRAIL; // Le trail n'est pas filtré, on le garde toujours
         if (trailId && (hasActivity || isPreview) && Math.random() > 0.3) {
             const effect = SHOP_EFFECTS.find(ef => ef.id === trailId);
             createParticles(e, effect || null, "hover");
         }
-
-        // 2. 🔥 FIX SAKURA : Gestion du HOVER qui fait des particules
-        // On déclenche manuellement les particules si le HOVER est "sakura_wind"
-       
     };
 
     const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
          const target = e.currentTarget;
-         if (loadout.HOVER !== "jelly_hover") target.style.transform = "translateY(-2px)";
+         if (hoverId !== "jelly_hover") target.style.transform = "translateY(-2px)";
          
-         const effectId = loadout.HOVER;
+         const effectId = hoverId;
          if ((hasActivity || isPreview) && effectId && effectId !== "flashlight") {
              const effect = SHOP_EFFECTS.find(ef => ef.id === effectId);
              createParticles(e, effect || null, "hover");
@@ -233,7 +248,7 @@ export default function DayCard({
     };
 
     const handleMouseLeave = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (loadout.HOVER !== "jelly_hover") e.currentTarget.style.transform = "translateY(0)";
+        if (hoverId !== "jelly_hover") e.currentTarget.style.transform = "translateY(0)";
     };
 
     const streakConfig = getStreakConfig(streakIndex);
@@ -248,15 +263,13 @@ export default function DayCard({
             onMouseLeave={handleMouseLeave}
             onClick={(e) => onClick && onClick(e, hasActivity || isPreview)}
         >
-            {/* CALQUE INTERNE POUR LES EFFETS QUI DOIVENT ETRE COUPÉS (Overflow Hidden) */}
             {innerLayerClass && (
                 <div className={innerLayerClass} style={{position:'absolute', inset:0, borderRadius:'6px', zIndex:-1, pointerEvents:'none'}}></div>
             )}
 
-            {/* MOUTONS SAUTEURS pour l'ambiance counting_dreams */}
+            {/* MOUTONS SAUTEURS (Seulement si ambiance active) */}
             {(ambianceEffect === "counting_dreams" && (hasActivity || isPreview)) && (
                 <>
-                    {/* On réajuste légèrement l'animation-delay pour un meilleur flux avec les nouvelles keyframes */}
                     <div className="sheep-jumper" style={{ animationDelay: '0s' }}>🐑</div>
                     <div className="sheep-jumper" style={{ animationDelay: '3s' }}>🐑</div>
                     <div className="sheep-jumper" style={{ animationDelay: '6s' }}>🐑</div>
@@ -265,13 +278,10 @@ export default function DayCard({
             )}
 
             {innerLayerClass && (
-                <div className={innerLayerClass} style={{ /* styles inchangés */ }}>
-                    {/* SI CIEL POLAIRE : Ajout de l'étoile filante */}
+                <div className={innerLayerClass}>
                     {ambianceEffect === "aurora_sky" && <div className="shooting-star"></div>}
                 </div>
             )}
-
-         
 
             {!isPreview && showConnector && streakConfig && <div className={streakConfig.className} />}
             
@@ -301,8 +311,8 @@ export default function DayCard({
                 <div className={innerBgClasses} style={{
                     position:'absolute', 
                     inset: 0, 
-                    borderRadius: '7px', // Un poil moins que le parent (8px) pour pas dépasser de la bordure
-                    overflow: 'hidden', // C'est lui qui coupe les rayons !
+                    borderRadius: '7px',
+                    overflow: 'hidden', 
                     zIndex: -1, 
                     pointerEvents:'none'
                 }}></div>
@@ -327,7 +337,7 @@ export default function DayCard({
                     )
                 ))}
                 
-                {isPreview && loadout.AMBIANCE === "smart_analysis" && smartStyle?.label && (
+                {isPreview && ambianceEffect === "smart_analysis" && smartStyle?.label && (
                     <div style={{
                         marginTop:'auto', textAlign:'center', fontSize:'0.7rem', fontWeight:800, 
                         color:'#fff', textShadow:'0 0 4px rgba(0,0,0,1)', background:'rgba(0,0,0,0.4)',
@@ -338,7 +348,7 @@ export default function DayCard({
                 )}
             </div>
 
-            {(loadout.AMBIANCE === "weather_dynamic") && (
+            {(ambianceEffect === "weather_dynamic") && (
                 <div style={{position:'absolute', bottom:4, left:4, zIndex: 10}}>
                     {isPreview && mockWeather ? (
                          <ActivityWeatherIcon 

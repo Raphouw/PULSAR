@@ -80,6 +80,7 @@ export const SHOP_EFFECTS: ShopEffect[] = [
   { id: "reindeer_trail", slot: "TRAIL", name: "Traîneau du Père Noël", description: "Traînée avec empreintes de rennes.", price: 350, preview: "🦌", colors: ["#8B4513", "#D2691E"], requiresActivity: true },
   { id: "magic_dust", slot: "TRAIL", name: "Poussière d'Étoile", description: "La magie de Noël suit votre souris.", price: 400, preview: "✨", colors: ["#ffd700", "#ff0000", "#fff"], requiresActivity: true },
   { id: "power_up_trail", slot: "TRAIL", name: "Power Ups", description: "Plume, Van et Aéro tombent de votre souris.", price: 600, preview: "🪶", colors: ["#0099ff", "#ff6600", "#cc00ff"], requiresActivity: false },
+  { id: "elf_dust", slot: "TRAIL", name: "Poussière d'Elfe", description: "Magie de Noël Rouge, Verte et Or.", price: 650, preview: "✨", colors: ["#ff0000", "#00ff00", "#ffd700"], requiresActivity: true },
   { id: "sakura_trail", slot: "TRAIL", name: "Sillage Sakura", description: "Des fleurs naissent sous votre souris.", price: 850, preview: "🍃", colors: ["#ffb7b2", "#ff69b4"], requiresActivity: true },
   { id: "comet_trail", slot: "TRAIL", name: "Comète", description: "Une vraie comète avec sa traînée.", price: 950, preview: "☄️", colors: ["#00ffff", "#ffffff"], requiresActivity: false },
   { id: "tiny_herd_trail", slot: "TRAIL", name: "Troupeau Galopant", description: "File de moutons avec animations individuelles", price: 1200, preview: "🐑🐑🐑", colors: ["#ffffff"], requiresActivity: true },
@@ -90,6 +91,7 @@ export const SHOP_EFFECTS: ShopEffect[] = [
   { id: "camera_flash", slot: "INTERACTION", name: "Photo Finish", description: "Flash aveuglant de la victoire.", price: 500, preview: "📸", colors: ["#fff"], cssClass: "anim-flash", requiresActivity: true },
   { id: "bell_ring", slot: "INTERACTION", name: "Sonnette", description: "Son de sonnette + onde sonore.", price: 750, preview: "🔔", colors: ["#ffd700"], cssClass: "anim-bell", requiresActivity: true },
   { id: "boing_click", slot: "INTERACTION", name: "Super Rebond", description: "Effet élastique ultra-dynamique", price: 800, preview: "🏈", colors: ["#ffffff"], cssClass: "anim-boing", requiresActivity: true },
+  { id: "snowball_splat", slot: "INTERACTION", name: "Boule de Neige", description: "Impact froid et satisfaisant.", price: 850, preview: "❄️", colors: ["#ffffff", "#e0f7fa"], cssClass: "anim-snowball", requiresActivity: true },
   { id: "polar_click", slot: "INTERACTION", name: "Onde Polaire", description: "Choc thermique.", price: 950, preview: "❄️", colors: ["#00ffcc"], cssClass: "anim-polar", requiresActivity: true },
   { id: "confetti", slot: "INTERACTION", name: "Fête", description: "Canon à confettis.", price: 1000, preview: "🎉", colors: ["#d04fd7", "#00f3ff", "#ffd700", "#ef4444"], requiresActivity: true },
   { id: "warp_click", slot: "INTERACTION", name: "Warp Speed", description: "Passage en hyperespace.", price: 1200, preview: "🚀", colors: ["#fff"], cssClass: "anim-warp", requiresActivity: true },
@@ -107,6 +109,7 @@ export const SHOP_EFFECTS: ShopEffect[] = [
   { id: "wind_effect", slot: "HOVER", name: "Effet Vent", description: "Rafales de vent au survol.", price: 600, preview: "💨", colors: ["#a5f3fc"], cssClass: "effect-wind", requiresActivity: true },
   { id: "jelly_hover", slot: "HOVER", name: "Jelly", description: "Texture gélatineuse au survol.", price: 800, preview: "🍮", colors: ["#d04fd7"], cssClass: "effect-rubber", requiresActivity: true },
   { id: "draft_effect", slot: "HOVER", name: "Effet d'Aspiration", description: "Simulation d'aspiration dans la roue.", price: 1000, preview: "🌀", colors: ["#333", "#666"], cssClass: "effect-draft", requiresActivity: true },
+  { id: "gift_unwrap", slot: "HOVER", name: "Papier Cadeau", description: "Déballez vos performances.", price: 1200, preview: "🎀", colors: ["#d04fd7"], cssClass: "hover-gift", requiresActivity: true },
   { id: "nebula_hover", slot: "HOVER", name: "Nébuleuse", description: "Gaz interstellaire vivant au survol.", price: 1400, preview: "🌫️", colors: ["#8b5cf6", "#00c8ff"], cssClass: "hover-nebula", requiresActivity: true },
   { id: "carbon_hover", slot: "HOVER", name: "Full Carbon", description: "Texture fibre de carbone tressée au survol.", price: 1800, preview: "🏁", colors: ["#222"], cssClass: "hover-carbon", requiresActivity: true },
   { id: "flashlight", slot: "HOVER", name: "Lampe Torche", description: "Révélez les détails dans le noir.", price: 2000, preview: "🔦", colors: ["#fff"], cssClass: "stealth-mode", requiresActivity: true },
@@ -122,6 +125,7 @@ export const SHOP_EFFECTS: ShopEffect[] = [
   { id: "wooly_frame", slot: "FRAME", name: "Laine Vierge", description: "Bordure ultra-douce avec flocons de laine", price: 900, preview: "☁️", colors: ["#f8f8ff"], cssClass: "frame-wooly", requiresActivity: true },
   { id: "forest_frame", slot: "FRAME", name: "Racines", description: "Cadre en bois vivant.", price: 1000, preview: "🪵", colors: ["#3e2723", "#1b5e20"], cssClass: "frame-forest", requiresActivity: true },
   { id: "chain_link", slot: "FRAME", name: "Chaîne de Vélo", description: "Bordure en maillons de chaîne animés.", price: 1400, preview: "⛓️", colors: ["#aaa", "#ddd"], cssClass: "effect-chain", requiresActivity: true },
+  { id: "frozen_peak", slot: "FRAME", name: "Pic Givré", description: "Cadre de glace éternelle.", price: 1500, preview: "🧊", colors: ["#a5f3fc"], cssClass: "frame-frozen", requiresActivity: true },
   { id: "carbon_fiber", slot: "FRAME", name: "Fibre de Carbone", description: "Texture haut de gamme comme les cadres pros.", price: 2000, preview: "🏍️", colors: ["#222", "#444"], cssClass: "frame-carbon", requiresActivity: true },
   { id: "neon_frame", slot: "FRAME", name: "Cadre Néon", description: "Bordure lumineuse cybernétique.", price: 2200, preview: "🟣", colors: ["#d04fd7", "#00f3ff"], cssClass: "effect-neon", requiresActivity: true },
   { id: "sakura_frame", slot: "FRAME", name: "Hanami", description: "Cadre rose pâle apaisant.", price: 2500, preview: "🌸", colors: ["#ffb7b2"], cssClass: "frame-sakura", requiresActivity: true },
@@ -136,6 +140,7 @@ export const SHOP_EFFECTS: ShopEffect[] = [
   { id: "snow_globe", slot: "TODAY", name: "Boule à Neige", description: "Transforme le jour J en sphère hivernale.", price: 900, preview: "🔮", colors: ["#fff", "#a5f3fc"], cssClass: "today-snowglobe", requiresActivity: false },
   { id: "gift_today", slot: "TODAY", name: "Cadeau du Jour", description: "Case spéciale avec ruban cadeau.", price: 1500, preview: "🎁", colors: ["#ff0000", "#00ff00"], cssClass: "today-gift", requiresActivity: false },
   { id: "start_line", slot: "TODAY", name: "Ligne de Départ", description: "Transforme la case en départ de course.", price: 1800, preview: "🏁", colors: ["#00ff00"], cssClass: "today-start", requiresActivity: false },
+  { id: "santa_chimney", slot: "TODAY", name: "La Cheminée", description: "Un foyer chaleureux pour le jour J.", price: 2500, preview: "🔥", colors: ["#ff4500"], cssClass: "today-chimney", requiresActivity: false },
   { id: "reactor_today", slot: "TODAY", name: "Réacteur ARC", description: "Transforme la case d'aujourd'hui.", price: 4000, preview: "☢️", colors: ["#00f3ff"], cssClass: "today-reactor", requiresActivity: false },
   { id: "yellow_jersey", slot: "TODAY", name: "Maillot Jaune", description: "L'aura du leader sur la case du jour.", price: 6000, preview: "💛", colors: ["#ffd700"], cssClass: "today-yellow", requiresActivity: false },
   { id: "golden_fleece_today", slot: "TODAY", name: "Toison d'Or Royale", description: "Mouton doré avec couronne et paillettes", price: 8000, preview: "🐑", colors: ["#ffd700"], cssClass: "today-golden-fleece", requiresActivity: false },
@@ -146,6 +151,7 @@ export const SHOP_EFFECTS: ShopEffect[] = [
   { id: "hell_north", slot: "AMBIANCE", name: "L'Enfer du Nord", description: "Pavés légendaires, boue et gloire.", price: 2000, preview: "🪨", colors: ["#333", "#555"], cssClass: "ambiance-paris-roubaix", requiresActivity: true },
   { id: "night_ride", slot: "AMBIANCE", name: "Nocturne", description: "Mode nuit avec éclairage de vélo.", price: 2200, preview: "🌙", colors: ["#000", "#1a1a2e"], requiresActivity: true },
   { id: "forest_night", slot: "AMBIANCE", name: "Nuit en Forêt", description: "Obscurité et lucioles.", price: 3000, preview: "🌲", colors: ["#051005"], cssClass: "ambiance-forest", requiresActivity: true },
+  { id: "silent_night", slot: "AMBIANCE", name: "Douce Nuit", description: "Sapins et neige silencieuse.", price: 3500, preview: "🌲", colors: ["#0f172a"], cssClass: "ambiance-silent-night", requiresActivity: true },
   { id: "smart_analysis", slot: "AMBIANCE", name: "Tactical Visor", description: "Analyse automatique (Grimpeur/Sprinteur).", price: 4000, preview: "🧠", colors: ["#ff4500", "#10b981", "#00f3ff"], requiresActivity: true },
   { id: "velodrome", slot: "AMBIANCE", name: "Vélodrome", description: "Ambiance de piste avec ligne de sprints.", price: 4500, preview: "🏟️", colors: ["#c0c0c0", "#333"], requiresActivity: true },
   { id: "weather_dynamic", slot: "AMBIANCE", name: "Météo Live", description: "Le fond change selon l'heure.", price: 5000, preview: "🌤️", colors: ["#87ceeb", "#1a1a2e"], requiresActivity: false },
@@ -156,6 +162,7 @@ export const SHOP_EFFECTS: ShopEffect[] = [
   
   // --- 7. AURA (Mythique) ---
   { id: "endurance_shield_aura", slot: "AURA", name: "Bouclier d'Endurance", description: "Aura dorée pour les sorties supérieures à 150 TSS.", price: 5000, preview: "🛡️", colors: ["#ffd700", "#ff8c00"], cssClass: "aura-endurance-shield", requiresActivity: true },
+  { id: "festive_lights_aura", slot: "AURA", name: "Esprit de Noël", description: "Guirlande lumineuse festive.", price: 6000, preview: "🎄", colors: ["#ff0000", "#00ff00"], cssClass: "aura-festive", requiresActivity: true },
   { id: "speed_warp_aura", slot: "AURA", name: "Warp Vitesse", description: "Halo de cyan pulsant récompensant la haute vitesse.", price: 7500, preview: "🚀", colors: ["#00f3ff", "#ffffff"], cssClass: "aura-speed-warp", requiresActivity: true },
   
   // --- 8. SPECIAL (Vide pour l'instant) ---
