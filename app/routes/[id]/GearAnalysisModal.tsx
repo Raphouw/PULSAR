@@ -287,8 +287,7 @@ export default function GearAnalysisModal({ isOpen, onClose, maxGradient, gradie
         const easiestRatio = chainring.small / currentCogs[currentCogs.length - 1];
         
         // Graphique
-        const chartData = [];
-        for (let g = 0; g <= 20; g+=0.5) {
+        const chartData: { grade: number; rpm: number; speed: string }[] = [];        for (let g = 0; g <= 20; g+=0.5) {
             const speedKmh = solveSpeed(powerTarget, totalWeight, g);
             const speedM_min = (speedKmh * 1000) / 60;
             const rpm = speedM_min / (2.10 * easiestRatio);
