@@ -16,8 +16,9 @@ interface ReportItem {
 }
 
 // État physiologique complet pour le tracking
+// NOTE : On track ici la FTP "Modélisée" par le moteur
 interface PhysioState {
-    ftp: number;
+    modeled_ftp: number;
     w_prime: number;
     cp3: number;
     cp12: number;
@@ -29,12 +30,15 @@ interface PhysioState {
 
 export async function GET(req: Request) {
   const startTime = Date.now();
-  console.log(`[Sequencer] 🚀 Démarrage Séquentiel (Smart Persistence V2)...`);
+  console.log(`[Sequencer] 🚀 Démarrage Séquentiel (Smart Persistence V2 - Dual FTP)...`);
 
   try {
+    // ⚠️ Assure-toi que les colonnes 'manual_ftp' et 'modeled_ftp' existent dans 'users'
+    // 'manual_ftp' : Saisie par l'user (prioritaire pour TSS/IF)
+    // 'modeled_ftp' : Calculée par l'engine (pour le suivi de forme)
     const { data: allUsers } = await supabaseAdmin
         .from('users')
-        .select('id, name, weight, ftp, w_prime, vo2max, TTE, CP3, CP12') // On charge tout le profil
+        .select('id, name, weight, ftp, modeled_ftp, w_prime, vo2max, TTE, CP3, CP12') 
         .order('id', { ascending: true });
 
     if (!allUsers) throw new Error("Aucun user trouvé");
@@ -53,7 +57,7 @@ export async function GET(req: Request) {
         // 1. Récupération du dernier état CONNU en base (History)
         const { data: lastHistory } = await supabaseAdmin
             .from('user_fitness_history')
-            .select('*') // On prend tout
+            .select('*') 
             .eq('user_id', user.id)
             .order('date_calculated', { ascending: false })
             .limit(1)
@@ -61,9 +65,9 @@ export async function GET(req: Request) {
 
         let lastDateISO = '2000-01-01T00:00:00.000Z';
         
-        // Initialisation de l'état courant (Priorité : History > User Profile > Defaults)
+        // Initialisation de l'état courant (Priorité : History > User Profile Modeled > Defaults)
         let currentState: PhysioState = {
-            ftp: lastHistory?.ftp_value ?? user.ftp ?? 200,
+            modeled_ftp: lastHistory?.ftp_value ?? user.modeled_ftp ?? 200,
             w_prime: lastHistory?.w_prime_value ?? user.w_prime ?? 20000,
             cp3: lastHistory?.cp3_value ?? user.CP3 ?? 0,
             cp12: lastHistory?.cp12_value ?? user.CP12 ?? 0,
@@ -129,25 +133,27 @@ export async function GET(req: Request) {
             }
 
             // C. ANALYSE & UPDATE
+            // 🔥 CRUCIAL : Pour le calcul TSS/IF, on utilise la Manual FTP si dispo, sinon la Modeled
+            const ftpForAnalysis = user.ftp || currentState.modeled_ftp;
+
             const result = await analyzeAndSaveActivity(
                 partialAct.id,
                 0, // eventId (non utilisé ici)
                 streams,
                 user.weight || 75,
-                currentState.ftp
+                ftpForAnalysis // <--- C'est ici qu'on évite le biais
             );
 
             if (result.success && result.fitnessUpdate?.success) {
                 // MISE À JOUR DE L'ÉTAT COURANT
                 const up = result.fitnessUpdate;
                 
-                // On met à jour l'objet d'état avec les nouvelles valeurs (ou on garde les anciennes si undefined)
+                // On met à jour l'objet d'état avec les nouvelles valeurs MODÉLISÉES
                 currentState = {
-                    ftp: up.newFtp ?? currentState.ftp,
+                    modeled_ftp: up.newFtp ?? currentState.modeled_ftp, // Le moteur renvoie la nouvelle modeled_ftp
                     w_prime: up.newWPrime ?? currentState.w_prime,
                     cp3: up.newCp3 ?? currentState.cp3,
                     cp12: up.newCp12 ?? currentState.cp12,
-                    // Si l'engine ne renvoie pas les modèles brutes, on garde les anciens ou on estime
                     model_cp3: up.newCp3 ?? currentState.model_cp3, 
                     model_cp12: up.newCp12 ?? currentState.model_cp12,
                     vo2max: up.newVo2Max ?? currentState.vo2max,
@@ -155,7 +161,7 @@ export async function GET(req: Request) {
                 };
 
                 const dateStr = new Date(partialAct.start_time).toLocaleDateString();
-                logs.push(`✅ [${dateStr}] FTP -> ${currentState.ftp}W`);
+                logs.push(`✅ [${dateStr}] Modeled FTP -> ${currentState.modeled_ftp}W (Calc sur base ${ftpForAnalysis}W)`);
             } else {
                 const reason = result.fitnessUpdate?.message || "Erreur interne";
                 // En cas d'échec calcul, on propage l'ancien état pour ne pas casser la timeline
@@ -190,14 +196,13 @@ export async function GET(req: Request) {
 }
 
 // Helper pour insérer l'historique "Skip" en conservant TOUTES les valeurs précédentes
-// C'est ça qui empêche les trous (NULLs) dans la base
 async function recordHistorySkip(userId: number | string, actId: number, dateISO: string, state: PhysioState) {
     await supabaseAdmin.from('user_fitness_history').insert({
         user_id: userId,
         date_calculated: dateISO,
         source_activity_id: actId,
         // On copie tout l'état
-        ftp_value: state.ftp, 
+        ftp_value: state.modeled_ftp, // On sauve la modeled_ftp dans l'historique
         w_prime_value: state.w_prime,
         cp3_value: state.cp3,
         cp12_value: state.cp12,

@@ -253,9 +253,11 @@ export async function updateUserFitnessProfile(
     }
 
     // 1. Context User
+    // NOTE: On récupère 'modeled_ftp' au lieu de 'ftp'
     const { data: userProfile, error: userError } = await supabaseAdmin
         .from('users')
-        .select('weight, ftp, w_prime')
+        // On suppose que la colonne 'ftp' est renommée en 'modeled_ftp' dans la BDD pour le tracking du moteur
+        .select('weight, modeled_ftp, w_prime, manual_ftp') 
         .eq('id', userId)
         .single();
 
@@ -266,14 +268,16 @@ export async function updateUserFitnessProfile(
     // Récupérer Historique Précédent (Avec les anciens records modèles)
     const { data: lastHistory } = await supabaseAdmin
       .from('user_fitness_history')
-      .select('ftp_value, w_prime_value, date_calculated, model_cp3, model_cp12')
+      // NOTE: Le moteur utilise 'ftp_value' qui correspond à l'ancienne 'ftp' / nouvelle 'modeled_ftp'
+      .select('ftp_value, w_prime_value, date_calculated, model_cp3, model_cp12') 
       .eq('user_id', userId)
       .lt('date_calculated', activityDateISO)
       .order('date_calculated', { ascending: false })
       .limit(1)
       .maybeSingle();
 
-    let prevFtp = lastHistory?.ftp_value || userProfile.ftp || 200;
+    // NOTE: On utilise 'modeled_ftp' du profil utilisateur comme base si pas d'historique
+    let prevModeledFtp = lastHistory?.ftp_value || userProfile.modeled_ftp || 200; 
     let prevWPrime = lastHistory?.w_prime_value || userProfile.w_prime || 20000;
     const prevModelCp12 = lastHistory?.model_cp12 || 0;
     const prevModelCp3 = lastHistory?.model_cp3 || 0;
@@ -286,6 +290,7 @@ export async function updateUserFitnessProfile(
     }
 
     // 2. INPUTS MODÈLE (Best 60j)
+    // ... (Reste de la récupération des records non modifié)
     const bestP3 = await fetchBestRawRecord(userId, 'CP3', activityDateISO, PERFORMANCE_WINDOW_DAYS);
     const bestP5 = await fetchBestRawRecord(userId, 'CP5', activityDateISO, PERFORMANCE_WINDOW_DAYS); 
     const bestP12 = await fetchBestRawRecord(userId, 'CP12', activityDateISO, PERFORMANCE_WINDOW_DAYS);
@@ -295,6 +300,7 @@ export async function updateUserFitnessProfile(
     }
 
     // 3. INPUTS ACTIVITÉ (peaks spécifiques à l'activité)
+    // ... (Reste de la récupération des pics non modifié)
     let activityPeaks = { cp3: 0, cp12: 0 };
     if (sourceActivityId) {
         activityPeaks = await fetchActivitySpecificPeaks(sourceActivityId);
@@ -303,8 +309,6 @@ export async function updateUserFitnessProfile(
     // -------------------------
     // 4. SMOOTHING DES RECORDS
     // -------------------------
-    // On applique un léger EMA entre l'ancien modèle (prevModelCpX) et la nouvelle "best" trouvée.
-    // Ça évite qu'une séance max fasse tout exploser.
     let smoothedP3 = smoothRecord(prevModelCp3, bestP3.value, DEFAULT_ALPHA_RECORDS);
     let smoothedP12 = smoothRecord(prevModelCp12, bestP12.value, DEFAULT_ALPHA_RECORDS);
 
@@ -331,22 +335,22 @@ export async function updateUserFitnessProfile(
     const calculatedWPrimeRaw = Math.round(model.wPrime);
 
     // 6. LOGIQUE DE DÉCISION (Anti-Paradoxe améliorée)
-    let finalFtp = prevFtp;
+    let finalModeledFtp = prevModeledFtp; // Renommé
     let finalWPrime = prevWPrime;
 
     // --- LOGIQUE FTP ---
     // On considère une amélioration "réelle" uniquement si :
-    // - FTP calculée > prevFtp + small margin
+    // - FTP calculée > prevModeledFtp + small margin
     // - et le CP12 smoothed n'a pas drastiquement baissé (tolérance 15W)
     const cp12OkForIncrease = smoothedP12 >= (prevModelCp12 - 15);
-    const isRealImprovement = (calculatedFtpRaw > prevFtp + 2) && cp12OkForIncrease;
+    const isRealImprovement = (calculatedFtpRaw > prevModeledFtp + 2) && cp12OkForIncrease;
 
     if (isRealImprovement) {
         // Cap de hausse journalière pour éviter explosion en 1 update
-        const maxAllowedIncrease = Math.round(prevFtp * (1 + (MAX_DAILY_FTP_INCREASE_PERCENT * daysSinceLastUpdate)));
+        const maxAllowedIncrease = Math.round(prevModeledFtp * (1 + (MAX_DAILY_FTP_INCREASE_PERCENT * daysSinceLastUpdate)));
         // autorise la montée mais pas au-delà du cap
-        finalFtp = Math.min(calculatedFtpRaw, maxAllowedIncrease);
-        console.log(`[FitnessEngine] 📈 FTP UP validé: ${prevFtp} -> ${finalFtp}W (calc ${calculatedFtpRaw})`);
+        finalModeledFtp = Math.min(calculatedFtpRaw, maxAllowedIncrease);
+        console.log(`[FitnessEngine] 📈 Modeled FTP UP validé: ${prevModeledFtp} -> ${finalModeledFtp}W (calc ${calculatedFtpRaw})`);
     } else {
         // Mode DECAY ou STAGNATION — calmer la chute
         const ageP3 = (activityDate.getTime() - new Date(bestP3.date).getTime()) / (1000 * 3600 * 24);
@@ -360,27 +364,27 @@ export async function updateUserFitnessProfile(
         }
 
         // Si paradoxe (calc > prev mais CP12 descend), on garde prev comme base
-        const baseValue = (calculatedFtpRaw > prevFtp) ? prevFtp : calculatedFtpRaw;
+        const baseValue = (calculatedFtpRaw > prevModeledFtp) ? prevModeledFtp : calculatedFtpRaw;
         const targetFtp = Math.round(baseValue * recencyFactor);
 
         // Protection chute journalière
-        const maxAllowedDrop = prevFtp * MAX_DAILY_DROP_PERCENT * daysSinceLastUpdate;
-        const minAllowedFtp = Math.round(prevFtp - maxAllowedDrop);
+        const maxAllowedDrop = prevModeledFtp * MAX_DAILY_DROP_PERCENT * daysSinceLastUpdate;
+        const minAllowedFtp = Math.round(prevModeledFtp - maxAllowedDrop);
 
-        finalFtp = Math.max(minAllowedFtp, targetFtp);
+        finalModeledFtp = Math.max(minAllowedFtp, targetFtp);
 
         // Hard floor : on n'autorise pas une perte instantanée > HARD_FTP_DROP_WATTS
-        const hardFloor = prevFtp - HARD_FTP_DROP_WATTS;
-        finalFtp = Math.max(finalFtp, hardFloor);
+        const hardFloor = prevModeledFtp - HARD_FTP_DROP_WATTS;
+        finalModeledFtp = Math.max(finalModeledFtp, hardFloor);
 
         // Sécurité : en decay, on ne dépasse jamais la valeur précédente
-        finalFtp = Math.min(finalFtp, prevFtp);
+        finalModeledFtp = Math.min(finalModeledFtp, prevModeledFtp);
 
-        console.log(`[FitnessEngine] 📉 FTP DECAY/STABLE: ${prevFtp} -> ${finalFtp}W (target ${targetFtp})`);
+        console.log(`[FitnessEngine] 📉 Modeled FTP DECAY/STABLE: ${prevModeledFtp} -> ${finalModeledFtp}W (target ${targetFtp})`);
     }
 
     // --- LOGIQUE W' ---
-    // On smooth d'abord
+    // ... (Logique W' non modifiée, utilise prevWPrime)
     let smoothedWPrime = smoothRecord(prevWPrime, calculatedWPrimeRaw, DEFAULT_ALPHA_WPRIME);
 
     if (calculatedWPrimeRaw > prevWPrime) {
@@ -394,7 +398,7 @@ export async function updateUserFitnessProfile(
     }
 
     // CLAMP & ARRONDI
-    finalFtp = Math.max(FTP_MIN, Math.min(FTP_MAX, finalFtp));
+    finalModeledFtp = Math.max(FTP_MIN, Math.min(FTP_MAX, finalModeledFtp));
     finalWPrime = Math.max(WPRIME_MIN, Math.min(WPRIME_MAX, finalWPrime));
     finalWPrime = roundToNearest(finalWPrime, WPRIME_ROUNDING);
 
@@ -402,7 +406,7 @@ export async function updateUserFitnessProfile(
     // Use bestP5 if available + cp3 blend for more stability
     const p5Val = bestP5 ? bestP5.value : undefined;
     const vo2Max = estimateVo2Mixed(p5Val, smoothedP3, userProfile.weight);
-    const ratioProfile = finalWPrime / finalFtp;
+    const ratioProfile = finalWPrime / finalModeledFtp;
     let estimatedTte = Math.round(Math.max(2400, Math.min(4200, 3000 + (ratioProfile * 10))));
 
     // 8. BANISTER (optionnel) -> try to fetch recent TSS series
@@ -412,8 +416,9 @@ export async function updateUserFitnessProfile(
     // 9. SAUVEGARDE -> update user + history
     const updateTimeISO = new Date().toISOString();
 
+    // NOTE: On met à jour la nouvelle colonne 'modeled_ftp' au lieu de 'ftp'
     await supabaseAdmin.from('users').update({
-      ftp: finalFtp,
+      modeled_ftp: finalModeledFtp,
       w_prime: finalWPrime,
       vo2max: vo2Max,
       TTE: estimatedTte,
@@ -430,7 +435,8 @@ export async function updateUserFitnessProfile(
     const historyPayload = {
       user_id: userId,
       date_calculated: activityDateISO,
-      ftp_value: finalFtp,
+      // NOTE: 'ftp_value' correspond maintenant à la 'modeled_ftp' dans l'historique
+      ftp_value: finalModeledFtp, 
       w_prime_value: finalWPrime,
       cp3_value: activityPeaks.cp3,
       cp12_value: activityPeaks.cp12,
@@ -439,7 +445,6 @@ export async function updateUserFitnessProfile(
       vo2max_value: vo2Max,
       tte_value: estimatedTte,
       source_activity_id: sourceActivityId || null
-      // NOTE: si tu veux logger banister/debug, ajoute une colonne debug_meta JSON et push banister ici
     };
 
     const { error: insertHistoryError } = await supabaseAdmin
@@ -451,11 +456,11 @@ export async function updateUserFitnessProfile(
         return { success: false, message: `DB Error: ${insertHistoryError.message}` };
     }
 
-    console.log(`[FitnessEngine V4.1] ✅ (FTP: ${finalFtp}W, W': ${finalWPrime}J, VO2: ${vo2Max} ml/kg, Banister form: ${banister.form})`);
+    console.log(`[FitnessEngine V4.1] ✅ (Modeled FTP: ${finalModeledFtp}W, W': ${finalWPrime}J, VO2: ${vo2Max} ml/kg, Banister form: ${banister.form})`);
 
     return {
       success: true,
-      newFtp: finalFtp,
+      newFtp: finalModeledFtp,
       newWPrime: finalWPrime,
       newCp3: activityPeaks.cp3,
       newCp12: activityPeaks.cp12,

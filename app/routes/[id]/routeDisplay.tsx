@@ -1,4 +1,3 @@
-// Fichier : app/routes/[id]/routeDisplay.tsx
 'use client';
 
 import React, { useMemo, useState, useEffect, useRef } from 'react';
@@ -6,15 +5,16 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { 
   AlertTriangle, Activity, Mountain, TrendingUp, Info,
-  Map as MapIcon, Zap, BarChart3, Layers, Gauge, HelpCircle, ChevronRight, Flag
+  Map as MapIcon, Zap, BarChart3, Layers, Gauge, HelpCircle, ChevronRight, Flag, Settings2
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
   ResponsiveContainer, ReferenceLine 
 } from 'recharts';
-import { Route } from "./page";
+import { Route, UserProfile } from "./page";
 import { Modal } from '../../../components/ui/modal';
 import ClimbDetailModal from './ClimbDetailModal';
+import GearAnalysisModal from './GearAnalysisModal'; // 🔥 IMPORT NOUVEAU
 
 // DYNAMIC IMPORTS
 const ActivityMap = dynamic(() => import('../../activities/[id]/activityMap'), {
@@ -247,7 +247,6 @@ const detectClimbs = (points: [number, number, number][], distances: number[]) =
     if (points.length < 10) return climbs;
 
     // 1. Préparation des points avec lissage de la pente
-    // On utilise une fenêtre mobile pour éviter le bruit GPS
     const allPoints: ProcessedPoint[] = distances.map((d, i) => ({
         dist: d,
         ele: points[i][2],
@@ -282,18 +281,14 @@ const detectClimbs = (points: [number, number, number][], distances: number[]) =
         const slope = point.smoothedSlope;
 
         if (isClimbing) {
-            // --- ON EST DANS UNE MONTÉE ---
             if (slope >= SLOPE_CONTINUE) {
-                // La pente est positive, on continue
                 lastClimbPoint = point;
                 replatDistance = 0;
             } else {
-                // On est sur un replat ou une descente
                 if (i > 0) { 
                     replatDistance += (point.dist - allPoints[i-1].dist);
                 }
                 
-                // Si le replat est trop long, on arrête la montée
                 if (replatDistance >= MAX_REPLAT_DISTANCE) {
                     isClimbing = false;
                     if (currentClimbStartPoint && lastClimbPoint) {
@@ -303,8 +298,6 @@ const detectClimbs = (points: [number, number, number][], distances: number[]) =
             }
 
         } else {
-            // --- ON NE MONTE PAS ---
-            // Si la pente devient assez forte, on DÉMARRE une montée
             if (slope >= SLOPE_THRESHOLD) {
                 isClimbing = true;
                 currentClimbStartPoint = point;
@@ -314,7 +307,6 @@ const detectClimbs = (points: [number, number, number][], distances: number[]) =
         }
     }
 
-    // S'il restait une montée en cours à la fin du GPX
     if (isClimbing && currentClimbStartPoint && lastClimbPoint) {
         saveClimb(climbs, currentClimbStartPoint, lastClimbPoint, allPoints, MIN_CLIMB_DISTANCE);
     }
@@ -373,10 +365,11 @@ const Tag = ({ text, color }: any) => (
 );
 
 // --- MAIN COMPONENT ---
-export default function RouteDisplay({ route }: { route: Route }) {
+export default function RouteDisplay({ route, userProfile }: { route: Route, userProfile: UserProfile }) {
     const router = useRouter();
     const [showScoreModal, setShowScoreModal] = useState(false);
     const [showTopologyModal, setShowTopologyModal] = useState(false);
+    const [showGearModal, setShowGearModal] = useState(false); // 🔥 STATE GEAR
     const [selectedClimb, setSelectedClimb] = useState<Climb | null>(null);
     const [highlightedClimb, setHighlightedClimb] = useState<Climb | null>(null);
     const climbListRef = useRef<HTMLDivElement>(null);
@@ -486,9 +479,15 @@ export default function RouteDisplay({ route }: { route: Route }) {
                         <span style={{fontFamily: 'var(--font-sans)', opacity: 0.7}}>ID {route.id}</span>
                     </div>
                 </div>
-                <button onClick={() => router.push(`/simulations/new?routeId=${route.id}`)} style={styles.ctaButton}>
-                    <Zap size={18} /> CHARGER LA SIMULATION
-                </button>
+                <div style={{display:'flex', gap:'1rem'}}>
+                    {/* 🔥 BOUTON GEAR ANALYSIS */}
+                    <button onClick={() => setShowGearModal(true)} style={styles.secondaryButton}>
+                        <Settings2 size={18} /> ANALYSER BRAQUET
+                    </button>
+                    <button onClick={() => router.push(`/simulations/new?routeId=${route.id}`)} style={styles.ctaButton}>
+                        <Zap size={18} /> CHARGER LA SIMULATION
+                    </button>
+                </div>
             </div>
 
             <div style={styles.grid}>
@@ -549,7 +548,7 @@ export default function RouteDisplay({ route }: { route: Route }) {
                             />
                         </div>
 
-                        {/* 🔥 TABLEAU MISSION LOG MIS À JOUR */}
+                        {/* TABLEAU MISSION LOG */}
                         {climbs.length > 0 && (
                             <div style={styles.climbListContainer} ref={climbListRef}>
                                 <div style={styles.climbListHeader}>
@@ -705,6 +704,14 @@ export default function RouteDisplay({ route }: { route: Route }) {
                 <p style={{textAlign: 'center', fontSize: '0.8rem', color: '#888', marginTop: '1rem'}}>Distribution de pente du parcours <br/><span style={{color: '#3b82f6'}}>Descente </span> VS <span style={{color: '#d04fd7'}}>Montée</span> </p>
             </Modal>
 
+            {/* 🔥 MODAL GEAR */}
+            <GearAnalysisModal 
+                isOpen={showGearModal} 
+                onClose={() => setShowGearModal(false)}
+                maxGradient={analytics.maxGradient}
+                gradientDistribution={analytics.gradientDistribution}
+                userProfile={userProfile}
+            />
 
             <ClimbDetailModal 
                 climb={selectedClimb} 
@@ -722,7 +729,10 @@ const styles: Record<string, React.CSSProperties> = {
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginBottom: '2.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid rgba(255,255,255,0.1)' },
   title: { fontSize: '2.5rem', fontWeight: 900, margin: 0, lineHeight: 1.1, background: 'linear-gradient(90deg, #fff, #a0a0a0)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' },
   meta: { display: 'flex', gap: '1rem', color: '#aaa', fontSize: '0.95rem', marginTop: '0.8rem', fontFamily: 'var(--font-sans)', fontWeight: 500 },
+  
   ctaButton: { background: 'linear-gradient(135deg, #d04fd7 0%, #8b5cf6 100%)', color: 'white', border: 'none', padding: '0.8rem 1.5rem', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', boxShadow: '0 0 20px rgba(208, 79, 215, 0.3)', transition: 'transform 0.2s', fontSize: '1rem' },
+  secondaryButton: { background: 'rgba(255,255,255,0.05)', color: 'white', border: '1px solid #333', padding: '0.8rem 1.5rem', borderRadius: '8px', fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', transition: 'all 0.2s' },
+
   grid: { display: 'grid', gridTemplateColumns: '380px 1fr', gap: '2rem', alignItems: 'start' },
   leftCol: { display: 'flex', flexDirection: 'column', gap: '1.5rem' },
   rightCol: { display: 'flex', flexDirection: 'column', gap: '1.5rem' },
@@ -768,7 +778,6 @@ const styles: Record<string, React.CSSProperties> = {
     scrollbarColor: '#333 transparent'
   } as React.CSSProperties,
   
-  // 🔥 GRID AJUSTÉE : 45px | 1fr | 60px (Score) | 1fr | 1fr | 1fr | 1.5fr | 40px
   climbListHeader: { 
     display: 'grid', 
     gridTemplateColumns: '45px 1fr 60px 1fr 1fr 1fr 1.5fr 40px',
@@ -789,7 +798,7 @@ const styles: Record<string, React.CSSProperties> = {
   
   climbRow: { 
     display: 'grid', 
-    gridTemplateColumns: '45px 1fr 60px 1fr 1fr 1fr 1.5fr 40px', // IDEM HEADER
+    gridTemplateColumns: '45px 1fr 60px 1fr 1fr 1fr 1.5fr 40px', 
     gap: '0.8rem',
     padding: '0.7rem 1rem', 
     fontSize: '0.8rem', 
