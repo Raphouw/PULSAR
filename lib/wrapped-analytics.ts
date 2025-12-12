@@ -325,9 +325,55 @@ console.log("TOTAL PATHS DÉCODÉS:", domainPaths.length);
     monsterRide,
     resilience: { enduranceRatio: parseFloat((p60m/p20m).toFixed(2)), fatigueResistance: Math.round((p60m/p20m) * 100), decayRate: 'MODERATE', durabilityRank: (p60m/p20m) > 0.90 ? "ULTRA" : "PUNCHEUR" },
     segPower: { performances: [
-      { gradientRange: "0-3%", avgWatts: Math.round(user.ftp * 0.88), avgWkg: parseFloat((wkg_ref * 0.88).toFixed(1)), efficiencyScore: 70, vam: 0, tteSeconds: 7200 },
-      { gradientRange: "10-12%", avgWatts: Math.round(user.ftp * 1.12), avgWkg: parseFloat((wkg_ref * 1.12).toFixed(1)), efficiencyScore: 98, vam: Math.round((wkg_ref * 1.12) * 315), tteSeconds: 900 }
-    ], dominantTerrain: user.weight < 72 ? "GRIMPEUR" : "ROULEUR", bestSlope: "10-12%" },
+      { 
+    gradientRange: "0-3%", 
+    avgWatts: Math.round(user.ftp * 0.88), 
+    avgWkg: parseFloat((wkg_ref * 0.88).toFixed(1)), 
+    efficiencyScore: 70, 
+    vam: 0, 
+    tteSeconds: 7200 
+  },
+  { 
+    gradientRange: "4-6%", 
+    avgWatts: Math.round(user.ftp * 0.94), 
+    avgWkg: parseFloat((wkg_ref * 0.94).toFixed(1)), 
+    efficiencyScore: 82, 
+    vam: Math.round(wkg_ref * 240), 
+    tteSeconds: 3600 
+  },
+  { 
+    gradientRange: "7-9%", 
+    avgWatts: Math.round(user.ftp * 1.02), 
+    avgWkg: parseFloat((wkg_ref * 1.02).toFixed(1)), 
+    efficiencyScore: 92, 
+    vam: Math.round(wkg_ref * 280), 
+    tteSeconds: 1800 
+  },
+  { 
+    gradientRange: "10-12%", 
+    avgWatts: Math.round(user.ftp * 1.12), 
+    avgWkg: parseFloat((wkg_ref * 1.12).toFixed(1)), 
+    efficiencyScore: 98, 
+    vam: Math.round(wkg_ref * 315), 
+    tteSeconds: 900 
+  },
+  { 
+    gradientRange: "13-15%", 
+    avgWatts: Math.round(user.ftp * 1.20), 
+    avgWkg: parseFloat((wkg_ref * 1.20).toFixed(1)), 
+    efficiencyScore: 95, 
+    vam: Math.round(wkg_ref * 330), 
+    tteSeconds: 420 
+  },
+  { 
+    gradientRange: ">15%", 
+    avgWatts: Math.round(user.ftp * 1.35), 
+    avgWkg: parseFloat((wkg_ref * 1.35).toFixed(1)), 
+    efficiencyScore: 88, 
+    vam: Math.round(wkg_ref * 350), 
+    tteSeconds: 180 
+  }
+], dominantTerrain: user.weight < 72 ? "GRIMPEUR" : "ROULEUR", bestSlope: "10-12%" },
     terrain: { climbingRatio: parseFloat(climbingRatio.toFixed(1)), flatSpeedPotency: Math.min(100, (user.ftp/400)*100), climbingPotency, sprintPotency, specialization, terrainVerdict: specialization === 'PURE_CLIMBER' ? "Grimpeur né." : "Polyvalence totale." },
     territories: { indoorPercent: Math.round((indoorSeconds / totalRideTime) * 100), outdoorPercent: Math.round((outdoorSeconds / totalRideTime) * 100), explorationScore: 85, maxRadius: Math.round(maxDistance), avgDistance: Math.round(totalDist / (activities.length || 1)) },
     biomech: { avgCadence: 88, cadenceStyle: 'NEUTRAL', torqueEfficiency: 92, legLengthFactor: user.height > 190 ? 1.15 : 1.05, recommendedCrank: user.height > 188 ? "175mm" : "172.5mm" },
