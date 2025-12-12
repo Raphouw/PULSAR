@@ -1,5 +1,5 @@
 /* Removed all Tailwind imports and directives to keep vanilla CSS only */
-
+@import "tailwindcss";
 
 
 /* Added animation for expanding metrics */

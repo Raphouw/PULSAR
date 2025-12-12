@@ -1,21 +1,24 @@
 // Fichier : app/training-plan/TrainingplanClient.tsx
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useEffect } from "react"
 import { 
   Clock, Zap, Plus, Mountain, Activity, TrendingUp, 
   BarChart3, Dumbbell, Play, CalendarCheck, CheckCircle2, 
   Battery, AlertCircle, ArrowRight, Download, FileText, X,
-  Gauge
+  Gauge, User
 } from "lucide-react"
 
-// Import des types partagés (Assure-toi d'avoir créé le fichier types.ts comme vu précédemment)
+import { supabase } from '../../lib/supabaseClient'
+
+// Import des types partagés
 import { TrainingPlan, TrainingWeek, Workout, Zone } from "./types"
-// Import du Wizard (Assure-toi d'avoir créé CreatePlanWizard.tsx)
+// Import du Wizard
 import CreatePlanWizard from "./createPlanWizard"
 
 // --- EXTENSION DES TYPES POUR CETTE VUE ---
-// On étend l'interface de base pour ajouter les détails nécessaires à l'affichage avancé
+// Interface étendue pour inclure les propriétés spécifiques au rendu (steps, if_est)
+// qui ne sont pas forcément dans le type de base BDD stricto sensu
 interface WorkoutStep {
     duration_s: number;
     power_pct: number;
@@ -52,7 +55,7 @@ const downloadWorkout = (workout: DetailedWorkout) => {
     document.body.removeChild(a);
 };
 
-// --- MOCK DATA ---
+// --- MOCK DATA (CATALOGUE PULSAR) ---
 const MOCK_PLANS: (TrainingPlan & { weeks: { workouts: DetailedWorkout[] }[] })[] = [
   {
     id: "plan_mount_1",
@@ -66,7 +69,7 @@ const MOCK_PLANS: (TrainingPlan & { weeks: { workouts: DetailedWorkout[] }[] })[
     weekly_load_progression: [450, 520, 380, 600], 
     zone_distribution: { Z1: 20, Z2: 40, Z3: 15, Z4: 20, Z5: 5, Z6: 0 },
     tags: ["Seuil", "W/kg", "Endurance de Force"],
-    is_active: true,
+    is_active: false,
     weeks: [
       {
         week_number: 1, theme: "Construction",
@@ -92,9 +95,9 @@ const MOCK_PLANS: (TrainingPlan & { weeks: { workouts: DetailedWorkout[] }[] })[
       {
         week_number: 2, theme: "Surcharge",
         workouts: [
-          { id: "w2_1", name: "Over-Under", duration_s: 3600, tss: 85, dominant_zone: "Z4", day_number: 2, if_est: 0.90, steps: [] },
-          { id: "w2_2", name: "Récup Active", duration_s: 2700, tss: 30, dominant_zone: "Z1", day_number: 3, if_est: 0.50, steps: [] },
-          { id: "w2_3", name: "Montagne Sim.", duration_s: 7200, tss: 140, dominant_zone: "Z3", day_number: 6, if_est: 0.80, steps: [] },
+          { id: "w2_1", name: "Over-Under", duration_s: 3600, tss: 85, dominant_zone: "Z4", day_number: 2, if_est: 0.90, steps: [{type:'steady', duration_s: 3600, power_pct: 85}] }, // Simplified steps for mock
+          { id: "w2_2", name: "Récup Active", duration_s: 2700, tss: 30, dominant_zone: "Z1", day_number: 3, if_est: 0.50, steps: [{type:'steady', duration_s: 2700, power_pct: 50}] },
+          { id: "w2_3", name: "Montagne Sim.", duration_s: 7200, tss: 140, dominant_zone: "Z3", day_number: 6, if_est: 0.80, steps: [{type:'steady', duration_s: 7200, power_pct: 75}] },
         ]
       }
     ]
@@ -103,7 +106,10 @@ const MOCK_PLANS: (TrainingPlan & { weeks: { workouts: DetailedWorkout[] }[] })[
 
 // --- STYLES & HELPERS ---
 const ZONE_COLORS: Record<Zone, string> = { Z1: "#a0a0a0", Z2: "#3b82f6", Z3: "#10b981", Z4: "#f59e0b", Z5: "#ef4444", Z6: "#d04fd7" };
-const CATEGORY_ICONS: Record<string, React.ElementType> = { 'Montagne': Mountain, 'Endurance': Activity, 'Explosivité': Zap, 'Force': Dumbbell, 'Seuil': TrendingUp };
+const CATEGORY_ICONS: Record<string, React.ElementType> = { 
+    'Montagne': Mountain, 'Endurance': Activity, 'Explosivité': Zap, 
+    'Force': Dumbbell, 'Seuil': TrendingUp, 'Perso': User 
+};
 const formatDuration = (s: number) => { const h = Math.floor(s / 3600); const m = Math.floor((s % 3600) / 60); return h > 0 ? `${h}h${m > 0 ? m : ''}` : `${m}m`; };
 
 const WorkoutProfileGraph = ({ steps }: { steps: WorkoutStep[] }) => {
@@ -121,7 +127,23 @@ const WorkoutProfileGraph = ({ steps }: { steps: WorkoutStep[] }) => {
     );
 };
 
+// --- COMPOSANT NOTIFICATION ---
+const NeonNotification = ({ message, onClose }: { message: string, onClose: () => void }) => (
+    <div style={{
+        position: 'fixed', bottom: '2rem', right: '2rem', zIndex: 9999,
+        background: 'rgba(10,10,15,0.95)', border: '1px solid #d04fd7',
+        boxShadow: '0 0 20px rgba(208, 79, 215, 0.4)', borderRadius: '12px',
+        padding: '1rem 2rem', display: 'flex', alignItems: 'center', gap: '1rem',
+        animation: 'slideInRight 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+    }}>
+        <div style={{width: '10px', height: '10px', borderRadius: '50%', background: '#d04fd7', boxShadow: '0 0 10px #d04fd7'}} />
+        <span style={{color: '#fff', fontWeight: 700}}>{message}</span>
+        <button onClick={onClose} style={{background: 'none', border: 'none', color: '#666', cursor: 'pointer', marginLeft: '10px'}}>✕</button>
+    </div>
+);
+
 const getMainSetDescription = (workout: DetailedWorkout) => {
+    if (!workout.steps || workout.steps.length === 0) return "Séance libre";
     const efforts = workout.steps.filter(s => s.type === 'interval' || (s.type === 'steady' && s.power_pct > 70));
     if (efforts.length === 0) return "Endurance continue";
     const count = efforts.length;
@@ -144,7 +166,6 @@ const MiniVolumeChart = ({ data }: { data: number[] }) => {
     );
 };
 
-// --- TUILE SÉANCE (LE CŒUR DU DESIGN) ---
 const WorkoutCard = ({ workout, onClick, userFtp = 250 }: { workout: DetailedWorkout, onClick: () => void, userFtp?: number }) => {
     const [isHovered, setIsHovered] = useState(false);
     const zoneColor = ZONE_COLORS[workout.dominant_zone];
@@ -165,18 +186,15 @@ const WorkoutCard = ({ workout, onClick, userFtp = 250 }: { workout: DetailedWor
                 borderRadius: '12px',
                 position: 'relative', 
                 cursor: 'pointer', 
-                // 🔥 ZOOM MASSIF (x1.45)
                 transition: 'all 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275)', 
                 transform: isHovered ? 'scale(1.45) translateY(-10px)' : 'scale(1)',
                 zIndex: isHovered ? 100 : 1,
                 boxShadow: isHovered ? `0 25px 50px -12px ${zoneColor}60` : isCompleted ? 'none' : `0 4px 15px -5px ${zoneColor}10`,
-                // Fond opaque au survol pour masquer les voisins
                 background: isHovered ? '#121217' : (isCompleted ? 'rgba(20,20,25,0.6)' : `linear-gradient(160deg, rgba(30, 30, 40, 0.9) 0%, ${zoneColor}10 100%)`),
                 border: isCompleted ? '1px solid #10b981' : isHovered ? `2px solid ${zoneColor}` : `1px solid ${zoneColor}40`,
                 overflow: 'hidden'
             }} 
         >
-            {/* --- CONTENU PRINCIPAL (Flouté au survol) --- */}
             <div style={{
                 position: 'absolute', inset: 0, padding: '10px',
                 display: 'flex', flexDirection: 'column', justifyContent: 'space-between',
@@ -188,7 +206,7 @@ const WorkoutCard = ({ workout, onClick, userFtp = 250 }: { workout: DetailedWor
                             {workout.dominant_zone}
                         </div>
                         {isCompleted && <CheckCircle2 size={14} color="#10b981" />}
-                        {!isCompleted && <div style={{fontSize: '0.6rem', color: '#aaa', display: 'flex', gap:'2px'}}><Gauge size={10}/> {intensityFactor}</div>}
+                        {!isCompleted && <div style={{fontSize: '0.6rem', color: '#aaa', display: 'flex', gap:'2px'}}><Gauge size={10}/> {intensityFactor.toFixed(2)}</div>}
                     </div>
                     <div style={{fontSize: '0.8rem', fontWeight: 700, color: '#fff', lineHeight: 1.1, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical'}}>
                         {workout.name}
@@ -196,7 +214,7 @@ const WorkoutCard = ({ workout, onClick, userFtp = 250 }: { workout: DetailedWor
                 </div>
                 <div style={{textAlign: 'center'}}>
                     <div style={{fontSize: '1.6rem', fontWeight: 900, color: '#fff', letterSpacing: '-1px'}}>
-                        {formatDuration(workout.duration_s).replace('h', 'h')}
+                        {formatDuration(workout.duration_s)}
                     </div>
                 </div>
                 <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', background: 'rgba(0,0,0,0.3)', borderRadius: '6px', padding: '4px'}}>
@@ -211,7 +229,6 @@ const WorkoutCard = ({ workout, onClick, userFtp = 250 }: { workout: DetailedWor
                 </div>
             </div>
 
-            {/* --- OVERLAY SURVOL (GRAND LUXE) --- */}
             <div style={{
                 position: 'absolute', inset: 0, 
                 background: `linear-gradient(180deg, rgba(20,20,30,1) 0%, ${zoneColor}15 100%)`,
@@ -231,7 +248,7 @@ const WorkoutCard = ({ workout, onClick, userFtp = 250 }: { workout: DetailedWor
                     </div>
                 </div>
                 <div style={{height: '50px', width: '100%', marginBottom: '8px', display: 'flex', alignItems: 'flex-end'}}>
-                     <WorkoutProfileGraph steps={workout.steps} />
+                     <WorkoutProfileGraph steps={workout.steps || []} />
                 </div>
                 <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 'auto', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '6px'}}>
                     <div style={{display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', fontWeight: 700, color: '#fff'}}>
@@ -289,7 +306,7 @@ const PlanListCard = ({ plan, isSelected, onClick }: { plan: TrainingPlan, isSel
                     ))}
                 </div>
                 <div style={{display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px'}}>
-                    <MiniVolumeChart data={plan.weekly_load_progression} />
+                    <MiniVolumeChart data={plan.weekly_load_progression || []} />
                     <span style={{fontSize: '0.6rem', color: '#666'}}>{plan.duration_weeks} SEM.</span>
                 </div>
             </div>
@@ -352,7 +369,7 @@ const WorkoutDetailModal = ({ workout, onClose, userFtp = 250 }: { workout: Deta
                     <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '2.5rem', background: 'rgba(255,255,255,0.03)', borderRadius: '16px', padding: '1.5rem'}}>
                         <div style={{textAlign: 'center', flex: 1, borderRight: '1px solid rgba(255,255,255,0.05)'}}><div style={{fontSize: '0.7rem', fontWeight: 700, color: '#666', marginBottom: '4px'}}>DURÉE</div><div style={{fontSize: '1.5rem', fontWeight: 800, color: '#00f3ff'}}>{formatDuration(workout.duration_s)}</div></div>
                         <div style={{textAlign: 'center', flex: 1, borderRight: '1px solid rgba(255,255,255,0.05)'}}><div style={{fontSize: '0.7rem', fontWeight: 700, color: '#666', marginBottom: '4px'}}>CHARGE</div><div style={{fontSize: '1.5rem', fontWeight: 800, color: '#d04fd7'}}>{workout.tss} <span style={{fontSize:'0.8rem'}}>TSS</span></div></div>
-                        <div style={{textAlign: 'center', flex: 1, borderRight: '1px solid rgba(255,255,255,0.05)'}}><div style={{fontSize: '0.7rem', fontWeight: 700, color: '#666', marginBottom: '4px'}}>INTENSITÉ</div><div style={{fontSize: '1.5rem', fontWeight: 800, color: '#f59e0b'}}>{workout.if_est || '-'} <span style={{fontSize:'0.8rem'}}>IF</span></div></div>
+                        <div style={{textAlign: 'center', flex: 1, borderRight: '1px solid rgba(255,255,255,0.05)'}}><div style={{fontSize: '0.7rem', fontWeight: 700, color: '#666', marginBottom: '4px'}}>INTENSITÉ</div><div style={{fontSize: '1.5rem', fontWeight: 800, color: '#f59e0b'}}>{workout.if_est?.toFixed(2) || '-'} <span style={{fontSize:'0.8rem'}}>IF</span></div></div>
                         <div style={{textAlign: 'center', flex: 1}}><div style={{fontSize: '0.7rem', fontWeight: 700, color: '#666', marginBottom: '4px'}}>WATTS EST.</div><div style={{fontSize: '1.5rem', fontWeight: 800, color: '#10b981'}}>{Math.round(userFtp * (workout.if_est || 0.6))} <span style={{fontSize:'0.8rem'}}>W</span></div></div>
                     </div>
                     <h4 style={{fontSize: '0.8rem', color: '#888', marginBottom: '1rem', textTransform: 'uppercase'}}>Structure de la séance</h4>
@@ -378,29 +395,73 @@ export default function TrainingplanClient({ userId }: { userId: string }) {
   const [selectedPlan, setSelectedPlan] = useState<TrainingPlan>(MOCK_PLANS[0]);
   const [view, setView] = useState<'LIST' | 'CREATE'>('LIST');
   const [selectedWorkout, setSelectedWorkout] = useState<DetailedWorkout | null>(null);
-  const isAdmin = userId === '1' || userId === '2';
+  const [userPlans, setUserPlans] = useState<TrainingPlan[]>([]);
+  const [notification, setNotification] = useState<string | null>(null);
 
-  const groupedPlans = useMemo(() => {
-      const groups: Record<string, TrainingPlan[]> = {};
-      MOCK_PLANS.forEach(p => { if (!groups[p.category]) groups[p.category] = []; groups[p.category].push(p); });
-      return groups;
-  }, []);
+  // Initialisation des plans
+  useEffect(() => {
+      const fetchPlans = async () => {
+          const { data } = await supabase.from('training_plans').select('*').eq('user_id', userId);
+          if(data) {
+              const parsed = data.map(p => ({
+                  ...p,
+                  weeks: typeof p.structure_json === 'string' ? JSON.parse(p.structure_json) : p.structure_json,
+                  tags: p.tags || ["Perso"],
+                  weekly_load_progression: p.weekly_load_progression || [0,0,0,0],
+                  zone_distribution: p.zone_distribution || { Z1:0,Z2:0,Z3:0,Z4:0,Z5:0,Z6:0 },
+                  compatibility_score: 100 // Les plans perso sont toujours 100% compatibles
+              }));
+              setUserPlans(parsed as TrainingPlan[]);
+          }
+      };
+      fetchPlans();
+  }, [userId, view]);
+
+  const handleSavePlan = async (newPlan: Partial<TrainingPlan>) => {
+      try {
+          if (!newPlan.name || !newPlan.weeks) return;
+
+          const totalTss = newPlan.weeks.reduce((acc, w) => acc + w.workouts.reduce((wa, wo) => wa + wo.tss, 0), 0);
+          
+          const { error } = await supabase
+              .from('training_plans')
+              .insert({
+                  user_id: userId,
+                  name: newPlan.name,
+                  description: newPlan.description,
+                  category: newPlan.category,
+                  duration_weeks: newPlan.duration_weeks,
+                  total_tss: totalTss,
+                  structure_json: newPlan.weeks,
+                  is_active: false
+              })
+              .select();
+
+          if (error) throw error;
+
+          setNotification(`Plan "${newPlan.name}" créé avec succès !`);
+          setTimeout(() => setNotification(null), 5000);
+          setView('LIST');
+          
+      } catch (err: any) {
+          console.error("Erreur sauvegarde:", err);
+          alert("Erreur lors de la sauvegarde du plan.");
+      }
+  };
 
   if (view === 'CREATE') {
       return (
           <CreatePlanWizard 
               onBack={() => setView('LIST')} 
-              onSave={(newPlan) => {
-                  console.log("Nouveau plan créé :", newPlan);
-                  alert(`Plan "${newPlan.name}" prêt à être sauvegardé !`);
-                  setView('LIST');
-              }}
+              onSave={handleSavePlan}
           />
       );
   }
 
   return (
     <div style={{minHeight: "100vh", background: "radial-gradient(circle at top center, #13131f 0%, #050505 80%)", color: "#fff", fontFamily: '"Inter", sans-serif', padding: "2rem", display: "flex", flexDirection: "column"}}>
+      {notification && <NeonNotification message={notification} onClose={() => setNotification(null)} />}
+
       <div style={{display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', paddingBottom: '1rem', borderBottom: '1px solid rgba(255,255,255,0.1)'}}>
           <div>
               <h1 style={{fontSize: "2rem", fontWeight: 900, margin: 0, background: "linear-gradient(90deg, #fff 0%, #00f3ff 100%)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent", letterSpacing: "-1px"}}>CENTRE D'ENTRAÎNEMENT</h1>
@@ -408,20 +469,47 @@ export default function TrainingplanClient({ userId }: { userId: string }) {
           </div>
           <div style={{display: 'flex', gap: '1rem'}}>
               <button onClick={() => alert("Génération du plan complet en cours... (Fonctionnalité complète en Phase 4)")} style={{background: 'rgba(255,255,255,0.05)', color: '#aaa', border: '1px solid rgba(255,255,255,0.1)', padding: '10px 20px', borderRadius: '30px', fontWeight: 700, fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer'}}><Download size={16} /> EXPORT GLOBAL</button>
-              {isAdmin && <button onClick={() => setView('CREATE')} style={{background: '#00f3ff', color: '#000', border: 'none', padding: '10px 24px', borderRadius: '30px', fontWeight: 800, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 0 20px rgba(0, 243, 255, 0.3)', cursor: 'pointer', transition: 'transform 0.2s'}} className="hover:scale-105 hover:shadow-cyan-500/50"><Plus size={18} strokeWidth={3} /> CRÉER UN PLAN</button>}
+              <button onClick={() => setView('CREATE')} style={{background: '#00f3ff', color: '#000', border: 'none', padding: '10px 24px', borderRadius: '30px', fontWeight: 800, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '8px', boxShadow: '0 0 20px rgba(0, 243, 255, 0.3)', cursor: 'pointer', transition: 'transform 0.2s'}} className="hover:scale-105 hover:shadow-cyan-500/50"><Plus size={18} strokeWidth={3} /> CRÉER UN PLAN</button>
           </div>
       </div>
 
       <div style={{display: 'grid', gridTemplateColumns: '420px 1fr', gap: '2rem', alignItems: 'start'}}>
+          
+          {/* SIDEBAR : LISTE DES PLANS */}
           <div style={{position: 'sticky', top: '2rem', maxHeight: 'calc(100vh - 4rem)', overflowY: 'auto', paddingRight: '12px', scrollbarWidth: 'thin', scrollbarColor: '#333 transparent'}}>
-              {Object.entries(groupedPlans).map(([category, plans]) => (
-                  <div key={category} style={{marginBottom: '2.5rem'}}>
-                      <h3 style={{fontSize: '0.7rem', fontWeight: 800, color: '#666', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px'}}>{category}</h3>
-                      {plans.map(plan => <PlanListCard key={plan.id} plan={plan} isSelected={selectedPlan.id === plan.id} onClick={() => setSelectedPlan(plan)} />)}
+              
+              {/* SECTION 1 : MES CRÉATIONS */}
+              {userPlans.length > 0 && (
+                  <div style={{marginBottom: '2.5rem'}}>
+                      <h3 style={{fontSize: '0.7rem', fontWeight: 800, color: '#d04fd7', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                         <User size={14} /> MES CRÉATIONS ({userPlans.length})
+                      </h3>
+                      {userPlans.map(plan => (
+                          <PlanListCard key={plan.id} plan={plan} isSelected={selectedPlan.id === plan.id} onClick={() => setSelectedPlan(plan)} />
+                      ))}
                   </div>
-              ))}
+              )}
+
+              {/* SECTION 2 : CATALOGUE */}
+              <div style={{marginBottom: '2.5rem'}}>
+                  <h3 style={{fontSize: '0.7rem', fontWeight: 800, color: '#666', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px'}}>
+                      CATALOGUE PULSAR
+                  </h3>
+                  {/* On groupe les MOCK par catégorie */}
+                  {Object.entries(MOCK_PLANS.reduce((acc, p) => {
+                      if (!acc[p.category]) acc[p.category] = [];
+                      acc[p.category].push(p);
+                      return acc;
+                  }, {} as Record<string, TrainingPlan[]>)).map(([category, plans]) => (
+                      <div key={category}>
+                          <div style={{fontSize: '0.65rem', color: '#444', fontWeight: 700, margin: '10px 0 5px 0', textTransform: 'uppercase'}}>{category}</div>
+                          {plans.map(plan => <PlanListCard key={plan.id} plan={plan} isSelected={selectedPlan.id === plan.id} onClick={() => setSelectedPlan(plan)} />)}
+                      </div>
+                  ))}
+              </div>
           </div>
 
+          {/* MAIN CONTENT : DÉTAIL DU PLAN */}
           <div style={{background: 'rgba(20, 20, 30, 0.4)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '24px', display: 'flex', flexDirection: 'column', position: 'relative', minHeight: '800px'}}>
               <div style={{padding: '2.5rem', borderBottom: '1px solid rgba(255,255,255,0.05)', position: 'relative', zIndex: 1, background: 'linear-gradient(180deg, rgba(20,20,30,0.8) 0%, rgba(20,20,30,0) 100%)', display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '2rem'}}>
                   <div>
@@ -433,7 +521,7 @@ export default function TrainingplanClient({ userId }: { userId: string }) {
                       <p style={{color: '#ccc', fontSize: '1rem', lineHeight: 1.5, maxWidth: '600px'}}>{selectedPlan.description}</p>
                       <div style={{marginTop: '1.5rem', display: 'flex', gap: '1.5rem'}}>
                           <div style={{display: 'flex', flexDirection: 'column'}}><span style={{fontSize: '0.7rem', color: '#666', fontWeight: 700}}>DURÉE</span><span style={{fontSize: '1.2rem', color: '#fff', fontWeight: 800}}>{selectedPlan.duration_weeks} sem.</span></div>
-                          <div style={{display: 'flex', flexDirection: 'column'}}><span style={{fontSize: '0.7rem', color: '#666', fontWeight: 700}}>VOLUME HEBDO</span><span style={{fontSize: '1.2rem', color: '#fff', fontWeight: 800}}>{selectedPlan.avg_hours_week}h</span></div>
+                          <div style={{display: 'flex', flexDirection: 'column'}}><span style={{fontSize: '0.7rem', color: '#666', fontWeight: 700}}>VOLUME HEBDO</span><span style={{fontSize: '1.2rem', color: '#fff', fontWeight: 800}}>{selectedPlan.avg_hours_week.toFixed(1)}h</span></div>
                           <div style={{display: 'flex', flexDirection: 'column'}}><span style={{fontSize: '0.7rem', color: '#666', fontWeight: 700}}>CHARGE TOTALE</span><span style={{fontSize: '1.2rem', color: '#d04fd7', fontWeight: 800}}>{selectedPlan.total_tss} TSS</span></div>
                       </div>
                   </div>

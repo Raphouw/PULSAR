@@ -16,6 +16,11 @@ import { useAnalysis } from '../context/AnalysisContext';
 import NewRecordModal from './NewRecordModal';
 import { useBackfill } from '../context/BackfillContext';
 import { FitnessEvolutionChart } from './FitnessEvolutionChart';
+import { 
+  Sparkles, 
+  ArrowRight 
+} from 'lucide-react';
+import { motion } from 'framer-motion';
 
 // --- Constantes et Helpers ---
 const REFRESH_COOLDOWN_MS = 60 * 1000; // 1 minute
@@ -228,6 +233,80 @@ const HeaderSection = ({
     </div>
   );
 };
+
+
+const WrappedBanner = () => {
+  return (
+    <Link href="/wrapped" style={{ textDecoration: 'none' }}>
+      <motion.div 
+        whileHover={{ scale: 1.01 }}
+        whileTap={{ scale: 0.98 }}
+        style={{
+          background: 'linear-gradient(90deg, rgba(208, 79, 215, 0.15) 0%, rgba(0, 243, 255, 0.15) 100%)',
+          border: '1px solid rgba(208, 79, 215, 0.3)',
+          borderRadius: '16px',
+          padding: '1.5rem 2rem',
+          marginBottom: '2rem',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          cursor: 'pointer',
+          position: 'relative',
+          overflow: 'hidden',
+          boxShadow: '0 0 20px rgba(208, 79, 215, 0.1)'
+        }}
+      >
+        {/* Effet de fond animé subtil */}
+        <div className="absolute inset-0 bg-[url('/noise.png')] opacity-10 pointer-events-none" />
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', zIndex: 1 }}>
+          <div style={{ 
+            background: 'linear-gradient(135deg, #d04fd7 0%, #00f3ff 100%)', 
+            padding: '12px', 
+            borderRadius: '12px',
+            boxShadow: '0 0 15px rgba(208, 79, 215, 0.4)'
+          }}>
+            <Sparkles size={24} color="#fff" fill="white" />
+          </div>
+          <div>
+            <h3 style={{ 
+              margin: 0, 
+              fontSize: '1.4rem', 
+              fontWeight: 800, 
+              fontStyle: 'italic',
+              background: 'linear-gradient(90deg, #fff, #e0e0e0)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              textTransform: 'uppercase',
+              letterSpacing: '1px'
+            }}>
+              Votre Rétrospective 2025
+            </h3>
+            <p style={{ margin: '4px 0 0 0', color: '#a0a0a0', fontSize: '0.9rem' }}>
+              Découvrez votre identité sportive et vos statistiques légendaires.
+            </p>
+          </div>
+        </div>
+
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: '10px', 
+          background: '#fff', 
+          color: '#000', 
+          padding: '10px 20px', 
+          borderRadius: '30px', 
+          fontWeight: 700, 
+          fontSize: '0.9rem',
+          zIndex: 1
+        }}>
+          LANCER <ArrowRight size={16} />
+        </div>
+      </motion.div>
+    </Link>
+  );
+};
+
 
 // --- HELPERS STATS ---
 const calcPercentDiff = (current: number, previous: number): number => {
@@ -619,6 +698,8 @@ export default function DashboardClient({ data, session: serverSession, hasStrav
       onRefresh={handleManualRefresh}
       cooldownRemaining={cooldownRemaining} 
     />
+
+    <WrappedBanner />
 
     <div style={tabContainerStyle}>
       <TabButton active={activeTab === 'overview'} onClick={() => setActiveTab('overview')}>Vue d'ensemble</TabButton>

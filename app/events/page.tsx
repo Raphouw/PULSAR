@@ -2,7 +2,7 @@
 import { supabaseAdmin } from '../../lib/supabaseAdminClient';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../lib/auth";
-import EventsGridClient from './EventGridClient'; // Attention au 's' (EventsGridClient)
+import EventsGridClient from './EventGridClient'; 
 
 export default async function EventsPage() {
     

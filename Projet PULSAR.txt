@@ -188,6 +188,10 @@ Idées quelconques :
 	Se baser sur le TSS pour faire des animations différentes sur la carte de charge totale
 	Des particules autour de la souris sur les mois où on a bien travaillé 
 	
+	Plan d'entrainement : Avoir des séances pré faites (Ex : SweetSpot, 30/30,z2 etc MAIS aussi des schémas de plan d'entrainement, ex : Sem1 : 4 jours dont 2 z2 1 intervale et 1 sweetspot)
+	On pourrait avoir des séances du type "vues chez les pros" etc 
+	Ca serait donc un builder de plan d'entrainement en fonction de ce qui se fait le plus et en pouvant rentrer une FTP de référence pour pouvoir être sur de partir sur de bonnes bases
+
 
 
 	TTE : Chercher sur toutes les activités le temps le plus élevé à @FTP et faire de même pour les 90 derniers jours
