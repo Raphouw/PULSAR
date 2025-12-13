@@ -106,6 +106,13 @@ function ActivityCard({ activity, specialBadges, onDelete }: { activity: Activit
     onDelete(activity.id);
   };
 
+  const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor((seconds- (m*60 + h*3600)))
+    return `${h}h${m.toString().padStart(2, '0')}m${s}s`;
+};
+
   return (
     <div 
       style={{ position: 'relative' }}
@@ -164,6 +171,13 @@ function ActivityCard({ activity, specialBadges, onDelete }: { activity: Activit
                     </div>
                     
                     <div style={cardStatsLineStyle}>
+                       
+                        
+
+                          <div style={statBoxInlineStyle}>
+                        <div style={statLabelStyle}>Durée</div>
+                        <div style={{...statValueInlineStyle, color: '#1083b9ff'}}>{formatTime(activity.duration_s)} </div>
+                        </div>
                         <div style={statBoxInlineStyle}>
                         <div style={statLabelStyle}>Distance</div>
                         <div style={{...statValueInlineStyle, color: '#10b981'}}>{activity.distance_km} km</div>
@@ -172,13 +186,24 @@ function ActivityCard({ activity, specialBadges, onDelete }: { activity: Activit
                         <div style={statLabelStyle}>Dénivelé</div>
                         <div style={{...statValueInlineStyle, color: '#f59e0b'}}>{Math.round(activity.elevation_gain_m ?? 0)} m</div>
                         </div>
+                        
+                        
+                    </div>
+                    <div style={cardStatsLineStyle}>
+
                         <div style={statBoxInlineStyle}>
+                        <div style={statLabelStyle}>Vitesse</div>
+                        <div style={{...statValueInlineStyle, color: '#ea62deff'}}>{activity.avg_speed_kmh ?? '-'} km/h</div>
+                        </div>
+
+                      <div style={statBoxInlineStyle}>
                         <div style={statLabelStyle}>Puissance</div>
                         <div style={{...statValueInlineStyle, color: '#8b5cf6'}}>{activity.avg_power_w ?? '-'} W</div>
                         </div>
+
                         <div style={statBoxInlineStyle}>
                         <div style={statLabelStyle}>TSS</div>
-                        <div style={{...statValueInlineStyle, color: '#d04fd7'}}>{activity.tss ?? '-'}</div>
+                        <div style={{...statValueInlineStyle, color: '#ff0000ff'}}>{activity.tss ?? '-'}</div>
                         </div>
                     </div>
                 </div>

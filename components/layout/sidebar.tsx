@@ -5,76 +5,146 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { Menu, X } from 'lucide-react'; // 🔥 Nouveaux imports pour le bouton mobile
+import { Menu, X, ChevronRight, Zap, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
-// --- ICÔNES SVG PRO (Inchangées) ---
+
+const HEADER_HEIGHT = 72;
+const FOOTER_HEIGHT = 64;
+
+// --- ICÔNES & ANIMATIONS (V5 - LOOP INFINI - INCHANGÉ) ---
 const Icons = {
   Dashboard: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9"></rect><rect x="14" y="3" width="7" height="5"></rect><rect x="14" y="12" width="7" height="9"></rect><rect x="3" y="16" width="7" height="5"></rect></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-dashboard">
+      <rect x="3" y="3" width="7" height="9" className="rect-1"></rect>
+      <rect x="14" y="3" width="7" height="5" className="rect-2"></rect>
+      <rect x="14" y="12" width="7" height="9" className="rect-3"></rect>
+      <rect x="3" y="16" width="7" height="5" className="rect-4"></rect>
+    </svg>
   ),
   Activity: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"></path></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-activity">
+      <path className="pulse-line" d="M22 12h-4l-3 9L9 3l-3 9H2"></path>
+    </svg>
   ),
   Calendar: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-calendar">
+      <rect x="3" y="4" width="18" height="18" rx="2" ry="2" className="cal-border"></rect>
+      <path d="M16 2v4" className="cal-pin"></path>
+      <path d="M8 2v4" className="cal-pin"></path>
+      <path d="M3 10h18" className="cal-sep"></path>
+      <rect x="7" y="14" width="3" height="3" className="cal-day-1" opacity="0.3" fill="currentColor" stroke="none"></rect>
+      <rect x="14" y="14" width="3" height="3" className="cal-day-2" opacity="0.3" fill="currentColor" stroke="none"></rect>
+      <rect x="7" y="18" width="3" height="3" className="cal-day-3" opacity="0.3" fill="currentColor" stroke="none"></rect>
+      <rect x="14" y="18" width="3" height="3" className="cal-day-4" opacity="0.3" fill="currentColor" stroke="none"></rect>
+    </svg>
   ),
   Events: (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><path d="m13 16 2 2 4-4"></path></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-events">
+      <path className="flag-pole" d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"></path>
+      <line className="flag-stick" x1="4" y1="22" x2="4" y2="15"></line>
+    </svg>
   ),
   Training: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-training">
+      <circle cx="12" cy="12" r="10" className="stopwatch-body"></circle>
+      <path d="M12 6v6l4 2" className="stopwatch-hand"></path>
+      <line x1="12" y1="2" x2="12" y2="4" className="stopwatch-btn"></line>
+    </svg>
   ),
   TrainingPlan: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-training-plan">
+      <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" className="clipboard-body"/>
       <rect x="9" y="3" width="6" height="4" rx="2" />
-      <path d="M9 14h6" />
-      <path d="M9 18h6" />
-      <path d="M9 10h2" />
+      <path d="M9 14h6" className="line-1"/>
+      <path d="M9 18h6" className="line-2"/>
+      <path d="M9 10h2" className="line-3"/>
     </svg>
   ),
   Simulation: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12h5l3 5 5-11 4 8h3"></path><path d="M12 2v2"></path><path d="M12 22v-2"></path></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-simulation">
+      <path className="wind-line-1" d="M2 6h20" strokeDasharray="12 8"></path>
+      <path className="wind-line-2" d="M2 12h20" strokeDasharray="12 8"></path>
+      <path className="wind-line-3" d="M2 18h20" strokeDasharray="12 8"></path>
+      <circle className="wind-obj" cx="12" cy="12" r="3" fill="transparent"></circle>
+    </svg>
   ),
   Route: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-route">
+      <polygon points="3 11 22 2 13 21 11 13 3 11" className="arrow-plane"></polygon>
+    </svg>
   ),
   Segment: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="m8 3 4 8 5-5 5 15H2L8 3z"></path></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-segment">
+      <rect x="2" y="16" width="3" height="5" rx="1" className="elev-bar-1"></rect>
+      <rect x="6" y="12" width="3" height="9" rx="1" className="elev-bar-2"></rect>
+      <rect x="10" y="8" width="3" height="13" rx="1" className="elev-bar-3"></rect>
+      <rect x="14" y="5" width="3" height="16" rx="1" className="elev-bar-4"></rect>
+      <rect x="18" y="10" width="3" height="11" rx="1" className="elev-bar-5"></rect>
+    </svg>
   ),
   Friends: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-friends">
+      <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+      <circle cx="9" cy="7" r="4"></circle>
+      <path d="M23 21v-2a4 4 0 0 0-3-3.87" className="friend-pop"></path>
+      <path d="M16 3.13a4 4 0 0 1 0 7.75" className="friend-pop"></path>
+    </svg>
   ),
   Compare: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3h5v5"></path><path d="M21 3l-7 7"></path><path d="M8 21H3v-5"></path><path d="M3 21l7-7"></path></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-compare">
+      <path d="M16 3h5v5" className="arrow-tr"></path>
+      <path d="M21 3l-7 7" className="arrow-tr-line"></path>
+      <path d="M8 21H3v-5" className="arrow-bl"></path>
+      <path d="M3 21l7-7" className="arrow-bl-line"></path>
+    </svg>
   ),
   Profile: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-profile">
+      <rect x="4" y="3" width="16" height="18" rx="2" className="id-card"></rect>
+      <circle cx="12" cy="10" r="3" className="id-head"></circle>
+      <line x1="8" y1="16" x2="16" y2="16" className="id-line"></line>
+      <line x1="4" y1="8" x2="20" y2="8" className="scan-beam" strokeWidth="1" opacity="0"></line>
+    </svg>
   ),
   Map: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-map">
+       <circle cx="12" cy="12" r="3" className="gps-dot" fill="currentColor" stroke="none"></circle>
+       <circle cx="12" cy="12" r="6" className="gps-ring-1" opacity="0.5"></circle>
+       <circle cx="12" cy="12" r="10" className="gps-ring-2" opacity="0.3"></circle>
+    </svg>
   ),
   Algo: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 7 4 4 20 4 20 7"></polyline><line x1="9" y1="20" x2="15" y2="20"></line><line x1="12" y1="4" x2="12" y2="20"></line></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-algo">
+      <rect x="4" y="4" width="16" height="16" rx="2" className="chip-body"></rect>
+      <rect x="9" y="9" width="6" height="6" className="chip-core" fill="currentColor" stroke="none" opacity="0.3"></rect>
+      <path d="M9 1v3 M15 1v3 M9 20v3 M15 20v3 M20 9h3 M20 15h3 M1 9h3 M1 15h3" className="chip-legs"></path>
+    </svg>
   ),
   World: (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M2 12h20"></path><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-world">
+      <circle cx="12" cy="12" r="2" className="net-center" fill="currentColor" stroke="none"></circle>
+      <line x1="12" y1="12" x2="12" y2="5" className="net-link-1" strokeDasharray="10" strokeDashoffset="10"></line>
+      <line x1="12" y1="12" x2="18" y2="15" className="net-link-2" strokeDasharray="10" strokeDashoffset="10"></line>
+      <line x1="12" y1="12" x2="6" y2="15" className="net-link-3" strokeDasharray="10" strokeDashoffset="10"></line>
+      <circle cx="12" cy="5" r="1.5" className="net-node-1" opacity="0.3"></circle>
+      <circle cx="18" cy="15" r="1.5" className="net-node-2" opacity="0.3"></circle>
+      <circle cx="6" cy="15" r="1.5" className="net-node-3" opacity="0.3"></circle>
+    </svg>
   ),
 };
 
-// Organisation des liens (Inchangée)
 const groups = [
   {
-    title: "Performance",
+    title: "PERFORMANCE",
     links: [
       { href: '/dashboard', label: 'Dashboard', icon: Icons.Dashboard },
       { href: '/activities', label: 'Activités', icon: Icons.Activity },
       { href: '/calendar', label: 'Calendrier', icon: Icons.Calendar },
-      { href: '/trainings', label: 'Entrainements ', icon: Icons.Training },
+      { href: '/trainings', label: 'Entrainements', icon: Icons.Training },
     ]
   },
   {
-    title: "Planification",
+    title: "PLANIFICATION",
     links: [
       { href: '/training-plan', label: "Plan d'entraînement", icon: Icons.TrainingPlan },
       { href: '/simulations', label: 'Simulations', icon: Icons.Simulation },
@@ -85,7 +155,7 @@ const groups = [
     ]
   },
   {
-    title: "Social & Données",
+    title: "SOCIAL & DONNÉES",
     links: [
       { href: '/friends', label: 'Communauté', icon: Icons.Friends },
       { href: '/world', label: 'Arbre-Monde', icon: Icons.World },
@@ -93,7 +163,7 @@ const groups = [
       { href: '/profildata', label: 'Mon Profil', icon: Icons.Profile },
       { href: '/algo', label: 'Algorithmes', icon: Icons.Algo },
     ]
-  }
+  },
 ];
 
 export default function Sidebar() {
@@ -101,115 +171,298 @@ export default function Sidebar() {
   const { data: session } = useSession();
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
-  const isLocked = session?.user?.onboarding_completed === false;
+  useEffect(() => {
+    setMounted(true);
+    const savedState = localStorage.getItem('sidebar-collapsed');
+    if (savedState) setIsCollapsed(JSON.parse(savedState));
+  }, []);
 
-  // 🔥 FIX: Fermer le menu mobile automatiquement quand on change de page
+  const toggleSidebar = () => {
+    const newState = !isCollapsed;
+    setIsCollapsed(newState);
+    localStorage.setItem('sidebar-collapsed', JSON.stringify(newState));
+  };
+
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [pathname]);
 
+  const isLocked = session?.user?.onboarding_completed === false;
+
+  // LARGEUR AJUSTÉE (Plus fine)
+  const sidebarWidth = isCollapsed ? '72px' : '210px';
+
+  // Marge entre les groupes : plus petite quand rétracté pour tasser le contenu
+  const groupMarginBottom = isCollapsed ? '0.8rem' : '1.5rem';
+
+  if (!mounted) return <div style={{ width: sidebarWidth, background: 'var(--background)' }} />;
+
   return (
     <>
-      {/* --- CSS POUR LE MOBILE (Media Queries) --- */}
       <style jsx global>{`
-        /* Par défaut : Desktop (Sidebar visible) */
-        .sidebar-container {
-          transform: translateX(0);
-          width: var(--sidebar-width, 250px);
-        }
-        .mobile-toggle-btn {
-          display: none;
-        }
-        .mobile-overlay {
-          display: none;
+        /* --- ANIMATIONS (V5 - WHITE ONLY) --- */
+        .logo-link:hover .logo-text {
+            letter-spacing: 2px;
+            filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.6));
+            background: linear-gradient(135deg, #ffffff 0%, #d04fd7 100%);
+            -webkit-background-clip: text;
         }
 
-        /* Mobile & Tablette (< 768px) */
-        @media (max-width: 768px) {
-          .sidebar-container {
-            transform: translateX(-100%); /* Caché par défaut */
-            width: 280px; /* Largeur fixe correcte pour mobile */
-            box-shadow: 5px 0 15px rgba(0,0,0,0.5);
-          }
-          .sidebar-container.open {
-            transform: translateX(0); /* Visible quand open */
-          }
-          .mobile-toggle-btn {
-            display: flex;
-            position: fixed;
-            top: 15px;
-            left: 15px;
-            z-index: 100;
-            background: rgba(20, 20, 30, 0.8);
-            backdrop-filter: blur(8px);
-            border: 1px solid rgba(255,255,255,0.1);
-            color: #fff;
-            padding: 8px;
-            border-radius: 8px;
-            cursor: pointer;
-          }
-          .mobile-overlay {
-            display: block;
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.6);
-            backdrop-filter: blur(3px);
-            z-index: 45; /* Juste sous la sidebar (z-50) */
-            opacity: 0;
-            pointer-events: none;
-            transition: opacity 0.3s ease;
-          }
-          .mobile-overlay.visible {
-            opacity: 1;
-            pointer-events: auto;
-          }
+        /* Dashboard */
+        .nav-link:hover .icon-dashboard .rect-1 { animation: eqMove 0.6s ease infinite alternate; }
+        .nav-link:hover .icon-dashboard .rect-2 { animation: eqMove 0.6s ease infinite alternate 0.1s; }
+        .nav-link:hover .icon-dashboard .rect-3 { animation: eqMove 0.6s ease infinite alternate 0.2s; }
+        .nav-link:hover .icon-dashboard .rect-4 { animation: eqMove 0.6s ease infinite alternate 0.3s; }
+        @keyframes eqMove { 0% { transform: scaleY(1); } 100% { transform: scaleY(0.6); transform-origin: bottom; } }
+
+        /* Activity */
+        .nav-link:hover .icon-activity .pulse-line { animation: pulseGraph 1s ease-in-out infinite; stroke: #fff; }
+        @keyframes pulseGraph { 
+          0% { stroke-dasharray: 40; stroke-dashoffset: 40; } 
+          50% { stroke-dasharray: 40; stroke-dashoffset: 0; }
+          100% { stroke-dasharray: 40; stroke-dashoffset: -40; } 
         }
+
+        /* Calendar */
+        .nav-link:hover .icon-calendar .cal-day-1 { animation: dayCycle 2s ease infinite; }
+        .nav-link:hover .icon-calendar .cal-day-2 { animation: dayCycle 2s ease infinite 0.25s; }
+        .nav-link:hover .icon-calendar .cal-day-3 { animation: dayCycle 2s ease infinite 0.5s; }
+        .nav-link:hover .icon-calendar .cal-day-4 { animation: dayCycle 2s ease infinite 0.75s; }
+        @keyframes dayCycle { 
+            0% { opacity: 0.3; } 
+            20% { opacity: 1; fill: #fff; }
+            50% { opacity: 1; fill: #fff; }
+            80% { opacity: 0.3; fill: currentColor; }
+            100% { opacity: 0.3; }
+        }
+
+        /* Training */
+        .nav-link:hover .icon-training .stopwatch-hand { animation: timerSpin 1s linear infinite; transform-origin: 12px 12px; }
+        @keyframes timerSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* Simulation */
+        .nav-link:hover .icon-simulation .wind-line-1 { animation: windSpeed 0.8s linear infinite; }
+        .nav-link:hover .icon-simulation .wind-line-2 { animation: windSpeed 0.8s linear infinite 0.1s; }
+        .nav-link:hover .icon-simulation .wind-line-3 { animation: windSpeed 0.8s linear infinite 0.2s; }
+        .nav-link:hover .icon-simulation .wind-obj { stroke: #fff; }
+        @keyframes windSpeed { 
+            from { stroke-dashoffset: 20; opacity: 0.2; } 
+            to { stroke-dashoffset: 0; opacity: 1; stroke: #fff; } 
+        }
+
+        /* Events */
+        .nav-link:hover .icon-events .flag-pole { animation: waveFlag 1s ease-in-out infinite alternate; transform-origin: left center; }
+        @keyframes waveFlag { 
+            0% { transform: scaleX(1) skewY(0deg); } 
+            100% { transform: scaleX(0.95) skewY(-10deg); stroke: #fff; } 
+        }
+
+        /* Training Plan */
+        .nav-link:hover .icon-training-plan .line-1 { animation: loadLine 0.8s ease infinite; }
+        .nav-link:hover .icon-training-plan .line-2 { animation: loadLine 0.8s ease infinite 0.2s; }
+        .nav-link:hover .icon-training-plan .line-3 { animation: loadLine 0.8s ease infinite 0.4s; }
+        @keyframes loadLine { 0% { opacity: 0.3; } 50% { opacity: 1; stroke: #fff; transform: translateX(2px); } 100% { opacity: 0.3; } }
+
+        /* Route */
+        .nav-link:hover .icon-route .arrow-plane { animation: flyPlane 1s ease-in-out infinite alternate; stroke: #fff; transform-origin: center; }
+        @keyframes flyPlane { from { transform: translate(0,0); } to { transform: translate(2px, -2px) rotate(5deg); } }
+
+        /* Segment */
+        .nav-link:hover .icon-segment .elev-bar-1 { animation: equalizerWave 1s ease infinite alternate; fill: #fff; }
+        .nav-link:hover .icon-segment .elev-bar-2 { animation: equalizerWave 1s ease infinite alternate 0.15s; fill: #fff; }
+        .nav-link:hover .icon-segment .elev-bar-3 { animation: equalizerWave 1s ease infinite alternate 0.3s; fill: #fff; }
+        .nav-link:hover .icon-segment .elev-bar-4 { animation: equalizerWave 1s ease infinite alternate 0.45s; fill: #fff; }
+        .nav-link:hover .icon-segment .elev-bar-5 { animation: equalizerWave 1s ease infinite alternate 0.6s; fill: #fff; }
+        @keyframes equalizerWave { 
+            0% { transform: scaleY(0.4); opacity: 0.6; } 
+            100% { transform: scaleY(1); opacity: 1; transform-origin: bottom; } 
+        }
+
+        /* Friends */
+        .nav-link:hover .icon-friends .friend-pop { animation: popFriend 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite alternate; stroke: #fff; }
+        @keyframes popFriend { from { transform: scale(0.9); opacity: 0.5; transform-origin: center; } to { transform: scale(1.1); opacity: 1; } }
+
+        /* Compare */
+        .nav-link:hover .icon-compare .arrow-tr { animation: expandTr 0.8s ease infinite alternate; stroke: #fff; }
+        .nav-link:hover .icon-compare .arrow-bl { animation: expandBl 0.8s ease infinite alternate; stroke: #fff; }
+        @keyframes expandTr { to { transform: translate(2px, -2px); } }
+        @keyframes expandBl { to { transform: translate(-2px, 2px); } }
+
+        /* Map */
+        .nav-link:hover .icon-map .gps-dot { fill: #fff; }
+        .nav-link:hover .icon-map .gps-ring-1 { animation: radarPulse 1.5s ease-out infinite; stroke: #fff; fill: transparent; }
+        .nav-link:hover .icon-map .gps-ring-2 { animation: radarPulse 1.5s ease-out infinite 0.4s; stroke: #fff; fill: transparent; }
+        @keyframes radarPulse {
+            0% { transform: scale(0.1); opacity: 1; transform-origin: center; stroke-width: 2px; }
+            100% { transform: scale(1); opacity: 0; transform-origin: center; stroke-width: 0px; }
+        }
+
+        /* Algo */
+        .nav-link:hover .icon-algo .chip-core { animation: corePulse 0.8s ease infinite alternate; fill: #fff; }
+        .nav-link:hover .icon-algo .chip-legs { animation: legsGlow 0.8s ease infinite alternate; stroke: #fff; }
+        @keyframes corePulse { from { opacity: 0.3; } to { opacity: 1; } }
+        @keyframes legsGlow { from { opacity: 0.5; } to { opacity: 1; stroke-width: 2px; } }
+
+        /* World */
+        .nav-link:hover .icon-world .net-center { fill: #fff; }
+        .nav-link:hover .icon-world .net-link-1 { animation: pulseLink 2s ease infinite alternate; stroke: #fff; }
+        .nav-link:hover .icon-world .net-link-2 { animation: pulseLink 2s ease infinite alternate 0.3s; stroke: #fff; }
+        .nav-link:hover .icon-world .net-link-3 { animation: pulseLink 2s ease infinite alternate 0.6s; stroke: #fff; }
+        .nav-link:hover .icon-world .net-node-1 { animation: pulseNode 2s ease infinite alternate; fill: #fff; }
+        .nav-link:hover .icon-world .net-node-2 { animation: pulseNode 2s ease infinite alternate 0.3s; fill: #fff; }
+        .nav-link:hover .icon-world .net-node-3 { animation: pulseNode 2s ease infinite alternate 0.6s; fill: #fff; }
+        
+        @keyframes pulseLink { 0% { stroke-dashoffset: 10; opacity: 0.3; } 100% { stroke-dashoffset: 0; opacity: 1; } }
+        @keyframes pulseNode { 0% { opacity: 0.3; r: 1.5; } 100% { opacity: 1; r: 2.2; } }
+
+        /* Profile */
+        .nav-link:hover .icon-profile .scan-beam { animation: scanDown 1.5s linear infinite; stroke: #fff; }
+        .nav-link:hover .icon-profile .id-head { stroke: #fff; transition: stroke 0.3s; }
+        @keyframes scanDown { 0% { transform: translateY(0); opacity: 0; } 20% { opacity: 1; } 80% { opacity: 1; } 100% { transform: translateY(12px); opacity: 0; } }
+
+        /* HOVER EFFECTS - WHITE ONLY */
+        .nav-link:hover .link-text,
+        .nav-link:hover svg,
+        .nav-link:hover svg path,
+        .nav-link:hover svg rect,
+        .nav-link:hover svg circle,
+        .nav-link:hover svg line,
+        .nav-link:hover svg polygon,
+        .nav-link:hover svg g {
+            color: #ffffff !important;
+            stroke: #ffffff !important;
+            fill: rgba(255,255,255,0) !important;
+        }
+        /* Fill exceptions */
+        .nav-link:hover svg .chip-core, .nav-link:hover svg .cal-day-1, .nav-link:hover svg .cal-day-2,
+        .nav-link:hover svg .cal-day-3, .nav-link:hover svg .cal-day-4, .nav-link:hover svg .gps-dot,
+        .nav-link:hover svg .net-center, .nav-link:hover svg .net-node-1, .nav-link:hover svg .net-node-2,
+        .nav-link:hover svg .net-node-3, .nav-link:hover svg .elev-bar-1, .nav-link:hover svg .elev-bar-2,
+        .nav-link:hover svg .elev-bar-3, .nav-link:hover svg .elev-bar-4, .nav-link:hover svg .elev-bar-5 {
+            fill: #ffffff !important;
+            stroke: none !important;
+        }
+
+        .nav-link:hover .link-text { transform: translateX(3px); }
+        
+        /* RESPONSIVE */
+        @media (max-width: 768px) {
+          .sidebar-container { transform: translateX(-100%); width: 220px !important; }
+          .sidebar-container.open { transform: translateX(0); }
+          .mobile-toggle-btn { display: flex; }
+          .collapse-btn { display: none !important; }
+        }
+        
+        .scroll-area::-webkit-scrollbar { width: 3px; }
+        .scroll-area::-webkit-scrollbar-track { background: transparent; }
+        .scroll-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
       `}</style>
 
-      {/* BOUTON HAMBURGER MOBILE */}
+      {/* BOUTON MOBILE */}
       <button 
         className="mobile-toggle-btn" 
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+        aria-label="Menu"
+        style={{
+            position: 'fixed', top: '12px', left: '12px', zIndex: 100,
+            background: 'rgba(15, 15, 20, 0.9)', backdropFilter: 'blur(8px)',
+            border: '1px solid rgba(255,255,255,0.1)', color: '#fff',
+            padding: '8px', borderRadius: '8px', cursor: 'pointer',
+            display: 'none'
+        }}
       >
-        {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+        {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
 
-      {/* OVERLAY FONCÉ (Pour fermer en cliquant à côté) */}
+      {/* OVERLAY MOBILE */}
       <div 
         className={`mobile-overlay ${isMobileMenuOpen ? 'visible' : ''}`} 
         onClick={() => setIsMobileMenuOpen(false)}
+        style={{
+            display: isMobileMenuOpen ? 'block' : 'none',
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
+            backdropFilter: 'blur(2px)', zIndex: 45
+        }}
       />
 
-      {/* NAV PRINCIPALE */}
-      <nav 
+      {/* --- SIDEBAR --- */}
+      <aside 
         className={`sidebar-container ${isMobileMenuOpen ? 'open' : ''}`}
         style={{
-            ...navStyle,
-            ...(isLocked ? {
-                opacity: 0.3,
-                pointerEvents: 'none',
-                filter: 'grayscale(100%)',
-                transition: 'all 0.5s ease'
-            } : {})
+            height: '100vh', position: 'fixed', top: 0, left: 0, width: sidebarWidth,
+            background: '#0a0a0c', borderRight: '1px solid rgba(255, 255, 255, 0.06)',
+            display: 'flex', flexDirection: 'column', zIndex: 50,
+            transition: 'width 0.4s cubic-bezier(0.2, 0, 0, 1)',
+            ...(isLocked ? { opacity: 0.4, pointerEvents: 'none', filter: 'grayscale(0.8)' } : {})
         }}
       >
-        {/* LOGO */}
-        <div style={headerStyle}>
-          <div style={logoWrapperStyle}>
-             <div style={logoGlowStyle} />
-             <span style={logoTextStyle}>PULSAR</span>
-          </div>
-          <div style={versionStyle}>DEV</div>
+        {/* HEADER & TOGGLE BUTTON */}
+        <div style={{ 
+            display: 'flex', alignItems: 'center', 
+            justifyContent: isCollapsed ? 'center' : 'space-between', 
+            padding: '1.2rem 1rem', marginBottom: 0 
+        }}>
+            <Link href="/dashboard" className="logo-link" style={{ textDecoration: 'none', display: isCollapsed ? 'none' : 'block' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                    <span style={logoTextStyle} className="logo-text">PULSAR</span>
+                    <span style={versionBadgeStyle}>DEV</span>
+                </div>
+            </Link>
+
+            {/* Logo "P" only when collapsed */}
+            {isCollapsed && (
+                 <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#d04fd7', display: 'none' }}>P</span>
+            )}
+
+            {/* BOUTON TOGGLE (TOP RIGHT) */}
+            <button 
+                className="collapse-btn"
+                onClick={toggleSidebar}
+                style={{
+                    background: 'rgba(255,255,255,0.03)',
+                    border: '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: '6px',
+                    color: 'rgba(255,255,255,0.5)',
+                    padding: '5px',
+                    cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'all 0.2s',
+                    width: isCollapsed ? '100%' : 'auto', // Prend toute la largeur si réduit
+                    height: isCollapsed ? '40px' : 'auto',
+                }}
+                onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
+                    e.currentTarget.style.color = '#fff';
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                }}
+                onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                    e.currentTarget.style.color = 'rgba(255,255,255,0.5)';
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
+                }}
+            >
+                {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={16} />}
+            </button>
         </div>
 
-        {/* LISTE DES LIENS */}
-        <div style={scrollAreaStyle}>
+        {/* NAVIGATION */}
+        <div style={scrollAreaStyle} className="scroll-area">
           {groups.map((group, index) => (
-            <div key={index} style={groupContainerStyle}>
-              <div style={groupHeaderStyle}>
-                 <span style={groupTitleStyle}>{group.title}</span>
-                 <div style={groupLineStyle}></div>
+            // Utilisation de la marge dynamique
+            <div key={index} style={{ marginBottom: groupMarginBottom }}>
+              <div style={{ 
+                  marginBottom: '0.6rem', paddingLeft: isCollapsed ? 0 : '0.8rem', 
+                  textAlign: isCollapsed ? 'center' : 'left', height: '16px',
+                  display: 'flex', alignItems: 'center', justifyContent: isCollapsed ? 'center' : 'flex-start'
+              }}>
+                 {isCollapsed ? (
+                    <div style={{ width: '20px', height: '2px', background: 'linear-gradient(90deg, #d04fd7 0%, transparent 100%)', opacity: 0.5 }} />
+                 ) : (
+                    <span style={groupTitleStyle}>{group.title}</span>
+                 )}
               </div>
               
               <ul style={ulStyle}>
@@ -218,27 +471,50 @@ export default function Sidebar() {
                   const isHovered = hoveredLink === link.href;
 
                   return (
-                    <li key={link.href} style={{ marginBottom: '2px' }}>
+                    <li key={link.href} style={{ marginBottom: '4px' }}>
                       <Link
                         href={link.href}
-                        style={getLinkStyle(isActive, isHovered)}
+                        className="nav-link"
+                        style={{
+                            ...getLinkStyle(isActive, isHovered),
+                            padding: isCollapsed ? '0.8rem' : '0.55rem 0.8rem',
+                            justifyContent: isCollapsed ? 'center' : 'flex-start'
+                        }}
                         onMouseEnter={() => setHoveredLink(link.href)}
                         onMouseLeave={() => setHoveredLink(null)}
                       >
                         {isActive && <div style={activeIndicatorStyle} />}
                         
-                        <span style={{ 
-                          marginRight: '12px', 
-                          display: 'flex', 
-                          color: isActive ? '#d04fd7' : 'var(--text-secondary)',
-                          transition: 'color 0.2s'
-                        }}>
+                        <span 
+                          className="link-icon"
+                          style={{ 
+                            marginRight: isCollapsed ? 0 : '12px', display: 'flex',
+                            transition: 'color 0.2s', color: isActive ? '#d04fd7' : 'rgba(255,255,255,0.6)',
+                            minWidth: '18px'
+                          }}
+                        >
                           {link.icon}
                         </span>
                         
-                        <span style={{ fontWeight: isActive ? 600 : 400 }}>
+                        <span 
+                          className="link-text"
+                          style={{ 
+                            fontSize: '0.85rem', fontWeight: isActive ? 600 : 400,
+                            color: isActive ? '#fff' : 'rgba(255,255,255,0.8)',
+                            transition: 'all 0.3s', opacity: isCollapsed ? 0 : 1,
+                            width: isCollapsed ? 0 : 'auto', overflow: 'hidden', whiteSpace: 'nowrap'
+                          }}
+                        >
                           {link.label}
                         </span>
+                        
+                        {!isCollapsed && (
+                            <ChevronRight size={14} style={{
+                                marginLeft: 'auto', opacity: isHovered ? 1 : 0,
+                                transform: isHovered ? 'translateX(0)' : 'translateX(-5px)',
+                                transition: 'all 0.2s ease', color: '#fff'
+                            }}/>
+                        )}
                       </Link>
                     </li>
                   );
@@ -248,202 +524,95 @@ export default function Sidebar() {
           ))}
         </div>
 
-        {/* PIED DE PAGE (USER) */}
-        {session?.user && (
-          <div style={footerStyle}>
-            <div style={avatarPlaceholderStyle}>
-               0{session.user.name?.charAt(0) || 'U'}
+        {/* FOOTER USER */}
+        {/* Suppression de marginTop: 'auto' car flex: 1 sur la scroll-area fait le travail */}
+        <div style={{ marginTop: 0, borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.3)' }}>
+            {session?.user && (
+            <div style={{ padding: isCollapsed ? '1rem 0.5rem' : '1rem 1rem', display: 'flex', justifyContent: 'center' }}>
+                <div style={footerProfileStyle}>
+                <div style={avatarPlaceholderStyle}>
+                    {session.user.image ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={session.user.image} alt="" style={{width:'100%', height:'100%', borderRadius:'50%'}}/>
+                    ) : (
+                        session.user.name?.charAt(0) || 'R'
+                    )}
+                </div>
+                
+                <div style={{ 
+                    overflow: 'hidden', transition: 'all 0.3s', opacity: isCollapsed ? 0 : 1,
+                    width: isCollapsed ? 0 : 'auto', marginLeft: isCollapsed ? 0 : '10px'
+                }}>
+                    <div style={userNameStyle}>{session.user.name}</div>
+                    <div style={userRoleStyle}>
+                        <Zap size={10} style={{ marginRight: 3, fill: '#fbbf24', stroke: 'none' }} />
+                        Athlète
+                    </div>
+                </div>
+                </div>
             </div>
-            <div style={{ overflow: 'hidden' }}>
-              <div style={userNameStyle}>{session.user.name}</div>
-              <div style={userRoleStyle}>Athlète</div>
-            </div>
-          </div>
-        )}
-      </nav>
+            )}
+        </div>
+      </aside>
     </>
   );
 }
 
-// --- STYLES PRO (Inchangés sauf navStyle qui est maintenant géré en partie par la classe CSS) ---
-
-const navStyle: React.CSSProperties = {
-  height: '100vh',
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  background: 'var(--background)', // Assure-toi que var(--background) est défini (ex: #050505)
-  borderRight: '1px solid var(--secondary)',
-  display: 'flex',
-  flexDirection: 'column',
-  zIndex: 50,
-  transition: 'transform 0.3s ease, width 0.3s ease', // Animation fluide
-};
-
-// ... (Le reste des styles reste identique à ton fichier original) ...
-const headerStyle: React.CSSProperties = {
-  padding: '2rem 1.5rem 1rem 1.5rem',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'space-between'
-};
-
-const logoWrapperStyle: React.CSSProperties = {
-  position: 'relative',
-};
+// --- STYLES CSS-IN-JS AJUSTÉS ---
 
 const logoTextStyle: React.CSSProperties = {
-  fontSize: '1.8rem',
-  fontWeight: 900,
-  letterSpacing: '-1px',
-  fontFamily: 'system-ui, sans-serif',
-  background: 'linear-gradient(135deg, #d04fd7 0%, #d70f9bff 100%)',
-  WebkitBackgroundClip: 'text',
-  WebkitTextFillColor: 'transparent',
-  filter: 'drop-shadow(0 0 15px rgba(208, 79, 215, 0.3))', 
+  fontSize: '1.4rem', fontWeight: 800, fontFamily: 'system-ui, sans-serif',
+  letterSpacing: '-0.5px', background: 'linear-gradient(135deg, #d04fd7 0%, #ffffff 100%)',
+  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', transition: 'all 0.3s ease',
 };
 
-const logoGlowStyle: React.CSSProperties = {
-  position: 'absolute',
-  top: '50%',
-  left: '50%',
-  transform: 'translate(-50%, -50%)',
-  width: '120%',
-  height: '120%',
-  background: 'radial-gradient(circle, rgba(208, 79, 215, 0.2) 0%, transparent 70%)',
-  filter: 'blur(15px)',
-  zIndex: -1
-};
-
-const versionStyle: React.CSSProperties = {
-  fontSize: '0.65rem',
-  color: 'var(--text-secondary)',
-  fontWeight: '600',
-  background: 'rgba(255,255,255,0.05)',
-  padding: '2px 6px',
-  borderRadius: '4px',
-  border: '1px solid rgba(255,255,255,0.05)'
+const versionBadgeStyle: React.CSSProperties = {
+  fontSize: '0.6rem', padding: '1px 5px', borderRadius: '4px',
+  background: 'rgba(208, 79, 215, 0.1)', border: '1px solid rgba(208, 79, 215, 0.25)',
+  color: '#d04fd7', fontWeight: 700, marginTop: '2px'
 };
 
 const scrollAreaStyle: React.CSSProperties = {
-  flex: 1,
-  overflowY: 'auto',
-  padding: '1rem 1rem',
-  scrollbarWidth: 'none', 
-  msOverflowStyle: 'none',
-};
-
-const groupContainerStyle: React.CSSProperties = {
-  marginBottom: '2rem',
-};
-
-const groupHeaderStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    marginBottom: '0.8rem',
-    paddingLeft: '0.8rem'
+  flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '0.5rem 0',
 };
 
 const groupTitleStyle: React.CSSProperties = {
-  fontSize: '0.7rem',
-  textTransform: 'uppercase',
-  color: 'var(--text-secondary)',
-  fontWeight: 700,
-  letterSpacing: '1px',
-  opacity: 0.7,
+  fontSize: '0.6rem', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '1px',
+  background: 'linear-gradient(90deg, #d04fd7 0%, #a0a0a0 100%)',
+  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', opacity: 1, 
 };
 
-const groupLineStyle: React.CSSProperties = {
-    flex: 1,
-    height: '1px',
-    background: 'var(--secondary)',
-    marginLeft: '10px',
-    opacity: 0.5
-};
-
-const ulStyle: React.CSSProperties = {
-  listStyle: 'none',
-  padding: 0,
-  margin: 0,
-};
+const ulStyle: React.CSSProperties = { listStyle: 'none', padding: 0, margin: 0 };
 
 const getLinkStyle = (isActive: boolean, isHovered: boolean): React.CSSProperties => {
-  const baseStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    padding: '0.65rem 0.8rem',
-    color: isActive ? '#fff' : 'var(--text-secondary)',
-    textDecoration: 'none',
-    borderRadius: '8px',
-    fontSize: '0.9rem',
-    transition: 'all 0.2s ease',
-    position: 'relative',
-    overflow: 'hidden',
-    cursor: 'pointer',
+  return {
+    display: 'flex', alignItems: 'center', textDecoration: 'none',
+    margin: '0 0.5rem', borderRadius: '8px', transition: 'all 0.2s ease',
+    position: 'relative', overflow: 'hidden', cursor: 'pointer',
+    background: isActive ? 'rgba(208, 79, 215, 0.12)' : isHovered ? 'rgba(255,255,255,0.05)' : 'transparent',
   };
-
-  if (isActive) {
-    return {
-      ...baseStyle,
-      background: 'rgba(208, 79, 215, 0.08)',
-    };
-  }
-
-  if (isHovered) {
-    return {
-      ...baseStyle,
-      background: 'var(--surface)',
-      color: 'var(--text)',
-    };
-  }
-
-  return baseStyle;
 };
 
 const activeIndicatorStyle: React.CSSProperties = {
-  position: 'absolute',
-  left: 0,
-  top: '15%',
-  height: '70%',
-  width: '3px',
-  background: '#d04fd7',
-  borderRadius: '0 4px 4px 0',
-  boxShadow: '0 0 8px rgba(208, 79, 215, 0.5)'
+  position: 'absolute', left: 0, top: '20%', height: '60%', width: '3px',
+  background: '#d04fd7', borderRadius: '0 4px 4px 0', boxShadow: '0 0 8px #d04fd7',
 };
 
-const footerStyle: React.CSSProperties = {
-  padding: '1rem 1.5rem',
-  borderTop: '1px solid var(--secondary)',
-  display: 'flex',
-  alignItems: 'center',
-  gap: '12px',
-  background: 'var(--surface)',
-};
+const footerProfileStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', width: '100%' };
 
 const avatarPlaceholderStyle: React.CSSProperties = {
-  width: '32px',
-  height: '32px',
-  borderRadius: '50%',
-  background: 'linear-gradient(135deg, #d04fd7 0%, #8b5cf6 100%)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  color: '#fff',
-  fontWeight: 'bold',
-  fontSize: '0.8rem',
-  flexShrink: 0,
+  width: '32px', height: '32px', borderRadius: '50%',
+  background: 'linear-gradient(135deg, #2a2a35 0%, #151520 100%)',
+  border: '1px solid rgba(255,255,255,0.1)',
+  display: 'flex', alignItems: 'center', justifyContent: 'center',
+  color: '#fff', fontWeight: 'bold', fontSize: '0.8rem', flexShrink: 0
 };
 
 const userNameStyle: React.CSSProperties = {
-  fontSize: '0.85rem',
-  fontWeight: 600,
-  color: 'var(--text)',
-  whiteSpace: 'nowrap',
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
+  fontSize: '0.85rem', fontWeight: 600, color: '#fff',
+  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px'
 };
 
 const userRoleStyle: React.CSSProperties = {
-  fontSize: '0.7rem',
-  color: 'var(--text-secondary)',
+  fontSize: '0.65rem', color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center'
 };
