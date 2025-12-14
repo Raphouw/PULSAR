@@ -5,7 +5,7 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { 
   AlertTriangle, Activity, Mountain, TrendingUp, Info,
-  Map as MapIcon, Zap, BarChart3, Layers, Gauge, HelpCircle, ChevronRight, Flag, Settings2
+  Map as MapIcon, Zap, BarChart3, Layers, Gauge, HelpCircle, ChevronRight, Flag, Settings2, Trophy
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, 
@@ -422,6 +422,9 @@ export default function RouteDisplay({ route, userProfile }: { route: Route, use
         };
     }, [route]);
 
+    const [matchedSegments, setMatchedSegments] = useState<any[]>([]);
+    const [loadingSegments, setLoadingSegments] = useState(false);
+
     // Scroll to climb logic
     useEffect(() => {
         if (highlightedClimb && climbListRef.current) {
@@ -431,6 +434,25 @@ export default function RouteDisplay({ route, userProfile }: { route: Route, use
             }
         }
     }, [highlightedClimb]);
+
+    useEffect(() => {
+        if (route.id) {
+            setLoadingSegments(true);
+            fetch('/api/routes/match-segments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ routeId: route.id })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.success) {
+                    setMatchedSegments(data.segments);
+                }
+            })
+            .catch(err => console.error("Erreur scan segments", err))
+            .finally(() => setLoadingSegments(false));
+        }
+    }, [route.id]);
 
     if (!analytics) return <div style={styles.errorContainer}><AlertTriangle size={48} /> DONNÉES CORROMPUES</div>;
 
@@ -659,8 +681,46 @@ export default function RouteDisplay({ route, userProfile }: { route: Route, use
                             </div>
                         )}
                     </div>
+                    <div style={{ background: 'rgba(20, 20, 30, 0.6)', backdropFilter: 'blur(12px)', border: '1px solid rgba(255, 255, 255, 0.08)', borderRadius: '16px', padding: '1.5rem', marginTop: '1.5rem' }}>
+                        <h3 style={{ fontSize: '0.9rem', fontWeight: 800, color: '#fff', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '8px', letterSpacing: '1px' }}>
+                            <Trophy size={16} color="#d04fd7" /> SEGMENTS ({loadingSegments ? '...' : matchedSegments.length})
+                        </h3>
+
+                        {loadingSegments && <div style={{ fontSize: '0.8rem', color: '#666', fontStyle: 'italic' }}>Analyse du tracé en cours...</div>}
+
+                        {!loadingSegments && matchedSegments.length === 0 && (
+                            <div style={{ fontSize: '0.8rem', color: '#666' }}>Aucun segment officiel détecté sur ce parcours.</div>
+                        )}
+
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', maxHeight: '400px', overflowY: 'auto' }}>
+                            {matchedSegments.map((seg) => (
+                                <div key={seg.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.03)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)', transition: 'transform 0.2s' }}>
+                                    <div style={{ overflow: 'hidden' }}>
+                                        <div style={{ fontWeight: 700, color: '#fff', fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '200px' }}>
+                                            {seg.name}
+                                        </div>
+                                        <div style={{ fontSize: '0.75rem', color: '#888', display: 'flex', gap: '8px', marginTop: '2px' }}>
+                                            <span>{(seg.distance_m / 1000).toFixed(1)}km</span>
+                                            <span style={{ color: seg.average_grade > 7 ? '#ef4444' : (seg.average_grade > 4 ? '#f59e0b' : '#10b981') }}>
+                                                {seg.average_grade}%
+                                            </span>
+                                        </div>
+                                    </div>
+                                    
+                                    {seg.category && (
+                                        <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#d04fd7', background: 'rgba(208, 79, 215, 0.1)', padding: '2px 6px', borderRadius: '4px', border: '1px solid rgba(208, 79, 215, 0.2)' }}>
+                                            {seg.category}
+                                        </span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             </div>
+                
+
+            
 
             {/* MODALS */}
             <Modal isOpen={showScoreModal} onClose={() => setShowScoreModal(false)} title="PULSAR SCORE">

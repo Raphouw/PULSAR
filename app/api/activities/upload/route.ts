@@ -2,10 +2,12 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth";
-import { supabaseAdmin } from "../../../../lib/supabaseAdminClient"; // Un seul import correct
+import { supabaseAdmin } from "../../../../lib/supabaseAdminClient"; 
 import { DOMParser } from '@xmldom/xmldom';
 import polyline from '@mapbox/polyline';
+// Assure-toi que cette fonction existe bien dans lib/physics, sinon copie-la
 import { calculateMaxAveragePower } from "../../../../lib/physics";
+import { scanActivityAgainstAllSegments } from "../../../../lib/segmentScanner"; // Mettre cet import tout en haut du fichier
 
 // --- HELPERS PHYSIQUES LOCAUX ---
 
@@ -66,7 +68,6 @@ export async function POST(req: Request) {
     const userId = session.user.id;
 
     // 1. Récupération Fichier (Compatible Next.js App Router)
-    // Note: req.formData() est la méthode standard
     const formData = await req.formData();
     const file = formData.get("file") as File;
     
@@ -280,10 +281,25 @@ export async function POST(req: Request) {
         polyline: { polyline: encodedPolyline },
         streams_data: streamsDataBDD 
       })
-      .select()
+      .select('id') // 🔥 On sélectionne l'ID explicitement
       .single();
 
     if (error) throw error;
+
+    // 🔥 DÉCLENCHEMENT SEGMENT MATCHING (CORRIGÉ)
+    // On utilise l'URL complète via NEXTAUTH_URL ou une URL relative si fetch interne supporté
+    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
+    
+    fetch(`${baseUrl}/api/segments/match`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        // Utilisation de activityData.id
+        body: JSON.stringify({ mode: 'activity', id: activityData.id }) 
+    }).catch(err => console.error("Segment matching trigger failed", err));
+
+    scanActivityAgainstAllSegments(activityData.id)
+        .then(res => console.log(`Segments scannés pour l'activité ${activityData.id}: ${res.matchesFound} trouvés`))
+        .catch(err => console.error("Erreur scan segments upload:", err));
 
     // --- 7. RECORDS (Power Curve) ---
     if (countWatts > 0) {

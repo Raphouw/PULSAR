@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic'; 
 import { useRouter } from 'next/navigation';
-import { UploadCloud, Save, FileCode, Zap, ChevronLeft, ChevronRight, MousePointer2, ArrowLeft, RefreshCw, ArrowUp, ArrowDown, Tag, Plus, X, Check } from 'lucide-react';
+import { UploadCloud, Save, FileCode, Zap, ChevronLeft, ChevronRight, MousePointer2, ArrowLeft, RefreshCw, ArrowUp, ArrowDown, Tag, Plus, X, Check, Search } from 'lucide-react';
 import polyline from '@mapbox/polyline';
 import toGeoJSON from '@mapbox/togeojson'; 
 import { DOMParser } from '@xmldom/xmldom'; 
@@ -124,12 +124,13 @@ export default function SegmentCreatorClient() {
     const [surface, setSurface] = useState<'Route' | 'Pavé' | 'Gravel'>('Route'); 
     const [selectedTags, setSelectedTags] = useState<TagDefinition[]>([]); 
     
-    // 🔥 STATES POUR CREATION TAG MANUEL
+    // STATES POUR CREATION TAG MANUEL
     const [isCreatingTag, setIsCreatingTag] = useState(false);
     const [newTagLabel, setNewTagLabel] = useState('');
     const [newTagColor, setNewTagColor] = useState('#d04fd7');
 
     const [isProcessing, setIsProcessing] = useState(false);
+    const [statusMessage, setStatusMessage] = useState<string>(''); // 🔥 Nouveau state pour le message
     const [isDragOver, setIsDragOver] = useState(false);
     const [focusMode, setFocusMode] = useState<'start' | 'end' | null>(null);
     const [hoveredPoint, setHoveredPoint] = useState<{ lat: number, lon: number } | null>(null);
@@ -152,12 +153,11 @@ export default function SegmentCreatorClient() {
         );
     };
 
-    // 🔥 AJOUTER UN TAG CUSTOM
     const handleAddCustomTag = () => {
         if (!newTagLabel.trim()) return;
         const customTag: TagDefinition = {
             label: newTagLabel,
-            value: `CUSTOM_${Date.now()}`, // ID unique
+            value: `CUSTOM_${Date.now()}`, 
             color: newTagColor,
             description: 'Tag personnalisé'
         };
@@ -203,34 +203,58 @@ export default function SegmentCreatorClient() {
         if (index !== null && fullTrace[index]) { setHoveredPoint({ lat: fullTrace[index].lat, lon: fullTrace[index].lon }); } else { setHoveredPoint(null); }
     }, [fullTrace]);
     
+    // 🔥 FONCTION DE SAUVEGARDE AMÉLIORÉE (SCAN RÉTROACTIF)
     const handleSave = async () => {
         if (!segmentName) return;
         setIsProcessing(true);
-        const points = fullTrace.slice(startIdx, endIdx + 1);
-        const polylineData = points.map(p => [p.lat, p.lon, Math.round(p.ele * 10) / 10]);
-        const categoryLabel = surface === 'Route' ? null : surface; 
-        
-        // Serialize tags
-        const tagsJsonb = selectedTags.map(tag => ({ label: tag.label, color: tag.color }));
+        setStatusMessage('Enregistrement du segment...'); // Step 1
 
-        await fetch('/api/admin/create-segment', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                name: segmentName, 
-                distance_m: metrics.dist * 1000, 
-                elevation_gain_m: metrics.ele, 
-                average_grade: metrics.avg, 
-                max_grade: metrics.max, 
-                start_lat: points[0].lat, 
-                start_lon: points[0].lon, 
-                end_lat: points[points.length-1].lat, 
-                end_lon: points[points.length-1].lon, 
-                polyline: polylineData,
-                category: categoryLabel,
-                tags: tagsJsonb 
-            })
-        });
-        router.push('/segments');
+        try {
+            const points = fullTrace.slice(startIdx, endIdx + 1);
+            const polylineData = points.map(p => [p.lat, p.lon, Math.round(p.ele * 10) / 10]);
+            const categoryLabel = surface === 'Route' ? null : surface; 
+            const tagsJsonb = selectedTags.map(tag => ({ label: tag.label, color: tag.color }));
+
+            // 1. Création en BDD
+            const res = await fetch('/api/admin/create-segment', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    name: segmentName, 
+                    distance_m: metrics.dist * 1000, 
+                    elevation_gain_m: metrics.ele, 
+                    average_grade: metrics.avg, 
+                    max_grade: metrics.max, 
+                    start_lat: points[0].lat, 
+                    start_lon: points[0].lon, 
+                    end_lat: points[points.length-1].lat, 
+                    end_lon: points[points.length-1].lon, 
+                    polyline: polylineData,
+                    category: categoryLabel,
+                    tags: tagsJsonb 
+                })
+            });
+
+            if (!res.ok) throw new Error("Erreur lors de la création");
+            const { id } = await res.json();
+
+            // 2. Scan Rétroactif
+            setStatusMessage("Analyse rétroactive de l'historique (Scan)..."); // Step 2
+            
+            await fetch('/api/segments/match', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: 'segment', id: id })
+            });
+
+            // 3. Succès & Redirection
+            setStatusMessage("Terminé !");
+            router.push('/segments');
+
+        } catch (error) {
+            console.error(error);
+            setStatusMessage("Erreur critique.");
+            setIsProcessing(false);
+        }
     };
 
     return (
@@ -283,7 +307,24 @@ export default function SegmentCreatorClient() {
                             </div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                 <label style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', color: '#888', padding: '12px 20px', borderRadius: '8px', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', transition: 'all 0.2s' }} className="hover:bg-white/10 hover:text-white"><RefreshCw size={16} /> Changer GPX<input type="file" accept=".gpx" className="hidden" onChange={(e) => e.target.files?.[0] && processFile(e.target.files[0])} style={{display:'none'}}/></label>
-                                <button onClick={handleSave} disabled={isProcessing || !segmentName || fullTrace.length === 0} style={{ background: segmentName ? 'linear-gradient(90deg, #d04fd7, #8a2be2)' : '#222', color: segmentName ? '#fff' : '#555', padding: '12px 30px', borderRadius: '8px', border: 'none', fontWeight: 700, fontSize: '0.9rem', cursor: segmentName ? 'pointer' : 'not-allowed', display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.2s' }}>{isProcessing ? 'CREATION...' : <><Save size={18} /> CERTIFIER</>}</button>
+                                
+                                <button 
+                                    onClick={handleSave} 
+                                    disabled={isProcessing || !segmentName || fullTrace.length === 0} 
+                                    style={{ 
+                                        background: segmentName ? 'linear-gradient(90deg, #d04fd7, #8a2be2)' : '#222', 
+                                        color: segmentName ? '#fff' : '#555', 
+                                        padding: '12px 30px', borderRadius: '8px', border: 'none', 
+                                        fontWeight: 700, fontSize: '0.9rem', cursor: segmentName ? 'pointer' : 'not-allowed', 
+                                        display: 'flex', alignItems: 'center', gap: '10px', transition: 'all 0.2s' 
+                                    }}
+                                >
+                                    {isProcessing ? (
+                                        <><Search size={18} className="animate-spin" /> {statusMessage}</>
+                                    ) : (
+                                        <><Save size={18} /> CERTIFIER & SCANNER</>
+                                    )}
+                                </button>
                             </div>
                         </div>
 
@@ -293,7 +334,6 @@ export default function SegmentCreatorClient() {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                                     <div style={{ fontSize: '0.8rem', color: '#666', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px', display: 'flex', alignItems: 'center', gap: '8px' }}><Tag size={14} color="#d04fd7" /> CLASSIFICATION MANUELLE</div>
                                     
-                                    {/* BOUTON AJOUTER TAG */}
                                     {!isCreatingTag && (
                                         <button onClick={() => setIsCreatingTag(true)} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', borderRadius: '12px', padding: '4px 8px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', color: '#fff', fontWeight: 700 }}>
                                             <Plus size={12} /> CRÉER TAG
@@ -303,17 +343,14 @@ export default function SegmentCreatorClient() {
 
                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'center' }}>
                                     
-                                    {/* LISTE DES TAGS */}
                                     {PREDEFINED_SEGMENT_TAGS.map(tag => (
                                         <TagButton key={tag.value} tag={tag} isActive={selectedTags.some(t => t.value === tag.value)} onClick={toggleTag} />
                                     ))}
                                     
-                                    {/* TAGS CUSTOM AJOUTÉS */}
                                     {selectedTags.filter(t => t.value.startsWith('CUSTOM_')).map(tag => (
                                         <TagButton key={tag.value} tag={tag} isActive={true} onClick={() => toggleTag(tag)} onDelete={() => toggleTag(tag)} />
                                     ))}
 
-                                    {/* INTERFACE DE CRÉATION */}
                                     {isCreatingTag && (
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.3)', padding: '6px 12px', borderRadius: '20px', border: '1px solid #d04fd7' }}>
                                             <input 
@@ -341,7 +378,7 @@ export default function SegmentCreatorClient() {
                             </div>
                         )}
 
-                        {/* LIGNE 3 : PROFIL / SLIDERS (Reste inchangé) */}
+                        {/* LIGNE 3 : PROFIL / SLIDERS */}
                         {fullTrace.length > 0 ? (
                             <div style={{ flex: 1, display: 'flex', padding: '0' }}>
                                 <div style={{ flex: '65', borderRight: '1px solid rgba(255,255,255,0.05)', padding: '2rem', position: 'relative', background: 'linear-gradient(180deg, rgba(255,255,255,0.01), transparent)' }}>

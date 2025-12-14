@@ -30,6 +30,7 @@ import {
   calculateTerrainStats,
   findBestInterval,
 } from '../../../lib/physics';
+import MatchedSegmentsList from './MatchedSegmentsList';
 
 // --- UTILITAIRE DE SÉCURITÉ (CRITIQUE) ---
 // Transforme n'importe quoi en tableau valide pour éviter le crash .filter is not a function
@@ -1009,7 +1010,7 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
     // NOUVEAUX ÉTATS POUR LA TÉLÉMÉTRIE NARRATIVE (Onglet 'extra')
     const [narrative, setNarrative] = useState<string | null>(null);
     const [narrativeLoading, setNarrativeLoading] = useState(false);
-
+    const officialSegments = activity.activity_segments;
     const advanced = useAdvancedStats(activity, localStreams);
     const badges = useMemo(() => generateActivityBadges(activity), [activity]);
     const handleLoadStreams = useCallback(async () => {
@@ -1113,7 +1114,7 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
 
             <div style={styles.mainGrid}>
                 <div style={{gridColumn: '1 / -1'}}>
-                    <SimpleTabs activeTab={activeTab} onChange={setActiveTab} tabs={[{ id: 'summary', label: 'Résumé' }, { id: 'analysis', label: 'Analyse & Carte' }, { id: 'extra', label: 'Infos' }, { id: 'replay', label: 'Replay' }]} />
+                    <SimpleTabs activeTab={activeTab} onChange={setActiveTab} tabs={[{ id: 'summary', label: 'Résumé' }, { id: 'analysis', label: 'Analyse & Carte' }, { id: 'segments', label: 'Segments' }, { id: 'extra', label: 'Infos' }, { id: 'replay', label: 'Replay' }]} />
                 </div>
 
                 {activeTab === 'summary' && (
@@ -1265,6 +1266,57 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
             <div style={styles.glassCard}>
                 <div style={{ padding: '2rem', textAlign: 'center', color: '#666' }}>
                     Chargement des données GPS...
+                </div>
+            </div>
+        )}
+    </div>
+)}
+
+{/* TAB SEGMENTS */}
+{activeTab === 'segments' && (
+    <div style={{ animation: 'fadeIn 0.3s ease-out' }}>
+        {officialSegments && officialSegments.length > 0 ? (
+            <MatchedSegmentsList 
+                segments={officialSegments} 
+                streams={localStreams} // 🔥 AJOUTER CECI
+                userWeight={activity.user_weight || 75} // 🔥 AJOUTER CECI
+            />
+        ) : (
+            <div style={styles.glassCard}>
+                <div style={{ padding: '3rem', textAlign: 'center', color: '#666', display:'flex', flexDirection:'column', alignItems:'center', gap:'1rem' }}>
+                    <span style={{fontStyle: 'italic'}}>Aucun segment officiel détecté pour l'instant.</span>
+                    
+                    {/* BOUTON DE SCAN MANUEL */}
+                    <button 
+                        onClick={async (e) => {
+                            const btn = e.currentTarget;
+                            btn.disabled = true;
+                            btn.innerText = "Analyse en cours...";
+                            try {
+                                await fetch('/api/segments/match', {
+                                    method: 'POST',
+                                    headers: {'Content-Type': 'application/json'},
+                                    body: JSON.stringify({ mode: 'activity', id: activity.id })
+                                });
+                                window.location.reload(); // Recharger pour voir les résultats
+                            } catch (err) {
+                                btn.innerText = "Erreur";
+                            }
+                        }}
+                        style={{
+                            background: 'rgba(208, 79, 215, 0.1)', 
+                            color: '#d04fd7', 
+                            border: '1px solid #d04fd7', 
+                            padding: '8px 16px', 
+                            borderRadius: '8px', 
+                            cursor: 'pointer',
+                            fontWeight: 700,
+                            fontSize: '0.8rem',
+                            display: 'flex', alignItems: 'center', gap: '8px'
+                        }}
+                    >
+                        <Zap size={14} /> LANCER L'ANALYSE
+                    </button>
                 </div>
             </div>
         )}

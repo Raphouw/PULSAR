@@ -6,9 +6,36 @@ import { authOptions } from "../../../lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import ActivityDisplay from "./activityDisplay";
-// ✅ CORRECTION IMPORT : On retire le ".d" et on utilise "import type"
+import MatchedSegmentsList from "./MatchedSegmentsList";
 import type { ActivityStreams } from "../../../types/next-auth"; 
 import { AlertTriangle, ArrowLeft, Lock } from 'lucide-react';
+
+// --- TYPES SYNCHRONISÉS AVEC LE NOUVEAU SCANNER ---
+export type SegmentMatch = {
+  id: number;
+  segment_id: number;
+  duration_s: number;
+  avg_power_w: number;
+  avg_speed_kmh: number;
+  // 🔥 Champs tactiques requis pour le Cockpit
+  start_index: number;
+  end_index: number;
+  np_w?: number;
+  avg_heartrate?: number;
+  max_heartrate?: number;
+  avg_cadence?: number;
+  vam?: number;
+  w_kg?: number;
+  segment: {
+    name: string;
+    distance_m: number;
+    average_grade: number;
+    elevation_gain_m: number;
+    category: string | null;
+    polyline?: number[][];
+    tags?: { label: string; color: string; }[] | null;
+  };
+};
 
 export type Activity = {
   id: number;
@@ -30,15 +57,15 @@ export type Activity = {
   user_weight: number | null;
   user_ftp: number | null;
   user_id: string | number;
+  activity_segments: SegmentMatch[];
 };
 
-// ✅ CORRECTION NEXT.JS 15 : Params est une Promise
 export default async function ActivityPage({ 
   params 
 }: { 
   params: Promise<{ id: string }> 
 }) {
-  const { id } = await params; // ✅ On await proprement
+  const { id } = await params; 
   const activityId = id;
 
   // 1. AUTHENTIFICATION
@@ -48,15 +75,46 @@ export default async function ActivityPage({
   }
   const viewerId = session.user.id;
 
-  // 2. RÉCUPÉRATION DE L'ACTIVITÉ
+  // 2. RÉCUPÉRATION DE L'ACTIVITÉ + USER + SEGMENTS (Requête nettoyée)
   const { data: activity, error } = await supabaseAdmin
-    .from("activities")
-    .select(`*, users ( weight, ftp )`)
-    .eq("id", activityId)
-    .maybeSingle();
+    .from('activities')
+    .select(`
+      *,
+      users (
+        weight,
+        ftp
+      ),
+      activity_segments (
+        id,
+        segment_id,
+        duration_s,
+        avg_power_w,
+        avg_speed_kmh,
+        start_index,
+        end_index,
+        np_w,
+        avg_heartrate,
+        max_heartrate,
+        avg_cadence,
+        vam,
+        w_kg,
+        segment:segments (
+            name,
+            distance_m,
+            average_grade,
+            elevation_gain_m,
+            category,
+            polyline,
+            tags
+        )
+      )
+    `)
+    .eq('id', activityId)
+    .single();
 
   // 3. GESTION ERREUR / 404
   if (error || !activity) {
+    console.error("[ActivityPage] Error:", error);
     return (
         <div style={{ minHeight: '100vh', background: '#050505', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
             <AlertTriangle size={64} color="#ef4444" style={{ marginBottom: '1rem', filter: 'drop-shadow(0 0 20px rgba(239,68,68,0.4))' }} />
@@ -69,7 +127,7 @@ export default async function ActivityPage({
     );
   }
 
-  // 4. 🛡️ SÉCURITÉ
+  // 4. 🛡️ SÉCURITÉ ACCÈS
   const isOwner = String(activity.user_id) === String(viewerId);
   let hasAccess = isOwner;
 
@@ -87,7 +145,7 @@ export default async function ActivityPage({
     }
   }
 
-  // 5. BLOCAGE
+  // 5. BLOCAGE SI PAS ACCÈS
   if (!hasAccess) {
     return (
         <div style={{ 
@@ -114,20 +172,26 @@ export default async function ActivityPage({
     );
   }
 
-  // 6. FORMATAGE DES DONNÉES (Nettoyage des ts-ignore)
-  // On type le retour de la jointure users proprement
+  // 6. FORMATAGE FINAL DES DONNÉES
   const userRelation = activity.users as unknown as { weight: number | null, ftp: number | null } | null;
   const user_weight = userRelation?.weight ?? 75; 
   const user_ftp = userRelation?.ftp ?? 200; 
 
-  // On crée une copie propre sans la propriété 'users'
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { users, ...activityWithoutUsers } = activity;
 
   const formattedActivity: Activity = {
     ...activityWithoutUsers,
     user_weight,
-    user_ftp
+    user_ftp,
+    // Cast sécurisé des segments vers le type étendu
+    activity_segments: (activity.activity_segments || []) as SegmentMatch[]
   } as Activity;
 
-  return <ActivityDisplay activity={formattedActivity} />;
+  return (
+    <div>
+        {/* Composant principal de contrôle de mission */}
+        <ActivityDisplay activity={formattedActivity} />
+    </div>
+  );
 }
