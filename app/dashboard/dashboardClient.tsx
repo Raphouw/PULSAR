@@ -666,6 +666,7 @@ export default function DashboardClient({ data, session: serverSession, hasStrav
   const global_comp = getConsistencyInterpretation(consistency.global);
 
   return (
+    
   <div>
     <HeaderSection 
       userName={userName}

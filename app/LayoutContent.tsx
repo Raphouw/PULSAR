@@ -1,35 +1,29 @@
+// Fichier : app/LayoutContent.tsx
 'use client';
 
+import React from 'react';
 import { usePathname } from 'next/navigation';
-import dynamic from 'next/dynamic';
 
-const DynamicSidebar = dynamic(() => import('../components/layout/sidebar'), { 
-    ssr: false,
-    loading: () => null
-});
+// ON SUPPRIME L'IMPORT DE LA SIDEBAR ICI
+// Car elle est déjà dans le layout parent (app/layout.tsx)
 
 export default function LayoutContent({
     children,
 }: {
     children: React.ReactNode;
 }) {
-    const pathname = usePathname();
+    // Si tu as besoin de détecter les pages Auth pour cacher la sidebar,
+    // on gérera ça différemment, mais pour l'instant on nettoie la structure.
     
-    const isAuthPage = pathname ? pathname.startsWith('/auth') : false;
-
     return (
         <>
-            {!isAuthPage && <DynamicSidebar />}
-            <main style={{ 
-                marginLeft: isAuthPage ? '0px' : 'var(--sidebar-width)', 
-                padding: isAuthPage ? '0' : '1.5rem',
-                width: `calc(100% - ${isAuthPage ? '0px' : 'var(--sidebar-width)'})`,
-                boxSizing: 'border-box',
-                minHeight: '100vh',
-                transition: 'margin-left 0.3s ease',
-            }}>
+            {/* PLUS DE SIDEBAR ICI 
+               PLUS DE MARGIN-LEFT MANUEL
+               Le Flexbox du parent gère tout l'espace maintenant.
+            */}
+            <div className="w-full h-full">
                 {children}
-            </main>
+            </div>
         </>
     );
 }

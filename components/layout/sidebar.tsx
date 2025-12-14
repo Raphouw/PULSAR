@@ -7,11 +7,10 @@ import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { Menu, X, ChevronRight, Zap, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
-
 const HEADER_HEIGHT = 72;
 const FOOTER_HEIGHT = 64;
 
-// --- ICÔNES & ANIMATIONS (V5 - LOOP INFINI - INCHANGÉ) ---
+// --- ICÔNES & ANIMATIONS (INCHANGÉES) ---
 const Icons = {
   Dashboard: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-dashboard">
@@ -166,6 +165,13 @@ const groups = [
   },
 ];
 
+const updateGlobalWidth = (collapsed: boolean) => {
+  if (typeof document !== 'undefined') {
+    const width = collapsed ? '72px' : '210px';
+    document.documentElement.style.setProperty('--sidebar-width', width);
+  }
+};
+
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
@@ -174,16 +180,24 @@ export default function Sidebar() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  const updateSidebarWidth = (collapsed: boolean) => {
+      const width = collapsed ? '72px' : '210px';
+      document.documentElement.style.setProperty('--sidebar-width', width);
+  };
+
   useEffect(() => {
     setMounted(true);
     const savedState = localStorage.getItem('sidebar-collapsed');
-    if (savedState) setIsCollapsed(JSON.parse(savedState));
+    const initialState = savedState ? JSON.parse(savedState) : false;
+    setIsCollapsed(initialState);
+    updateGlobalWidth(initialState); // Applique la largeur au chargement
   }, []);
 
   const toggleSidebar = () => {
     const newState = !isCollapsed;
     setIsCollapsed(newState);
     localStorage.setItem('sidebar-collapsed', JSON.stringify(newState));
+    updateGlobalWidth(newState); // Met à jour la largeur en temps réel
   };
 
   useEffect(() => {
@@ -203,6 +217,31 @@ export default function Sidebar() {
   return (
     <>
       <style jsx global>{`
+        /* --- STRUCTURE STICKY / FIXED --- */
+        .sidebar-container {
+            height: 100vh;
+            background: #0a0a0c;
+            border-right: 1px solid rgba(255, 255, 255, 0.06);
+            display: flex;
+            flex-direction: column;
+            z-index: 50;
+            transition: width 0.4s cubic-bezier(0.2, 0, 0, 1);
+            
+            /* MOBILE : Fixed pour passer au dessus */
+            position: fixed;
+            top: 0;
+            left: 0;
+        }
+
+        /* DESKTOP (Tablettes et +) : Sticky pour coller au contenu */
+        @media (min-width: 768px) {
+            .sidebar-container {
+                position: sticky; 
+                top: 0;
+                /* Note: pas de left: 0 ici pour laisser le Flexbox layout gérer la position */
+            }
+        }
+
         /* --- ANIMATIONS (V5 - WHITE ONLY) --- */
         .logo-link:hover .logo-text {
             letter-spacing: 2px;
@@ -392,10 +431,7 @@ export default function Sidebar() {
       <aside 
         className={`sidebar-container ${isMobileMenuOpen ? 'open' : ''}`}
         style={{
-            height: '100vh', position: 'fixed', top: 0, left: 0, width: sidebarWidth,
-            background: '#0a0a0c', borderRight: '1px solid rgba(255, 255, 255, 0.06)',
-            display: 'flex', flexDirection: 'column', zIndex: 50,
-            transition: 'width 0.4s cubic-bezier(0.2, 0, 0, 1)',
+            width: sidebarWidth, // La position est gérée par le CSS maintenant !
             ...(isLocked ? { opacity: 0.4, pointerEvents: 'none', filter: 'grayscale(0.8)' } : {})
         }}
       >
@@ -525,7 +561,6 @@ export default function Sidebar() {
         </div>
 
         {/* FOOTER USER */}
-        {/* Suppression de marginTop: 'auto' car flex: 1 sur la scroll-area fait le travail */}
         <div style={{ marginTop: 0, borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.3)' }}>
             {session?.user && (
             <div style={{ padding: isCollapsed ? '1rem 0.5rem' : '1rem 1rem', display: 'flex', justifyContent: 'center' }}>
