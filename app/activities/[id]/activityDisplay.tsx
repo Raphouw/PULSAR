@@ -12,7 +12,7 @@ import {
 import { 
   ComposedChart, Area, Line, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, AreaChart 
 } from 'recharts';
-
+import { generateActivityBadges, Badge } from '../../../lib/badgeSystem';
 import ReplayRace from './ReplayRace';
 
 import ClimbProfileChart from './climbProfileChart';
@@ -40,6 +40,29 @@ const safeArray = <T,>(input: any): T[] => {
   if (typeof input === 'object') return Object.values(input);
   return [];
 };
+
+const DetailBadge = ({ label, color }: Badge) => (
+    <div style={{
+        background: `${color}20`, // Fond très transparent
+        color: color,
+        border: `1px solid ${color}40`,
+        padding: '4px 12px',
+        borderRadius: '12px', // Pill shape
+        fontSize: '0.75rem',
+        fontWeight: 800,
+        textTransform: 'uppercase',
+        letterSpacing: '0.5px',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '6px',
+        boxShadow: `0 0 10px ${color}10`, // Légère lueur
+        backdropFilter: 'blur(4px)'
+    }}>
+        {/* Petit point lumineux à gauche */}
+       
+        {label}
+    </div>
+);
 
 // --- STYLES GLOBAUX ---
 const loadingContainerStyle: React.CSSProperties = {
@@ -988,7 +1011,7 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
     const [narrativeLoading, setNarrativeLoading] = useState(false);
 
     const advanced = useAdvancedStats(activity, localStreams);
-
+    const badges = useMemo(() => generateActivityBadges(activity), [activity]);
     const handleLoadStreams = useCallback(async () => {
         if (!activity.strava_id) return;
         setIsLoading(true);
@@ -1050,6 +1073,18 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
                         <div>
                             <button onClick={() => router.push('/activities')} style={styles.backButton}><ArrowLeft size={16} /> RETOUR</button>
                             <h1 style={styles.title}>{activity.name}</h1>
+
+                            <div style={{ 
+                                display: 'flex', 
+                                gap: '10px', 
+                                margin: '10px 0 15px 0', // Un peu d'espace
+                                flexWrap: 'wrap' 
+                            }}>
+                                {badges.map((badge, idx) => (
+                                    <DetailBadge key={idx} {...badge} />
+                                ))}
+                            </div>
+
                             <div style={{display: 'flex', gap: '15px', color: '#ccc', fontSize: '0.9rem', fontWeight: 500}}>
                                 <span style={{display:'flex', alignItems:'center', gap:'6px'}}><Calendar size={14} color="#d04fd7"/> {formatDate(activity.start_time)}</span>
                                 <span style={{display:'flex', alignItems:'center', gap:'6px'}}><Clock size={14} color="#00f3ff"/> {formatTime(activity.duration_s)}</span>

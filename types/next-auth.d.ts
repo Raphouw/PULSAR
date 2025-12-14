@@ -148,15 +148,18 @@ export type Activity = {
 export type ActivityCardData = {
   id: number;
   name: string;
-  distance_km: number;
-  elevation_gain_m: number;
+  distance_km: number | null;
+  elevation_gain_m: number | null;
   start_time: string;
-  avg_speed_kmh: number;
+  avg_speed_kmh: number | null;
   avg_power_w: number | null;
   tss: number | null;
-  type?: string | null;
-  duration_s: number | 0;
   polyline: { polyline: string } | null;
+  
+  // 🔥 CORRECTION ICI : on ajoute "| null"
+  np_w: number | null;
+  duration_s: number; 
+  type?: string | null; // <--- C'est ça qui bloquait !
 };
 
 // --- Nouveaux Types pour le module ÉVÉNEMENT ---

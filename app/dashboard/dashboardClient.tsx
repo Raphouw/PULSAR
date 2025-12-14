@@ -1,3 +1,4 @@
+
 // Fichier : app/dashboard/dashboardClient.tsx
 'use client';
 
@@ -16,12 +17,11 @@ import { useAnalysis } from '../context/AnalysisContext';
 import NewRecordModal from './NewRecordModal';
 import { useBackfill } from '../context/BackfillContext';
 import { FitnessEvolutionChart } from './FitnessEvolutionChart';
-import { 
-  Sparkles, 
-  ArrowRight 
-} from 'lucide-react';
+import { Sparkles, ArrowRight } from 'lucide-react';
 import { motion } from 'framer-motion';
 
+// 🔥 IMPORT DU SYSTÈME DE BADGES HARMONISÉ
+import { generateActivityBadges, detectRecordBadges, Badge } from '../../lib/badgeSystem';
 // --- Constantes et Helpers ---
 const REFRESH_COOLDOWN_MS = 60 * 1000; // 1 minute
 const ARROW_UP = '↗';
@@ -33,38 +33,22 @@ const MiniMap = dynamic(() => import('../../components/ui/miniMap'), {
   loading: () => <div style={{ height: '150px', background: 'var(--secondary)', borderRadius: '10px 10px 0 0', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>Chargement...</div>,
 });
 
-interface Badge {
-  label: string;
-  color: string;
-  icon?: string;
-  category: 'distance' | 'elevation' | 'special';
-}
+// Note: L'interface Badge est importée depuis badgeSystem.ts
 
-export interface ActivityCardData { 
-  id: number;
-  name: string;
-  distance_km: number | null;
-  elevation_gain_m: number | null;
-  start_time: string;
-  avg_speed_kmh: number | null;
-  avg_power_w: number | null;
-  tss: number | null;
-  polyline: { polyline: string } | null;
-  np_w: number | null;
-}
+import { ActivityCardData } from '../../types/next-auth';
 
 export interface graphdata{
-id:number;
-user_id:number;
-date_calculated:string;
-ftp_value:number | null;
-w_prime_value:number | null;
-cp3_value:number | null;
-cp12_value:number | null;
-vo2max_value:number | null;
-tte_value:number | null;
-model_cp3:number | null;
-model_cp12:number | null;
+  id:number;
+  user_id:number;
+  date_calculated:string;
+  ftp_value:number | null;
+  w_prime_value:number | null;
+  cp3_value:number | null;
+  cp12_value:number | null;
+  vo2max_value:number | null;
+  tte_value:number | null;
+  model_cp3:number | null;
+  model_cp12:number | null;
 }
 
 // --- HEADER SECTION (Nettoyé) ---
@@ -380,41 +364,46 @@ const StatCard = ({ title, value, unit, comparison, onClick, isExpanded, cardRef
 function ActivityBadge({ label, color, icon }: Badge) {
   return (
     <div style={{ 
-        background: color, color: '#ffffffff', alignItems: 'center', padding: '0.4rem 0.95rem',
-        borderRadius: '20px', fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase',
-        letterSpacing: '0.5px', display: 'inline-flex', gap: '0.3rem', boxShadow: '0 4px 12px rgba(0,0,0,0.5)',
-        whiteSpace: 'nowrap', textShadow: '0 1px 2px rgba(0,0,0,0.5)'
-      }} title={label}>
+        background: color, 
+        color: '#ffffff', 
+        alignItems: 'center', 
+        padding: '0.4rem 0.95rem', 
+        borderRadius: '20px', 
+        fontSize: '0.75rem', 
+        fontWeight: 700, 
+        textTransform: 'uppercase', 
+        letterSpacing: '0.5px', 
+        display: 'inline-flex', 
+        gap: '0.3rem', 
+        // 🔥 OMBRE DIRECTEMENT ICI, PAS SUR UN PARENT CARRÉ
+        boxShadow: '0 4px 12px rgba(0,0,0,0.4)', 
+        whiteSpace: 'nowrap', 
+        textShadow: '0 1px 2px rgba(0,0,0,0.5)' 
+    }} title={label}>
       {icon && <span style={{ marginRight: '0.25rem', fontSize: '0.7rem' }}>{icon}</span>}
       {label}
     </div>
   );
 }
 
-function ActivityCard({ activity, specialBadges }: { activity: ActivityCardData; specialBadges: Map<string, Badge> }) {
+ const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor((seconds- (m*60 + h*3600)))
+    return `${h}h${m.toString().padStart(2, '0')}m${s}s`;
+  };
+
+function ActivityCard({ activity, contextActivities }: { activity: ActivityCardData; contextActivities: ActivityCardData[] }) {
   const [isHovered, setIsHovered] = useState(false);
   
-  const getDistanceBadge = (distanceKm: number): Badge => {
-    if (distanceKm < 50) return { label: 'Courte', color: '#10b981', category: 'distance' };
-    if (distanceKm < 100) return { label: 'Moyenne', color: '#ff6b9d', category: 'distance' };
-    if (distanceKm < 250) return { label: 'Longue', color: '#d04fd7', category: 'distance' };
-    return { label: 'Ultra', color: '#ef4444', category: 'distance' };
-  };
-
-  const getTerrainBadge = (dist: number, elev: number): Badge => {
-    const elevPerKm = elev / (dist || 1);
-    if (elevPerKm < 10) return { label: 'Plat', color: '#3b82f6', category: 'elevation' };
-    if (elevPerKm < 20) return { label: 'Accidentée', color: '#f59e0b', category: 'elevation' };
-    return { label: 'Montagne', color: '#ef4444', category: 'elevation' };
-  };
-
   const activityBadges = useMemo(() => {
-    const badges: Badge[] = [];
-    if (activity.distance_km !== null) badges.push(getDistanceBadge(activity.distance_km));
-    if (activity.distance_km !== null && activity.elevation_gain_m !== null) badges.push(getTerrainBadge(activity.distance_km, activity.elevation_gain_m));
-    const recordBadges = Array.from(specialBadges.entries()).map(([_, badge]) => ({...badge, icon: ''})).slice(0, 0); 
-    return [...badges, ...recordBadges].slice(0, 3);
-  }, [activity, specialBadges]);
+    // 1. Badges Standards (Distance, etc.)
+    const standard = generateActivityBadges(activity);
+    // 2. Badges Records (Comparé aux activités du contexte actuel)
+    const records = detectRecordBadges(activity, contextActivities);
+    
+    return [...standard, ...records].slice(0, 4);
+  }, [activity, contextActivities]);
 
   const formatDate = (isoString: string) => {
     return new Date(isoString).toLocaleDateString('fr-FR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -426,75 +415,70 @@ function ActivityCard({ activity, specialBadges }: { activity: ActivityCardData;
           background: 'var(--surface)', borderRadius: '12px', transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
           border: '1px solid var(--secondary)', overflow: 'hidden', display: 'flex', flexDirection: 'column',
           height: '100%', position: 'relative', transform: isHovered ? 'translateY(-8px)' : 'translateY(0)',
-          boxShadow: isHovered ? '0 20px 40px rgba(79, 215, 127, 0.3), 0 0 0 2px rgba(208, 79, 215, 0.2)' : '0 4px 15px rgba(0, 0, 0, 0.2)',
+          boxShadow: isHovered ? '0 20px 40px rgba(243, 16, 255, 0.3), 0 0 0 2px rgba(208, 79, 215, 0.2)' : '0 4px 15px rgba(0, 0, 0, 0.2)',
         }}
         onMouseEnter={() => setIsHovered(true)} onMouseLeave={() => setIsHovered(false)}
       >
-        {/* HEADER : CARTE + BADGES */}
         <div style={{ position: 'relative', height: '160px', flexShrink: 0, width: '100%', background: '#e5e7eb' }}>
-            
             {activity.polyline?.polyline ? (
-                // 🔥 MAGIE ICI :
-                // 1. maskImage : Crée un fondu en bas pour que la carte claire "disparaisse" dans le noir
-                // 2. fitBoundsPadding : [20, 60] -> On réserve 60px en bas pour les badges, le tracé sera poussé vers le haut
                 <div style={{ width: '100%', height: '100%', WebkitMaskImage: 'linear-gradient(to bottom, black 70%, transparent 100%)', maskImage: 'linear-gradient(to bottom, black 70%, transparent 100%)' }}>
-                    <MiniMap 
-                        encodedPolyline={activity.polyline.polyline} 
-                        mapHeight="100%" 
-                        color="#d04fd7" // Rose Néon qui ressort bien sur le clair
-                        fitBoundsPadding={[20, 60]} 
-                    />
+                    <MiniMap encodedPolyline={activity.polyline.polyline} mapHeight="100%" color="#d04fd7" fitBoundsPadding={[20, 60]} />
                 </div>
             ) : (
-                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555', fontSize: '0.8rem', background: '#e5e7eb' }}>
-                    Pas de tracé GPS
-                </div>
+                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555', fontSize: '0.8rem', background: '#e5e7eb' }}>Pas de tracé GPS</div>
             )}
             
-            {/* BADGES : Positionnés en bas à gauche */}
+            {/* 🔥 CORRECTION DU RENDU DES BADGES (Plus de div wrapper inutile) */}
             <div style={{ 
-                position: 'absolute', 
-                bottom: '12px', 
-                left: '12px', 
-                display: 'flex', 
-                gap: '0.5rem', 
-                zIndex: 500,
-                flexWrap: 'wrap'
+                position: 'absolute', bottom: '12px', left: '12px', 
+                display: 'flex', gap: '0.5rem', zIndex: 500, flexWrap: 'wrap' 
             }}>
                 {activityBadges.map((badge, index) => (
-                    // Ajout d'une petite ombre portée sur les badges pour qu'ils pop sur la carte claire
-                    <div key={index} style={{ pointerEvents: 'auto', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
-                        <ActivityBadge {...badge} />
-                    </div>
+                    <ActivityBadge key={index} {...badge} />
                 ))}
             </div>
         </div>
-
-        {/* CONTENT */}
+        
+      
         <div style={{ padding: '1rem', paddingLeft: '1.5rem', flex: 1, display: 'flex', flexDirection: 'column', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-          <h4 style={{ margin: '0.5rem 0 0.25rem 0', color: 'var(--text)', fontSize: '1.1rem', fontWeight: 600, lineHeight: '1.3', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-              {activity.name}
-          </h4>
-          <p style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.2' }}>
-              {formatDate(activity.start_time)}
-          </p>
-
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginTop: 'auto', paddingTop: '0.75rem', borderTop: '1px solid rgba(255, 255, 255, 0.1)' }}>
+          <h4 style={{ margin: '0.5rem 0 0.25rem 0', color: 'var(--text)', fontSize: '1.1rem', fontWeight: 600, lineHeight: '1.3', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{activity.name}</h4>
+          <p style={{ margin: '0 0 1rem 0', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.2' }}>{formatDate(activity.start_time)}</p>
+          
+          {/* 🔥 STATS GRID UNIFIÉE ET CENTRÉE */}
+          <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(3, 1fr)', // 3 colonnes égales pour prendre toute la largeur
+              gap: '1rem 0.5rem', // Espace vertical (1rem) et horizontal (0.5rem)
+              marginTop: 'auto', 
+              paddingTop: '0.75rem',
+              borderTop: '1px solid rgba(255, 255, 255, 0.1)' // Séparateur optionnel, tu peux l'enlever si tu préfères
+          }}>
+            {/* LIGNE 1 */}
+            <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.2rem'}}>Durée</div>
+              <div style={{fontSize: '1.09rem', fontWeight: 700, color: '#1083b9ff', lineHeight: '1'}}>{formatTime(activity.duration_s) ?? '-'}</div>
+            </div>
             <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.2rem'}}>Distance</div>
-              <div style={{fontSize: '1.0rem', fontWeight: 700, color: '#10b981', lineHeight: '1'}}>{activity.distance_km?.toFixed(1) ?? '-'} km</div>
+              <div style={{fontSize: '1.09rem', fontWeight: 700, color: '#10b981', lineHeight: '1'}}>{activity.distance_km?.toFixed(1) ?? '-'} km</div>
             </div>
             <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.2rem'}}>Dénivelé</div>
-              <div style={{fontSize: '1.0rem', fontWeight: 700, color: '#f97316', lineHeight: '1'}}>{activity.elevation_gain_m?.toFixed(0) ?? '-'} m</div>
+              <div style={{fontSize: '1.09rem', fontWeight: 700, color: '#f59e0b', lineHeight: '1'}}> {activity.elevation_gain_m?.toFixed(0) ?? '-'} m</div>
+            </div>
+            
+            {/* LIGNE 2 */}
+            <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+              <div style={{fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.2rem'}}>Vitesse</div>
+              <div style={{fontSize: '1.09rem', fontWeight: 700, color: '#ea62deff', lineHeight: '1'}}>{activity.avg_speed_kmh?.toFixed(2) ?? '-'} km/h</div>
             </div>
             <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.2rem'}}>Puissance</div>
-              <div style={{fontSize: '1.0rem', fontWeight: 700, color: '#8b5cf6', lineHeight: '1'}}>{activity.avg_power_w?.toFixed(0) ?? '-'} W</div>
+              <div style={{fontSize: '1.09rem', fontWeight: 700, color: '#8b5cf6', lineHeight: '1'}}>{activity.avg_power_w?.toFixed(0) ?? '-'} W</div>
             </div>
             <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
               <div style={{fontSize: '0.7rem', color: 'var(--text-secondary)', marginBottom: '0.2rem'}}>TSS</div>
-              <div style={{fontSize: '1.0rem', fontWeight: 700, color: '#d04fd7', lineHeight: '1'}}>{activity.tss?.toFixed(0) ?? '-'}</div>
+              <div style={{fontSize: '1.09rem', fontWeight: 700, color: '#ff0000ff', lineHeight: '1'}}>{activity.tss?.toFixed(0) ?? '-'}</div>
             </div>
           </div>
         </div>
@@ -503,13 +487,7 @@ function ActivityCard({ activity, specialBadges }: { activity: ActivityCardData;
   );
 }
 
-const specialBadgesMap: Map<string, Badge> = new Map([
-  ['power', { label: 'Watt Max', color: '#FF3C00', icon: '⚡', category: 'special' }],
-  ['speed', { label: 'Fusée', color: '#00FF87', icon: '🚀', category: 'special' }],
-  ['distance', { label: 'ULTRAA', color: '#00B4D8', icon: '🏆', category: 'special' }],
-  ['elevation', { label: 'Grimpette', color: '#F77F00', icon: '⛰️', category: 'special' }],
-  ['tss', { label: 'Tu stresses ?', color: '#7c3aed', icon: '💪', category: 'special' }],
-]);
+// NOTE: On utilise SPECIAL_BADGES_MAP importé au lieu de le redéfinir localement
 
 type TabType = 'overview' | 'stats' | 'graph';
 
@@ -855,12 +833,12 @@ export default function DashboardClient({ data, session: serverSession, hasStrav
         {recentActivities.length > 0 ? (
           <div style={activitiesGridStyle}>
             {recentActivities.map((activity) => (
-              <ActivityCard 
-                key={activity.id} 
-                activity={activity as ActivityCardData}
-                specialBadges={specialBadgesMap}
-              />
-            ))}
+  <ActivityCard 
+    key={activity.id} 
+    activity={activity as ActivityCardData}
+    contextActivities={recentActivities as ActivityCardData[]} // 🔥 On passe la liste pour la comparaison
+  />
+))}
           </div>
         ) : (
           <div style={emptyStateStyle}>

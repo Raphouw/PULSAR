@@ -84,6 +84,7 @@ const calculateStats = (activities: any[]): StatBlock => {
   return stats;
 };
 
+// 🔥 CORRECTION ICI : On ajoute duration_s et type pour que le client les reçoive !
 export type RecentActivity = {
   id: number;
   name: string;
@@ -94,6 +95,9 @@ export type RecentActivity = {
   avg_power_w: number | null;
   tss: number | null;
   polyline: { polyline: string } | null;
+  duration_s: number; // AJOUTÉ
+  type: string | null; // AJOUTÉ
+  np_w?: number | null; // Optionnel
 };
 
 export type DashboardData = {
@@ -123,7 +127,7 @@ export type DashboardData = {
     curve: { duration: string; seconds: number; real: number | null; model: number }[];
   };
   fitnessData: { date: string; ctl: number; atl: number; tsb: number }[];
-  fitnessHistory: any[]; // ou typé proprement avec FitnessHistoryItem[]
+  fitnessHistory: any[]; 
 };
 
 function getEmptyDashboardData(): DashboardData {
@@ -177,7 +181,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
   const fetchLimitDate = getISODateXDaysAgo(180); 
 
   try {
-    // 0. 🔥 PROFIL UTILISATEUR (Pour W' et FTP) + Date de dernière update
+    // 0. 🔥 PROFIL UTILISATEUR (Pour W' et FTP)
     const { data: userProfile } = await supabaseAdmin
         .from('users')
         .select('w_prime, ftp, updated_at')
@@ -187,7 +191,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     // 1. Récupérer toutes les activités
     const { data: activities, error: activitiesError } = await supabaseAdmin
       .from('activities')
-      .select('id, name, distance_km, elevation_gain_m, start_time, duration_s, tss, avg_power_w')
+      .select('id, name, distance_km, elevation_gain_m, start_time, duration_s, tss, avg_power_w, type, avg_speed_kmh')
       .eq('user_id', userId)
       .gte('start_time', fetchLimitDate)
       .order('start_time', { ascending: false });
@@ -275,7 +279,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
       prev90: calculateStats(statsPrev90),
     };
 
-    // 6. 🔥 MODÈLE BIOLOGIQUE AVEC DÉCROISSANCE (Time Decay)
+    // 6. MODÈLE BIOLOGIQUE AVEC DÉCROISSANCE
     const cpCurveObj: { [key: string]: number } = {};
     (records || []).forEach(r => {
         if (!cpCurveObj[r.type] || r.value > cpCurveObj[r.type]) {
@@ -299,34 +303,26 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 
     let finalWPrime = dbWPrime;
 
-    // CAS 1 : PROGRESSION (Calcul > BDD) -> Mise à jour immédiate
+    // CAS 1 : PROGRESSION
     if (calcWPrime > dbWPrime + 100) {
-        console.log(`[W'] Progression détectée ! ${dbWPrime} -> ${calcWPrime}`);
         await supabaseAdmin
             .from('users')
             .update({ w_prime: calcWPrime, updated_at: new Date() })
             .eq('id', userId);
         finalWPrime = calcWPrime;
     }
-    // CAS 2 : S'ENTRAÎNE COOL (Calcul < BDD) -> Érosion temporelle
+    // CAS 2 : S'ENTRAÎNE COOL (Érosion)
     else if (calcWPrime < dbWPrime) {
-        // Combien de jours depuis la dernière update ?
         const now = new Date();
         const diffMs = now.getTime() - updatedAt.getTime();
         const diffDays = diffMs / (1000 * 60 * 60 * 24);
 
-        // Si la valeur a plus de 24h, on applique l'érosion
         if (diffDays >= 1) {
-            // Taux de décroissance : 0.5% par jour (soit ~15% par mois sans effort max)
             const decayRate = 0.005; 
             const decayAmount = Math.floor(dbWPrime * decayRate * diffDays);
-            
-            // La nouvelle valeur érodée ne peut pas descendre sous la réalité calculée (plancher)
             const decayedWPrime = Math.max(calcWPrime, dbWPrime - decayAmount);
 
             if (decayedWPrime < dbWPrime) {
-                console.log(`[W'] Érosion naturelle (-${decayAmount}J) : ${dbWPrime} -> ${decayedWPrime}`);
-                // On met à jour la BDD pour acter la baisse
                 await supabaseAdmin
                     .from('users')
                     .update({ w_prime: decayedWPrime, updated_at: new Date() })
@@ -336,11 +332,10 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
         }
     }
     
-    // Safety : si BDD vide, on prend le calcul
     if (finalWPrime === 0) finalWPrime = calcWPrime;
 
-    const CP = calculated.CP; // CP reste 100% dynamique selon la forme du moment
-    const WPrime = finalWPrime; // W' est stabilisé
+    const CP = calculated.CP; 
+    const WPrime = finalWPrime; 
 
     // Génération courbe de puissance théorique
     const curvePoints: { label: string, sec: number }[] = [ { label: '30s', sec: 30 } ];
@@ -360,11 +355,11 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
         };
     });
 
-    // 7. Activités Récentes (14j pour l'affichage liste)
+    // 7. Activités Récentes (14j) - C'est ici qu'on inclut type et duration_s
     const twoWeeksAgoISO = getISODateXDaysAgo(14);
     const { data: recentActivitiesData } = await supabaseAdmin
       .from("activities")
-      .select(`id, name, distance_km, elevation_gain_m, start_time, avg_speed_kmh, avg_power_w, tss, polyline`)
+      .select(`id, name, distance_km, elevation_gain_m, start_time, avg_speed_kmh, avg_power_w, tss, polyline, duration_s, type`) // 🔥 AJOUT DE duration_s et type
       .eq("user_id", userId)
       .gte("start_time", twoWeeksAgoISO)
       .order("start_time", { ascending: false })
@@ -382,7 +377,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
       .from("user_fitness_history")
       .select(`id, user_id, date_calculated, ftp_value, w_prime_value, cp3_value, cp12_value, vo2max_value, tte_value, source_activity_id, model_cp3, model_cp12`)
       .eq("user_id", userId)
-      .order("date_calculated", { ascending: false }); // On garde Descending pour la BDD, on triera en JS pour le graph
+      .order("date_calculated", { ascending: false });
 
     return {
       allTimeStats,
@@ -393,7 +388,6 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
       recentActivities: (recentActivitiesData as RecentActivity[]) || [],
       powerModel: { metrics: { CP, WPrime }, curve: powerCurveData },
       fitnessData,
-      // 👇 IMPORTANT : C'est ici qu'on passe les données au client !
       fitnessHistory: graphdata || []
     };
 
