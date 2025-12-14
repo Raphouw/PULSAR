@@ -183,7 +183,7 @@ export default function GlobalMapClient({ activities }: { activities: MapActivit
     const tilesForSquares = new Set(tiles);
     const calculatedTopSquares: MaxSquareWithRank[] = [];
     
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 5; i++) {
         if (tilesForSquares.size === 0) break;
         const sq = calculateMaxSquare(tilesForSquares);
         if (sq.maxSquare === 0) break;
@@ -364,7 +364,7 @@ export default function GlobalMapClient({ activities }: { activities: MapActivit
   // --- SWITCH RANK CARRÉ (1, 2, 3) ---
   const cycleSquareRank = (e: React.MouseEvent) => {
       e.stopPropagation(); // Bloque la propagation pour éviter le zoom parent
-      const nextRank = (activeSquareRank + 1) % Math.min(topSquares.length, 3);
+      const nextRank = (activeSquareRank + 1) % Math.min(topSquares.length, 5);
       setActiveSquareRank(nextRank);
       
       if (targetMode !== 'square') {
@@ -570,9 +570,9 @@ export default function GlobalMapClient({ activities }: { activities: MapActivit
                         <div 
                             onClick={cycleSquareRank} 
                             className="flex gap-0.5 p-1 -m-1 cursor-alias hover:scale-110 transition-transform"
-                            title="Changer de carré (1, 2, 3)"
+                            title="Changer de carré (1, 2, 3, 4, 5)"
                         >
-                            {[0,1,2].map(i => (
+                            {[0,1,2,3,4].map(i => (
                                 <div key={i} className={`w-1.5 h-1.5 rounded-full ${activeSquareRank === i ? 'bg-yellow-500' : 'bg-gray-700'}`} />
                             ))}
                         </div>

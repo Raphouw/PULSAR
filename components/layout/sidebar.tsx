@@ -5,12 +5,16 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
-import { Menu, X, ChevronRight, Zap, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { 
+  ChevronRight, Zap, 
+  Pin, PinOff, 
+  Menu, X, 
+  PanelLeftClose, PanelLeftOpen 
+} from 'lucide-react';
 
 const HEADER_HEIGHT = 72;
-const FOOTER_HEIGHT = 64;
 
-// --- ICÔNES & ANIMATIONS (INCHANGÉES) ---
+// --- ICÔNES SVG AVEC CLASSES D'ANIMATION ---
 const Icons = {
   Dashboard: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-dashboard">
@@ -165,9 +169,8 @@ const groups = [
   },
 ];
 
-const updateGlobalWidth = (collapsed: boolean) => {
+const updateGlobalWidth = (width: string) => {
   if (typeof document !== 'undefined') {
-    const width = collapsed ? '72px' : '210px';
     document.documentElement.style.setProperty('--sidebar-width', width);
   }
 };
@@ -177,47 +180,54 @@ export default function Sidebar() {
   const { data: session } = useSession();
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  
+  // --- ÉTATS ---
+  const [isPinned, setIsPinned] = useState(false); // Mode "Épinglé" (Cadenas)
+  const [isHovered, setIsHovered] = useState(false); // Mode "Survol temporaire"
   const [mounted, setMounted] = useState(false);
 
-  const updateSidebarWidth = (collapsed: boolean) => {
-      const width = collapsed ? '72px' : '210px';
-      document.documentElement.style.setProperty('--sidebar-width', width);
-  };
+  // La sidebar est ouverte si Épinglée OU Survolée
+  const isSidebarOpen = isPinned || isHovered;
 
   useEffect(() => {
     setMounted(true);
-    const savedState = localStorage.getItem('sidebar-collapsed');
-    const initialState = savedState ? JSON.parse(savedState) : false;
-    setIsCollapsed(initialState);
-    updateGlobalWidth(initialState); // Applique la largeur au chargement
+    // Charger la préférence "Pinned" du localStorage
+    const savedPinState = localStorage.getItem('sidebar-pinned');
+    const initialPinState = savedPinState ? JSON.parse(savedPinState) : true;
+    setIsPinned(initialPinState);
   }, []);
 
-  const toggleSidebar = () => {
-    const newState = !isCollapsed;
-    setIsCollapsed(newState);
-    localStorage.setItem('sidebar-collapsed', JSON.stringify(newState));
-    updateGlobalWidth(newState); // Met à jour la largeur en temps réel
+  // Met à jour la largeur globale (CSS variable) pour pousser le contenu
+  useEffect(() => {
+    if (!mounted) return;
+    const width = isSidebarOpen ? '210px' : '72px';
+    updateGlobalWidth(width);
+  }, [isSidebarOpen, mounted]);
+
+  // Action : Clic sur le bouton PIN
+  const togglePin = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Empêche de propager le clic
+    const newState = !isPinned;
+    setIsPinned(newState);
+    localStorage.setItem('sidebar-pinned', JSON.stringify(newState));
   };
 
+  // Navigation : Quand l'URL change (nouvelle page chargée), on reset le hover
   useEffect(() => {
     setIsMobileMenuOpen(false);
+    setIsHovered(false); 
   }, [pathname]);
 
   const isLocked = session?.user?.onboarding_completed === false;
+  const currentWidth = isSidebarOpen ? '210px' : '72px';
+  const groupMarginBottom = isSidebarOpen ? '1.5rem' : '0.4rem';
 
-  // LARGEUR AJUSTÉE (Plus fine)
-  const sidebarWidth = isCollapsed ? '72px' : '210px';
-
-  // Marge entre les groupes : plus petite quand rétracté pour tasser le contenu
-  const groupMarginBottom = isCollapsed ? '0.8rem' : '1.5rem';
-
-  if (!mounted) return <div style={{ width: sidebarWidth, background: 'var(--background)' }} />;
+  if (!mounted) return <div style={{ width: currentWidth, background: 'var(--background)' }} />;
 
   return (
     <>
       <style jsx global>{`
-        /* --- STRUCTURE STICKY / FIXED --- */
+        /* --- STRUCTURE PRINCIPALE --- */
         .sidebar-container {
             height: 100vh;
             background: #0a0a0c;
@@ -226,29 +236,29 @@ export default function Sidebar() {
             flex-direction: column;
             z-index: 50;
             transition: width 0.4s cubic-bezier(0.2, 0, 0, 1);
-            
-            /* MOBILE : Fixed pour passer au dessus */
+            overflow-x: hidden;
             position: fixed;
             top: 0;
             left: 0;
         }
 
-        /* DESKTOP (Tablettes et +) : Sticky pour coller au contenu */
+        /* DESKTOP : Sticky */
         @media (min-width: 768px) {
             .sidebar-container {
                 position: sticky; 
                 top: 0;
-                /* Note: pas de left: 0 ici pour laisser le Flexbox layout gérer la position */
             }
         }
 
-        /* --- ANIMATIONS (V5 - WHITE ONLY) --- */
+        /* --- STYLES TEXTES & LOGO --- */
         .logo-link:hover .logo-text {
             letter-spacing: 2px;
             filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.6));
             background: linear-gradient(135deg, #ffffff 0%, #d04fd7 100%);
             -webkit-background-clip: text;
         }
+
+        /* --- ANIMATIONS SVG (Toutes les keyframes) --- */
 
         /* Dashboard */
         .nav-link:hover .icon-dashboard .rect-1 { animation: eqMove 0.6s ease infinite alternate; }
@@ -364,18 +374,11 @@ export default function Sidebar() {
 
         /* HOVER EFFECTS - WHITE ONLY */
         .nav-link:hover .link-text,
-        .nav-link:hover svg,
-        .nav-link:hover svg path,
-        .nav-link:hover svg rect,
-        .nav-link:hover svg circle,
-        .nav-link:hover svg line,
-        .nav-link:hover svg polygon,
-        .nav-link:hover svg g {
+        .nav-link:hover svg, .nav-link:hover svg path, .nav-link:hover svg rect, .nav-link:hover svg circle, .nav-link:hover svg line, .nav-link:hover svg polygon, .nav-link:hover svg g {
             color: #ffffff !important;
             stroke: #ffffff !important;
             fill: rgba(255,255,255,0) !important;
         }
-        /* Fill exceptions */
         .nav-link:hover svg .chip-core, .nav-link:hover svg .cal-day-1, .nav-link:hover svg .cal-day-2,
         .nav-link:hover svg .cal-day-3, .nav-link:hover svg .cal-day-4, .nav-link:hover svg .gps-dot,
         .nav-link:hover svg .net-center, .nav-link:hover svg .net-node-1, .nav-link:hover svg .net-node-2,
@@ -384,15 +387,13 @@ export default function Sidebar() {
             fill: #ffffff !important;
             stroke: none !important;
         }
-
         .nav-link:hover .link-text { transform: translateX(3px); }
-        
-        /* RESPONSIVE */
-        @media (max-width: 768px) {
-          .sidebar-container { transform: translateX(-100%); width: 220px !important; }
-          .sidebar-container.open { transform: translateX(0); }
-          .mobile-toggle-btn { display: flex; }
-          .collapse-btn { display: none !important; }
+
+        /* Styles spécifiques pour le bouton Pin */
+        .pin-btn:hover {
+            background: rgba(255,255,255,0.08);
+            color: #fff;
+            border-color: rgba(255,255,255,0.2);
         }
         
         .scroll-area::-webkit-scrollbar { width: 3px; }
@@ -404,7 +405,6 @@ export default function Sidebar() {
       <button 
         className="mobile-toggle-btn" 
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        aria-label="Menu"
         style={{
             position: 'fixed', top: '12px', left: '12px', zIndex: 100,
             background: 'rgba(15, 15, 20, 0.9)', backdropFilter: 'blur(8px)',
@@ -427,74 +427,54 @@ export default function Sidebar() {
         }}
       />
 
-      {/* --- SIDEBAR --- */}
+      {/* --- SIDEBAR CONTAINER --- */}
       <aside 
         className={`sidebar-container ${isMobileMenuOpen ? 'open' : ''}`}
+        // GESTION INTELLIGENTE DU SURVOL
+        // Si ce n'est pas épinglé (cadenas ouvert), on ouvre temporairement au survol
+        onMouseEnter={() => !isPinned && setIsHovered(true)}
+        // Quand on sort la souris, on ferme le mode temporaire
+        onMouseLeave={() => setIsHovered(false)}
         style={{
-            width: sidebarWidth, // La position est gérée par le CSS maintenant !
+            width: currentWidth, 
             ...(isLocked ? { opacity: 0.4, pointerEvents: 'none', filter: 'grayscale(0.8)' } : {})
         }}
       >
-        {/* HEADER & TOGGLE BUTTON */}
+        {/* HEADER : LOGO */}
         <div style={{ 
             display: 'flex', alignItems: 'center', 
-            justifyContent: isCollapsed ? 'center' : 'space-between', 
-            padding: '1.2rem 1rem', marginBottom: 0 
+            // Si fermé : centré. Si ouvert : aligné à gauche.
+            justifyContent: !isSidebarOpen ? 'center' : 'flex-start', 
+            padding: '1.2rem 1rem', marginBottom: 0,
+            height: HEADER_HEIGHT // Hauteur fixe pour éviter les sauts
         }}>
-            <Link href="/dashboard" className="logo-link" style={{ textDecoration: 'none', display: isCollapsed ? 'none' : 'block' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                    <span style={logoTextStyle} className="logo-text">PULSAR</span>
-                    <span style={versionBadgeStyle}>DEV</span>
+            <Link href="/dashboard" className="logo-link" style={{ textDecoration: 'none', display: 'block' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
+                    {/* Le logo "P" simple si fermé */}
+                    {!isSidebarOpen ? (
+                         <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#d04fd7' }}>P</span>
+                    ) : (
+                        // Logo complet si ouvert
+                        <>
+                            <span style={logoTextStyle} className="logo-text">PULSAR</span>
+                            <span style={versionBadgeStyle}>DEV</span>
+                        </>
+                    )}
                 </div>
             </Link>
-
-            {/* Logo "P" only when collapsed */}
-            {isCollapsed && (
-                 <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#d04fd7', display: 'none' }}>P</span>
-            )}
-
-            {/* BOUTON TOGGLE (TOP RIGHT) */}
-            <button 
-                className="collapse-btn"
-                onClick={toggleSidebar}
-                style={{
-                    background: 'rgba(255,255,255,0.03)',
-                    border: '1px solid rgba(255,255,255,0.08)',
-                    borderRadius: '6px',
-                    color: 'rgba(255,255,255,0.5)',
-                    padding: '5px',
-                    cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    transition: 'all 0.2s',
-                    width: isCollapsed ? '100%' : 'auto', // Prend toute la largeur si réduit
-                    height: isCollapsed ? '40px' : 'auto',
-                }}
-                onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
-                    e.currentTarget.style.color = '#fff';
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
-                }}
-                onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
-                    e.currentTarget.style.color = 'rgba(255,255,255,0.5)';
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.03)';
-                }}
-            >
-                {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={16} />}
-            </button>
         </div>
 
-        {/* NAVIGATION */}
+        {/* NAVIGATION SCROLLABLE */}
         <div style={scrollAreaStyle} className="scroll-area">
           {groups.map((group, index) => (
-            // Utilisation de la marge dynamique
             <div key={index} style={{ marginBottom: groupMarginBottom }}>
+              {/* TITRE DU GROUPE (Ligne ou Texte) */}
               <div style={{ 
-                  marginBottom: '0.6rem', paddingLeft: isCollapsed ? 0 : '0.8rem', 
-                  textAlign: isCollapsed ? 'center' : 'left', height: '16px',
-                  display: 'flex', alignItems: 'center', justifyContent: isCollapsed ? 'center' : 'flex-start'
+                  marginBottom: '0.6rem', paddingLeft: !isSidebarOpen ? 0 : '0.8rem', 
+                  textAlign: !isSidebarOpen ? 'center' : 'left', height: '16px',
+                  display: 'flex', alignItems: 'center', justifyContent: !isSidebarOpen ? 'center' : 'flex-start'
               }}>
-                 {isCollapsed ? (
+                 {!isSidebarOpen ? (
                     <div style={{ width: '20px', height: '2px', background: 'linear-gradient(90deg, #d04fd7 0%, transparent 100%)', opacity: 0.5 }} />
                  ) : (
                     <span style={groupTitleStyle}>{group.title}</span>
@@ -504,17 +484,19 @@ export default function Sidebar() {
               <ul style={ulStyle}>
                 {group.links.map((link) => {
                   const isActive = pathname?.startsWith(link.href) ?? false;
-                  const isHovered = hoveredLink === link.href;
+                  const isHoveredLink = hoveredLink === link.href;
 
                   return (
-                    <li key={link.href} style={{ marginBottom: '4px' }}>
+                    <li key={link.href} style={{ marginBottom: !isSidebarOpen ? '2px' : '4px' }}>
                       <Link
                         href={link.href}
                         className="nav-link"
+                        // Ferme le menu mobile au clic, mais ne touche pas à la sidebar desktop (gérée par URL)
+                        onClick={() => isMobileMenuOpen && setIsMobileMenuOpen(false)}
                         style={{
-                            ...getLinkStyle(isActive, isHovered),
-                            padding: isCollapsed ? '0.8rem' : '0.55rem 0.8rem',
-                            justifyContent: isCollapsed ? 'center' : 'flex-start'
+                            ...getLinkStyle(isActive, isHoveredLink),
+                            padding: !isSidebarOpen ? '0.5rem' : '0.55rem 0.8rem',
+                            justifyContent: !isSidebarOpen ? 'center' : 'flex-start'
                         }}
                         onMouseEnter={() => setHoveredLink(link.href)}
                         onMouseLeave={() => setHoveredLink(null)}
@@ -524,7 +506,7 @@ export default function Sidebar() {
                         <span 
                           className="link-icon"
                           style={{ 
-                            marginRight: isCollapsed ? 0 : '12px', display: 'flex',
+                            marginRight: !isSidebarOpen ? 0 : '12px', display: 'flex',
                             transition: 'color 0.2s', color: isActive ? '#d04fd7' : 'rgba(255,255,255,0.6)',
                             minWidth: '18px'
                           }}
@@ -537,20 +519,12 @@ export default function Sidebar() {
                           style={{ 
                             fontSize: '0.85rem', fontWeight: isActive ? 600 : 400,
                             color: isActive ? '#fff' : 'rgba(255,255,255,0.8)',
-                            transition: 'all 0.3s', opacity: isCollapsed ? 0 : 1,
-                            width: isCollapsed ? 0 : 'auto', overflow: 'hidden', whiteSpace: 'nowrap'
+                            transition: 'all 0.3s', opacity: !isSidebarOpen ? 0 : 1,
+                            width: !isSidebarOpen ? 0 : 'auto', overflow: 'hidden', whiteSpace: 'nowrap'
                           }}
                         >
                           {link.label}
                         </span>
-                        
-                        {!isCollapsed && (
-                            <ChevronRight size={14} style={{
-                                marginLeft: 'auto', opacity: isHovered ? 1 : 0,
-                                transform: isHovered ? 'translateX(0)' : 'translateX(-5px)',
-                                transition: 'all 0.2s ease', color: '#fff'
-                            }}/>
-                        )}
                       </Link>
                     </li>
                   );
@@ -560,10 +534,35 @@ export default function Sidebar() {
           ))}
         </div>
 
-        {/* FOOTER USER */}
-        <div style={{ marginTop: 0, borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.3)' }}>
+        {/* --- ZONE DU BAS : PIN BUTTON & USER --- */}
+        <div style={{ marginTop: 0, borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)' }}>
+            
+            {/* BOUTON PIN (Uniquement visible quand ouvert pour éviter le bruit visuel fermé) */}
+            {isSidebarOpen && (
+                <div style={{ padding: '0.5rem 1rem', display: 'flex', justifyContent: 'flex-end' }}>
+                     <button
+                        onClick={togglePin}
+                        className="pin-btn"
+                        title={isPinned ? "Détacher la barre" : "Épingler la barre"}
+                        style={{
+                            background: 'transparent',
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            borderRadius: '6px',
+                            padding: '6px',
+                            cursor: 'pointer',
+                            color: isPinned ? '#d04fd7' : 'rgba(255,255,255,0.5)',
+                            transition: 'all 0.2s',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}
+                     >
+                        {isPinned ? <Pin size={14} fill="currentColor" /> : <PinOff size={14} />}
+                     </button>
+                </div>
+            )}
+
+            {/* USER PROFILE */}
             {session?.user && (
-            <div style={{ padding: isCollapsed ? '1rem 0.5rem' : '1rem 1rem', display: 'flex', justifyContent: 'center' }}>
+            <div style={{ padding: !isSidebarOpen ? '1rem 0.5rem' : '0.5rem 1rem 1rem 1rem', display: 'flex', justifyContent: 'center' }}>
                 <div style={footerProfileStyle}>
                 <div style={avatarPlaceholderStyle}>
                     {session.user.image ? (
@@ -575,8 +574,8 @@ export default function Sidebar() {
                 </div>
                 
                 <div style={{ 
-                    overflow: 'hidden', transition: 'all 0.3s', opacity: isCollapsed ? 0 : 1,
-                    width: isCollapsed ? 0 : 'auto', marginLeft: isCollapsed ? 0 : '10px'
+                    overflow: 'hidden', transition: 'all 0.3s', opacity: !isSidebarOpen ? 0 : 1,
+                    width: !isSidebarOpen ? 0 : 'auto', marginLeft: !isSidebarOpen ? 0 : '10px'
                 }}>
                     <div style={userNameStyle}>{session.user.name}</div>
                     <div style={userRoleStyle}>
@@ -593,12 +592,11 @@ export default function Sidebar() {
   );
 }
 
-// --- STYLES CSS-IN-JS AJUSTÉS ---
-
+// ... STYLES UTILS ...
 const logoTextStyle: React.CSSProperties = {
   fontSize: '1.4rem', fontWeight: 800, fontFamily: 'system-ui, sans-serif',
   letterSpacing: '-0.5px', background: 'linear-gradient(135deg, #d04fd7 0%, #ffffff 100%)',
-  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', transition: 'all 0.3s ease',
+  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', transition: 'all 0.3s ease', whiteSpace: 'nowrap'
 };
 
 const versionBadgeStyle: React.CSSProperties = {
@@ -614,7 +612,7 @@ const scrollAreaStyle: React.CSSProperties = {
 const groupTitleStyle: React.CSSProperties = {
   fontSize: '0.6rem', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '1px',
   background: 'linear-gradient(90deg, #d04fd7 0%, #a0a0a0 100%)',
-  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', opacity: 1, 
+  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', opacity: 1, whiteSpace: 'nowrap',
 };
 
 const ulStyle: React.CSSProperties = { listStyle: 'none', padding: 0, margin: 0 };
