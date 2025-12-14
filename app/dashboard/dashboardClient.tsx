@@ -451,7 +451,7 @@ function ActivityCard({ activity, contextActivities }: { activity: ActivityCardD
               gap: '1rem 0.5rem', // Espace vertical (1rem) et horizontal (0.5rem)
               marginTop: 'auto', 
               paddingTop: '0.75rem',
-              borderTop: '1px solid rgba(255, 255, 255, 0.1)' // Séparateur optionnel, tu peux l'enlever si tu préfères
+             
           }}>
             {/* LIGNE 1 */}
             <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
