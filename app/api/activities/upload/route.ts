@@ -5,9 +5,9 @@ import { authOptions } from "../../../../lib/auth";
 import { supabaseAdmin } from "../../../../lib/supabaseAdminClient"; 
 import { DOMParser } from '@xmldom/xmldom';
 import polyline from '@mapbox/polyline';
-// Assure-toi que cette fonction existe bien dans lib/physics, sinon copie-la
 import { calculateMaxAveragePower } from "../../../../lib/physics";
-import { scanActivityAgainstAllSegments } from "../../../../lib/segmentScanner"; // Mettre cet import tout en haut du fichier
+// 🔥 FIX : Importation du nom correct de la fonction
+import { scanActivityAgainstSegments } from "../../../../lib/segmentScanner"; 
 
 // --- HELPERS PHYSIQUES LOCAUX ---
 
@@ -67,13 +67,11 @@ export async function POST(req: Request) {
     if (!session?.user?.id) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     const userId = session.user.id;
 
-    // 1. Récupération Fichier (Compatible Next.js App Router)
     const formData = await req.formData();
     const file = formData.get("file") as File;
     
     if (!file) return NextResponse.json({ error: "Fichier manquant" }, { status: 400 });
 
-    // 2. Profil utilisateur (pour FTP/Poids)
     const { data: userProfile } = await supabaseAdmin
         .from("users")
         .select("ftp, weight")
@@ -82,7 +80,6 @@ export async function POST(req: Request) {
     
     const userFTP = userProfile?.ftp || 200;
 
-    // 3. Parsing GPX
     const text = await file.text();
     const parser = new DOMParser();
     const xmlDoc = parser.parseFromString(text, "application/xml");
@@ -92,7 +89,6 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: "GPX invalide (pas de points)" }, { status: 400 });
     }
 
-    // --- EXTRACTION STREAMS ---
     const streams = {
         lat: [] as number[],
         lng: [] as number[],
@@ -119,13 +115,11 @@ export async function POST(req: Request) {
     const firstTimeNode = trkpts[0].getElementsByTagName("time")[0];
     const startTime = new Date(firstTimeNode?.textContent || new Date().toISOString()).getTime();
     
-    // Init Point 0
     let prevLat = parseFloat(trkpts[0].getAttribute("lat") || "0");
     let prevLng = parseFloat(trkpts[0].getAttribute("lon") || "0");
     let prevEle = parseFloat(trkpts[0].getElementsByTagName("ele")[0]?.textContent || "0");
     let prevTime = startTime;
 
-    // Variables pour le lissage D+ (Hysteresis)
     let refEle = prevEle; 
     const ELEV_THRESHOLD = 3.0; 
 
@@ -142,7 +136,6 @@ export async function POST(req: Request) {
     streams.hr.push(getTagValue(trkpts[0], "hr") || 0);
     streams.cad.push(getTagValue(trkpts[0], "cad") || 0);
     
-    // Boucle sur les points
     for (let i = 1; i < trkpts.length; i++) {
         const pt = trkpts[i];
         
@@ -162,11 +155,10 @@ export async function POST(req: Request) {
         const hr = getTagValue(pt, "hr") || getTagValue(pt, "heartrate") || 0;
         const cad = getTagValue(pt, "cad") || getTagValue(pt, "cadence") || 0;
 
-        // Physique
         const dist = getDist([prevLng, prevLat], [lng, lat]);
         const speed = dist / dt; 
 
-        if (speed < 42) { // Filtre aberrations > 150km/h
+        if (speed < 42) {
             totalDist += dist;
             if (speed > 0.5) movingTime += dt;
 
@@ -176,7 +168,6 @@ export async function POST(req: Request) {
             if (smoothedSpeed > maxSpeed) maxSpeed = smoothedSpeed;
         }
 
-        // Correction D+
         const diffEle = ele - refEle;
         if (diffEle > ELEV_THRESHOLD) {
             totalElev += diffEle;
@@ -185,7 +176,6 @@ export async function POST(req: Request) {
             refEle = ele; 
         }
 
-        // Ajout Streams
         streams.lat.push(lat);
         streams.lng.push(lng);
         streams.ele.push(ele);
@@ -202,8 +192,6 @@ export async function POST(req: Request) {
         prevLat = lat; prevLng = lng; prevEle = ele; prevTime = time;
     }
 
-    // --- 4. CALCULS AGRÉGÉS ---
-    
     const totalDuration = (prevTime - startTime) / 1000;
     const activeDuration = (movingTime > totalDuration * 0.1) ? movingTime : totalDuration;
     
@@ -211,7 +199,6 @@ export async function POST(req: Request) {
     const avgPower = countWatts > 0 ? Math.round(sumWatts / countWatts) : null;
     const avgHr = streams.hr.some(h => h > 0) ? Math.round(streams.hr.reduce((a,b)=>a+b,0) / streams.hr.filter(h=>h>0).length) : null;
     const maxHr = streams.hr.some(h => h > 0) ? Math.max(...streams.hr) : null;
-    // NP & TSS
     const np = countWatts > 0 ? calculateNP(streams.watts) : null;
     
     let tss: number | null = null;
@@ -222,7 +209,6 @@ export async function POST(req: Request) {
         tss = Math.round((activeDuration * np * intensityFactor) / (userFTP * 3600) * 100);
     }
 
-    // --- 5. DÉTECTION DOUBLONS ---
     const timeMargin = 30 * 60 * 1000; 
     const minDate = new Date(startTime - timeMargin).toISOString();
     const maxDate = new Date(startTime + timeMargin).toISOString();
@@ -239,12 +225,10 @@ export async function POST(req: Request) {
         if (isDuplicate) return NextResponse.json({ error: "Cette activité existe déjà." }, { status: 409 });
     }
 
-    // --- 6. SAUVEGARDE ---
     const polylinePoints = streams.lat.map((lat, i) => [lat, streams.lng[i]]);
     // @ts-ignore
     const encodedPolyline = polyline.encode(polylinePoints);
 
-    // Structure Streams optimisée (undefined si vide pour économiser BDD)
     const streamsDataBDD = {
         time: streams.relTime,
         distance: streams.dist,
@@ -261,44 +245,31 @@ export async function POST(req: Request) {
         user_id: userId,
         name: file.name.replace('.gpx', '').replace('.GPX', ''),
         type: 'Ride',
-        strava_id: null, // C'est un upload manuel
-        
+        strava_id: null,
         distance_km: parseFloat((totalDist / 1000).toFixed(2)),
         elevation_gain_m: Math.round(totalElev),
         duration_s: Math.round(activeDuration),
         start_time: new Date(startTime).toISOString(),
-        
         avg_speed_kmh: parseFloat(avgSpeed.toFixed(1)),
         max_speed_kmh: parseFloat((maxSpeed * 3.6).toFixed(1)),
-        
         avg_power_w: avgPower,
-        avg_heartrate: avgHr, // 🔥 Stocké en dur !
+        avg_heartrate: avgHr,
         max_heart_rate: maxHr,
         np_w: np,
         tss: tss,
         intensity_factor: intensityFactor ? parseFloat(intensityFactor.toFixed(2)) : null,
-        
         polyline: { polyline: encodedPolyline },
         streams_data: streamsDataBDD 
       })
-      .select('id') // 🔥 On sélectionne l'ID explicitement
+      .select('id')
       .single();
 
     if (error) throw error;
 
-    // 🔥 DÉCLENCHEMENT SEGMENT MATCHING (CORRIGÉ)
-    // On utilise l'URL complète via NEXTAUTH_URL ou une URL relative si fetch interne supporté
-    const baseUrl = process.env.NEXTAUTH_URL || 'http://localhost:3000';
-    
-    fetch(`${baseUrl}/api/segments/match`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        // Utilisation de activityData.id
-        body: JSON.stringify({ mode: 'activity', id: activityData.id }) 
-    }).catch(err => console.error("Segment matching trigger failed", err));
-
-    scanActivityAgainstAllSegments(activityData.id)
-        .then(res => console.log(`Segments scannés pour l'activité ${activityData.id}: ${res.matchesFound} trouvés`))
+    // 🔥 DÉCLENCHEMENT SCAN SEGMENTS PULSAR (AUTO & BLINDÉ)
+    // On passe streamsDataBDD directement pour l'injection directe (évite les lags BDD)
+    console.log(`[Upload] Lancement scan segments auto pour ID ${activityData.id}`);
+    scanActivityAgainstSegments(activityData.id, undefined, streamsDataBDD as any)
         .catch(err => console.error("Erreur scan segments upload:", err));
 
     // --- 7. RECORDS (Power Curve) ---

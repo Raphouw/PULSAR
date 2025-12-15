@@ -41,6 +41,86 @@ export type DetectedClimb = {
 };
 
 // --- FONCTIONS DE BASE ---
+export const calculatePulsarScore = (
+  distanceM: number,
+  elevationGainM: number,
+  avgGrade: number,
+  polyline?: number[][]
+): { index: number; sigma: number; density: number } => {
+  const H = Math.max(1, elevationGainM);
+  const L = Math.max(100, distanceM);
+  const AvgP = Math.max(0, avgGrade);
+  const density = H / (L / 1000); // m/km
+
+  let sigma = 0;
+  let maxAlt = 0;
+
+  if (polyline && polyline.length > 5) {
+    const sigmaGrades: number[] = [];
+    let distAcc = 0;
+    let lastEle = polyline[0][2] || 0;
+
+    for (let i = 1; i < polyline.length; i++) {
+      const p1 = polyline[i - 1];
+      const p2 = polyline[i];
+      // Haversine simplifiée pour le sigma (déjà centralisée ailleurs si besoin)
+      const R = 6371e3;
+      const φ1 = (p1[0] * Math.PI) / 180;
+      const φ2 = (p2[0] * Math.PI) / 180;
+      const Δφ = ((p2[0] - p1[0]) * Math.PI) / 180;
+      const Δλ = ((p2[1] - p1[1]) * Math.PI) / 180;
+      const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
+      const d = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+      distAcc += d;
+      if (p2[2] > maxAlt) maxAlt = p2[2];
+
+      if (distAcc >= 25) { // Fenêtre de 25m pour la variance de pente
+        const eleDiff = (p2[2] || 0) - lastEle;
+        sigmaGrades.push((eleDiff / distAcc) * 100);
+        distAcc = 0;
+        lastEle = p2[2] || 0;
+      }
+    }
+
+    if (sigmaGrades.length > 1) {
+      const mean = sigmaGrades.reduce((a, b) => a + b, 0) / sigmaGrades.length;
+      const variance = sigmaGrades.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / sigmaGrades.length;
+      sigma = Math.sqrt(variance);
+    }
+  }
+
+  // Facteurs environnementaux
+  const AltFactor = 1 + (maxAlt / 8000); // Pénalité hypoxique
+  const Pivot = 1 + ((sigma * (AvgP - 8)) / 50); // Pénalité irrégularité (Sigma) sur pentes fortes
+  
+  // Formule PULSAR : H²/L (travail contre gravité) + 3H (charge de base)
+  const Base = (20 * (Math.pow(H, 2) / L)) + (3 * H);
+  const rawScore = Base * AltFactor * Pivot;
+
+  return { 
+    index: Math.round(rawScore), 
+    sigma: parseFloat(sigma.toFixed(2)), 
+    density: parseFloat(density.toFixed(1)) 
+  };
+};
+
+/**
+ * Détermine la catégorie Pulsar d'un segment selon son index.
+ */
+export const getPulsarCategory = (index: number, distanceM: number, density: number) => {
+  if (distanceM >= 50000 && density < 30) return { label: 'BOUCLE MYTHIQUE', color: '#00f3ff', textColor: '#000' };
+  if (index > 7500) return { label: 'ICONIC', color: '#000', textColor: '#d04fd7', border: true };
+  if (index > 6500) return { label: 'HC', color: '#ef4444', textColor: '#fff' };
+  if (index > 5000) return { label: 'CAT 1', color: '#f97316', textColor: '#fff' };
+  if (index > 3000) return { label: 'CAT 2', color: '#eab308', textColor: '#000' };
+  if (index > 1500) return { label: 'CAT 3', color: '#84cc16', textColor: '#000' };
+  if (index > 1000) return { label: 'CAT 4', color: '#10b981', textColor: '#fff' };
+  return { label: 'COTE REGION', color: '#0077B6', textColor: '#fff' };
+};
+
+
+
 export const findMaxValue = (data: (number | null)[] | undefined): number | null => {
   const safeData = safeArray<number | null>(data);
   if (safeData.length === 0) return null;

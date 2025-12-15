@@ -1,17 +1,17 @@
-// Fichier : app/segments/[id]/segmentDisplay.tsx
 'use client';
 
 import React, { useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { Mountain, Zap, Clock, Trophy, Activity, ArrowUpRight, MapPin, Navigation, ChevronLeft, Users, Heart, RotateCw, ArrowDown, HelpCircle, Info, Gauge, TrendingUp } from 'lucide-react';
+import { 
+    Mountain, Zap, Clock, Trophy, Activity, ArrowUpRight, MapPin, 
+    Navigation, ChevronLeft, Users, Heart, RotateCw, ArrowDown, 
+    HelpCircle, Gauge, TrendingUp, Scale, User, Award, Target, ArrowUpDown
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { SegmentDetail } from './page';
 
-const SegmentProfileChart = dynamic(() => import('./segmentProfilChart'), { ssr: false, loading: () => <div className="h-full w-full bg-[#050505] animate-pulse"></div> });
-const SegmentMap = dynamic(() => import('./SegmentMap'), { ssr: false, loading: () => <div className="h-full w-full bg-[#050505]"></div> });
-
-// EXTENSION DE TYPE GLOBALE
-
+const SegmentProfileChart = dynamic(() => import('./segmentProfilChart'), { ssr: false, loading: () => <div className="h-full w-full bg-[#050505] animate-pulse rounded-2xl"></div> });
+const SegmentMap = dynamic(() => import('./SegmentMap'), { ssr: false, loading: () => <div className="h-full w-full bg-[#050505] rounded-2xl"></div> });
 
 type BadgeData = { label: string; color: string; textColor: string; border?: boolean; isManual?: boolean; };
 
@@ -19,15 +19,14 @@ type BadgeData = { label: string; color: string; textColor: string; border?: boo
 function getDist(lat1: number, lon1: number, lat2: number, lon2: number) {
     const R = 6371e3; const φ1 = lat1 * Math.PI / 180; const φ2 = lat2 * Math.PI / 180;
     const a = Math.sin(((lat2-lat1)*Math.PI/180)/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(((lon2-lon1)*Math.PI/180)/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-// --- VULGARISATION SIGMA (PRO) ---
 const getSigmaLabel = (sigma: number) => {
-    if (sigma < 0.8) return { label: "MÉTRONOME", desc: "Pente constante favorisant un effort lissé (Steady State).", color: "#10b981" }; 
-    if (sigma < 1.5) return { label: "VARIÉ", desc: "Fluctuations modérées nécessitant une gestion active du braquet.", color: "#3b82f6" }; 
-    if (sigma < 2.5) return { label: "CASSE-PATTES", desc: "Ruptures de rythme fréquentes sollicitant les filières anaérobies.", color: "#f59e0b" }; 
-    return { label: "CHANTIER", desc: "Irrégularité extrême. Effort stochastique à haute charge neuromusculaire.", color: "#ef4444" }; 
+    if (sigma < 0.8) return { label: "MÉTRONOME", color: "#10b981" }; 
+    if (sigma < 1.5) return { label: "VARIÉ", color: "#3b82f6" }; 
+    if (sigma < 2.5) return { label: "CASSE-PATTES", color: "#f59e0b" }; 
+    return { label: "CHANTIER", color: "#ef4444" }; 
 };
 
 const calculatePulsarMetrics = (segment: SegmentDetail) => {
@@ -35,127 +34,56 @@ const calculatePulsarMetrics = (segment: SegmentDetail) => {
     const L = Math.max(100, segment.distance_m); 
     const AvgP = Math.max(0, segment.average_grade); 
     const density = H / (L / 1000); 
-
     let sigma = 0;
     let maxAlt = -Infinity;
-    
     let maxGrade = (segment.max_grade && segment.max_grade > AvgP) ? segment.max_grade : 0; 
     const shouldCalcMax = maxGrade === 0;
-
     let polyline: number[][] = [];
-    
     if (segment.polyline && Array.isArray(segment.polyline) && segment.polyline.length > 0) {
-        if (segment.polyline[0].length >= 3) polyline = segment.polyline as number[][];
-        else polyline = segment.polyline.map(p => [p[0], p[1], 0]);
-
+        polyline = segment.polyline.map(p => [p[0], p[1], p[2] || 0]);
         maxAlt = polyline.reduce((max, p) => Math.max(max, p[2]), -Infinity);
-
         if (polyline.length > 5) {
-            let distAccMax = 0;
-            let lastEleMax = polyline[0][2];
-            
-            let distAccSigma = 0;
-            let lastEleSigma = polyline[0][2];
+            let distAccMax = 0; let lastEleMax = polyline[0][2];
+            let distAccSigma = 0; let lastEleSigma = polyline[0][2];
             const sigmaGrades: number[] = [];
-
             for (let i = 1; i < polyline.length; i++) {
-                const p = polyline[i];
-                const prevP = polyline[i-1];
+                const p = polyline[i]; const prevP = polyline[i-1];
                 const stepDist = getDist(prevP[0], prevP[1], p[0], p[1]);
-                
-                distAccMax += stepDist;
-                distAccSigma += stepDist;
-
+                distAccMax += stepDist; distAccSigma += stepDist;
                 if (shouldCalcMax && distAccMax >= 5) {
-                    const eleDiff = p[2] - lastEleMax;
-                    if (distAccMax > 0) {
-                        const grade = (eleDiff / distAccMax) * 100;
-                        if (grade > maxGrade && grade < 50) maxGrade = grade;
-                    }
+                    const grade = ((p[2] - lastEleMax) / distAccMax) * 100;
+                    if (grade > maxGrade && grade < 50) maxGrade = grade;
                     distAccMax = 0; lastEleMax = p[2];
                 }
-
                 if (distAccSigma >= 25) { 
-                    const eleDiff = p[2] - lastEleSigma;
-                    if (distAccSigma > 0) {
-                        const grade = (eleDiff / distAccSigma) * 100;
-                        sigmaGrades.push(grade);
-                    }
+                    sigmaGrades.push(((p[2] - lastEleSigma) / distAccSigma) * 100);
                     distAccSigma = 0; lastEleSigma = p[2];
                 }
             }
-            
             if (sigmaGrades.length > 1) {
                 const mean = sigmaGrades.reduce((a, b) => a + b, 0) / sigmaGrades.length;
-                const variance = sigmaGrades.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / sigmaGrades.length;
-                sigma = Math.sqrt(variance);
+                sigma = Math.sqrt(sigmaGrades.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / sigmaGrades.length);
             }
         }
     }
-    
     if (maxAlt === -Infinity) maxAlt = H; 
-    if (maxGrade < AvgP) maxGrade = AvgP + (sigma * 1.5);
-
-    // Base Physique corrigée (20/3)
     const Base = (20 * (Math.pow(H, 2) / L)) + (3 * H);
-    
-    const Oxygen = 1 + (maxAlt / 8000);
-    const Pivot = 1 + ((sigma * (AvgP - 8)) / 50);
-    const rawScore = Base * Oxygen * Pivot;
-    
-    return { index: Math.round(rawScore), sigma: Number(sigma.toFixed(2)), polyline, maxAlt, maxGrade, density };
+    const score = Base * (1 + (maxAlt / 8000)) * (1 + ((sigma * (AvgP - 8)) / 50));
+    return { index: Math.round(score), sigma: Number(sigma.toFixed(2)), polyline, maxAlt, maxGrade, density };
 };
 
 const getSegmentBadges = (score: number, seg: SegmentDetail, density: number) => {
     const badges: BadgeData[] = [];
-
-    let mainCat: string = 'PLAT';
-    
-    // Logique de classification
-    if (seg.distance_m >= 50000 && density < 30) {
-        mainCat = 'BOUCLE MYTHIQUE';
-    }
-    else if (score > 7500) mainCat = 'ICONIC'; 
-    else if (score > 6500) mainCat = 'HC'; 
-    else if (score > 5000) mainCat = 'CAT 1'; 
-    else if (score > 3000) mainCat = 'CAT 2'; 
-    else if (score > 1500) mainCat = 'CAT 3'; 
-    else if (score > 1000) mainCat = 'CAT 4'; 
-    else if (score > 500) mainCat = 'COTE REGION';
-    
-    const getBadgeStyle = (label: string) => {
-        switch (label) {
-            case 'ICONIC': return { label, color: '#000', textColor: '#d04fd7', border: true };
-            case 'HC': return { label, color: '#ef4444', textColor: '#fff' };
-            case 'CAT 1': return { label, color: '#f97316', textColor: '#fff' };
-            case 'CAT 2': return { label, color: '#eab308', textColor: '#000' };
-            case 'CAT 3': return { label, color: '#84cc16', textColor: '#000' };
-            case 'CAT 4': return { label, color: '#10b981', textColor: '#fff' };
-            case 'COTE REGION': return { label, color: '#0077B6', textColor: '#fff' };
-            case 'BOUCLE MYTHIQUE': return { label, color: '#00f3ff', textColor: '#000' };
-            default: return { label, color: '#3b82f6', textColor: '#fff' };
-        }
+    let mainCat = score > 7500 ? 'ICONIC' : score > 6500 ? 'HC' : score > 5000 ? 'CAT 1' : score > 3000 ? 'CAT 2' : score > 1500 ? 'CAT 3' : score > 1000 ? 'CAT 4' : 'COTE REGION';
+    if (seg.distance_m >= 50000 && density < 30) mainCat = 'BOUCLE MYTHIQUE';
+    const getStyle = (l: string) => {
+        if (l === 'ICONIC') return { label: l, color: '#000', textColor: '#d04fd7', border: true };
+        if (l === 'HC') return { label: l, color: '#ef4444', textColor: '#fff' };
+        if (l === 'BOUCLE MYTHIQUE') return { label: l, color: '#00f3ff', textColor: '#000' };
+        return { label: l, color: '#3b82f6', textColor: '#fff' };
     };
-
-    badges.push(getBadgeStyle(mainCat));
-    
-    const name = seg.name.toLowerCase();
-    const catStr = seg.category?.toLowerCase() || '';
-
-    if (name.includes('pavé') || catStr.includes('pavé')) badges.push({ label: 'PAVÉ *****', color: '#fbbf24', textColor: '#000' });
-    if (name.includes('gravel') || catStr.includes('gravel')) badges.push({ label: 'GRAVEL', color: '#a8a29e', textColor: '#000' });
-
-    if (seg.tags && Array.isArray(seg.tags)) {
-        seg.tags.forEach(tag => {
-            badges.push({
-                label: tag.label || 'TAG',
-                color: tag.color || '#4A00A0', 
-                textColor: '#fff',
-                isManual: true, 
-            });
-        });
-    }
-
+    badges.push(getStyle(mainCat));
+    if (seg.tags) seg.tags.forEach(t => badges.push({ label: t.label, color: t.color, textColor: '#fff' }));
     return badges;
 };
 
@@ -169,14 +97,10 @@ const GlassCard = ({ children, className = "", style = {} }: any) => (
 );
 
 const StatItem = ({ label, value, unit, color, icon: Icon }: any) => (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'center', justifyContent: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.7rem', color: '#888', textTransform: 'uppercase', letterSpacing: '1px', fontWeight: 700 }}><Icon size={12} color={color} /> {label}</div>
         <div style={{ fontSize: '1.6rem', fontWeight: 800, color: '#fff', lineHeight: 1 }}>{value}<span style={{ fontSize: '0.6em', color: '#666', marginLeft: '4px' }}>{unit}</span></div>
     </div>
-);
-
-const Badge = ({ data }: { data: BadgeData }) => (
-    <span style={{ background: data.color, color: data.textColor, padding: '3px 8px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 800, letterSpacing: '0.5px', border: data.border ? '1px solid #d04fd7' : 'none', boxShadow: data.border ? '0 0 10px #d04fd7' : 'none', whiteSpace: 'nowrap' }}>{data.label}</span>
 );
 
 export default function SegmentDisplay({ segment, currentUserId }: { segment: SegmentDetail, currentUserId: string }) {
@@ -184,6 +108,12 @@ export default function SegmentDisplay({ segment, currentUserId }: { segment: Se
     const [hoveredPoint, setHoveredPoint] = useState<{ lat: number, lon: number } | null>(null);
     const [activeTab, setActiveTab] = useState<'personal' | 'global'>('personal');
     
+    // --- ÉTATS TRIS & FILTRES ---
+    const [sortBy, setSortBy] = useState('chrono');
+    const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+    const [filterWeight, setFilterWeight] = useState('All');
+    const [filterAge, setFilterAge] = useState('All');
+
     const [showPulsarInfo, setShowPulsarInfo] = useState(false);
     const [showSigmaInfo, setShowSigmaInfo] = useState(false);
 
@@ -200,9 +130,58 @@ export default function SegmentDisplay({ segment, currentUserId }: { segment: Se
         return loss;
     }, [polyline]);
 
-    const personalEfforts = useMemo(() => segment.efforts.filter(e => e.user_id === currentUserId), [segment.efforts, currentUserId]);
-    const displayedEfforts = activeTab === 'personal' ? personalEfforts : segment.efforts;
-    const top3Personal = personalEfforts.slice(0, 3);
+    const handleSort = (key: string) => {
+        if (sortBy === key) {
+            setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+        } else {
+            setSortBy(key);
+            setSortOrder(key === 'chrono' || key === 'athlete' ? 'asc' : 'desc');
+        }
+    };
+
+    const personalEfforts = useMemo(() => {
+        return segment.efforts
+            .filter(e => String(e.user_id) === String(currentUserId))
+            .sort((a, b) => a.duration_s - b.duration_s);
+    }, [segment.efforts, currentUserId]);
+
+    const processedEfforts = useMemo(() => {
+        let base = activeTab === 'personal' ? personalEfforts : segment.efforts;
+
+        if (activeTab === 'global') {
+            base = base.filter((e: any) => {
+                const w = e.user?.weight || 75;
+                const a = e.user?.age || 35;
+                let weightMatch = true;
+                if (filterWeight === '< 65kg') weightMatch = w < 65;
+                else if (filterWeight === '65-80kg') weightMatch = w >= 65 && w <= 80;
+                else if (filterWeight === '> 80kg') weightMatch = w > 80;
+                let ageMatch = true;
+                if (filterAge === 'Espoir') ageMatch = a < 30;
+                else if (filterAge === 'Senior') ageMatch = a >= 30 && a <= 45;
+                else if (filterAge === 'Master') ageMatch = a > 45;
+                return weightMatch && ageMatch;
+            });
+        }
+
+        return [...base].sort((a: any, b: any) => {
+            let valA, valB;
+            switch (sortBy) {
+                case 'athlete': valA = a.user?.name || ''; valB = b.user?.name || ''; break;
+                case 'date': valA = new Date(a.start_time).getTime(); valB = new Date(b.start_time).getTime(); break;
+                case 'watts': valA = a.avg_power_w || 0; valB = b.avg_power_w || 0; break;
+                case 'wkg': 
+                    valA = (a.avg_power_w || 0) / (a.user?.weight || 75); 
+                    valB = (b.avg_power_w || 0) / (b.user?.weight || 75); 
+                    break;
+                case 'speed': valA = a.avg_speed_kmh || 0; valB = b.avg_speed_kmh || 0; break;
+                case 'heartrate': valA = a.avg_heartrate || 0; valB = b.avg_heartrate || 0; break;
+                case 'cadence': valA = a.avg_cadence || 0; valB = b.avg_cadence || 0; break;
+                default: valA = a.duration_s; valB = b.duration_s;
+            }
+            return sortOrder === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+        });
+    }, [segment.efforts, activeTab, personalEfforts, filterWeight, filterAge, sortBy, sortOrder]);
 
     return (
         <div style={{ minHeight: '100vh', color: '#F1F1F1', fontFamily: '"Inter", sans-serif', display: 'flex', flexDirection: 'column', padding: '2rem', maxWidth: '1600px', margin: '0 auto', gap: '2rem' }}>
@@ -211,256 +190,218 @@ export default function SegmentDisplay({ segment, currentUserId }: { segment: Se
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
                 <div>
                      <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '1rem' }}>
-                        <button onClick={() => router.push('/segments')} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 16px', borderRadius: '12px', color: '#ccc', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', transition: 'all 0.2s' }} className="hover:bg-white/10 hover:text-white">
+                        <button onClick={() => router.push('/segments')} style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', padding: '8px 16px', borderRadius: '12px', color: '#ccc', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
                             <ChevronLeft size={14} /> CATALOGUE
                         </button>
-                        <div style={{ display: 'flex', gap: '6px' }}>{segmentBadges.map((b, i) => <Badge key={i} data={b} />)}</div>
+                        <div style={{ display: 'flex', gap: '6px' }}>{segmentBadges.map((b, i) => <span key={i} style={{ background: b.color, color: b.textColor, padding: '3px 8px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 800, border: b.border ? '1px solid #d04fd7' : 'none' }}>{b.label}</span>)}</div>
                     </div>
                     <h1 style={{ fontSize: '3.5rem', fontWeight: 800, margin: 0, letterSpacing: '-1.5px', lineHeight: 1 }}>{segment.name}</h1>
                 </div>
                 
-                {/* HEADER RIGHT */}
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px', position: 'relative' }}>
-                    
-                    {/* BLOC SCORE */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(0,0,0,0.4)', padding: '8px 16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', position: 'relative', zIndex: 60 }}>
-                        
-                        {/* GAUCHE : PULSAR INDEX */}
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '0.65rem', color: '#d04fd7', fontWeight: 800, letterSpacing: '1px' }}>PULSAR INDEX</span>
-                                <div 
-                                    onMouseEnter={() => setShowPulsarInfo(true)} 
-                                    onMouseLeave={() => setShowPulsarInfo(false)}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    <HelpCircle size={12} color="#888" />
-                                </div>
-                            </div>
-                            <span style={{ fontSize: '2rem', fontWeight: 900, color: '#fff', lineHeight: 0.9, fontFamily: 'monospace' }}>{pulsarIndex}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '15px', background: 'rgba(0,0,0,0.4)', padding: '8px 16px', borderRadius: '12px', border: '1px solid rgba(255,255,255,0.1)', position: 'relative' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <span style={{ fontSize: '0.65rem', color: '#d04fd7', fontWeight: 800 }}>PULSAR INDEX</span>
+                            <HelpCircle size={12} color="#888" onMouseEnter={() => setShowPulsarInfo(true)} onMouseLeave={() => setShowPulsarInfo(false)} />
                         </div>
-                        
-                        <div style={{ height: '30px', width: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
-                        
-                        {/* DROITE : TYPE DE PROFIL (SIGMA) */}
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                <span style={{ fontSize: '0.8rem', color: sigmaData.color, fontWeight: 800, letterSpacing: '1px' }}>{sigmaData.label}</span>
-                                <div 
-                                    onMouseEnter={() => setShowSigmaInfo(true)} 
-                                    onMouseLeave={() => setShowSigmaInfo(false)}
-                                    style={{ cursor: 'pointer' }}
-                                >
-                                    <HelpCircle size={12} color="#888" />
-                                </div>
-                            </div>
-                            <span style={{ fontSize: '0.65rem', color: '#888' }}>Type de profil</span>
-                        </div>
-
-                        {/* 🔥 TOOLTIP 1 : VULGARISATION PULSAR (MISE A JOUR DES SEUILS) */}
-                        {showPulsarInfo && (
-                            <div style={{ 
-                                position: 'absolute', top: '110%', right: '0', width: '450px', zIndex: 100,
-                                background: '#0E0E14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.5rem',
-                                boxShadow: '0 20px 50px rgba(0,0,0,0.9)', pointerEvents: 'none'
-                            }}>
-                                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginBottom: '15px' }}>
-                                    <Zap size={20} color="#d04fd7" fill="#d04fd7" />
-                                    <div>
-                                        <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#fff' }}>L'INDICE PULSAR</h4>
-                                        <p style={{ margin: '4px 0 0 0', fontSize: '0.7rem', color: '#888' }}>Indice composite évaluant la charge physiologique totale.</p>
-                                    </div>
-                                </div>
-                                
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '8px' }}>
-                                        <h5 style={{ margin: '0 0 4px 0', fontSize: '0.75rem', color: '#fff', fontWeight: 700 }}>1. TRAVAIL MÉCANIQUE (Gravité)</h5>
-                                        <p style={{ margin: 0, fontSize: '0.7rem', color: '#aaa' }}>
-                                            Le coût énergétique n'est pas linéaire. Pondération exponentielle du dénivelé (<span style={{fontFamily:'monospace'}}>H²/L</span>) pour refléter la fatigue musculaire accrue sur les fortes pentes.
-                                        </p>
-                                    </div>
-
-                                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '8px' }}>
-                                        <h5 style={{ margin: '0 0 4px 0', fontSize: '0.75rem', color: '#fff', fontWeight: 700 }}>2. FACTEUR HYPOXIQUE (Oxygène)</h5>
-                                        <p style={{ margin: 0, fontSize: '0.7rem', color: '#aaa' }}>
-                                            Pénalité liée à la baisse de la pression partielle d'oxygène. Au-delà de 1800m, la puissance aérobie chute, augmentant drastiquement la perception de l'effort.
-                                        </p>
-                                    </div>
-
-                                    <div style={{ background: 'rgba(255,255,255,0.03)', padding: '10px', borderRadius: '8px' }}>
-                                        <h5 style={{ margin: '0 0 4px 0', fontSize: '0.75rem', color: '#fff', fontWeight: 700 }}>3. COÛT DE L'IRRÉGULARITÉ (Sigma)</h5>
-                                        <p style={{ margin: 0, fontSize: '0.7rem', color: '#aaa' }}>
-                                            Modulation basée sur l'écart-type de la pente (σ). Sur une pente raide, l'irrégularité impose des relances coûteuses (surcoût métabolique).
-                                        </p>
-                                    </div>
-                                </div>
-
-                                {/* 🔥 ECHELLE DE DOULEUR RECALIBRÉE */}
-                                <div style={{ marginTop: '15px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '10px' }}>
-                                    <h5 style={{ margin: '0 0 8px 0', fontSize: '0.7rem', color: '#888', textTransform: 'uppercase' }}>Échelle de Difficulté</h5>
-                                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr 1fr', gap: '4px', textAlign: 'center' }}>
-                                        <div style={{ background: '#3b82f6', color: '#fff', padding: '4px', borderRadius: '4px', fontSize: '0.6rem', fontWeight: 800 }}>0-1000<br/>REGIONAL</div>
-                                        <div style={{ background: '#10b981', color: '#000', padding: '4px', borderRadius: '4px', fontSize: '0.6rem', fontWeight: 800 }}>1k-3k<br/>CAT 3/4</div>
-                                        <div style={{ background: '#f59e0b', color: '#000', padding: '4px', borderRadius: '4px', fontSize: '0.6rem', fontWeight: 800 }}>3k-5k<br/>CAT 1/2</div>
-                                        <div style={{ background: '#ef4444', color: '#fff', padding: '4px', borderRadius: '4px', fontSize: '0.6rem', fontWeight: 800 }}>5k-7.5k<br/>H.C</div>
-                                        <div style={{ background: '#d04fd7', color: '#fff', padding: '4px', borderRadius: '4px', fontSize: '0.6rem', fontWeight: 800 }}>7500+<br/>ICONIC</div>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-
-                        {/* 🔥 TOOLTIP 2 : VULGARISATION SIGMA (CORRECTION SYMBOLE) */}
-                        {showSigmaInfo && (
-                            <div style={{ 
-                                position: 'absolute', top: '110%', right: '0', width: '350px', zIndex: 100,
-                                background: '#0E0E14', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '16px', padding: '1.5rem',
-                                boxShadow: '0 20px 50px rgba(0,0,0,0.9)', pointerEvents: 'none'
-                            }}>
-                                <div style={{ display: 'flex', gap: '10px', alignItems: 'flex-start', marginBottom: '10px' }}>
-                                    <Activity size={20} color="#3b82f6" />
-                                    <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 800, color: '#fff' }}>PROFIL DE PENTE (SIGMA)</h4>
-                                </div>
-                                <p style={{ fontSize: '0.75rem', color: '#ccc', lineHeight: '1.4', marginBottom: '12px' }}>
-                                    Analyse statistique de la variance de la pente (σ) pour déterminer la stratégie d'effort optimale.
-                                </p>
-                                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                                    <li style={{ fontSize: '0.75rem', color: '#aaa' }}>
-                                        <span style={{ color: '#10b981', fontWeight: 800 }}>MÉTRONOME (σ &lt; 0.8)</span> : Pente constante. Permet un effort lissé type "Contre-la-montre". Rendement mécanique optimal.
-                                    </li>
-                                    <li style={{ fontSize: '0.75rem', color: '#aaa' }}>
-                                        <span style={{ color: '#3b82f6', fontWeight: 800 }}>VARIÉ (σ &lt; 1.5)</span> : Fluctuations naturelles. Nécessite une gestion active du braquet pour maintenir la cadence.
-                                    </li>
-                                    <li style={{ fontSize: '0.75rem', color: '#aaa' }}>
-                                        <span style={{ color: '#f59e0b', fontWeight: 800 }}>CASSE-PATTES (σ &lt; 2.5)</span> : Ruptures de rythme fréquentes. Sollicite les filières anaérobies lactiques sur les portions raides.
-                                    </li>
-                                    <li style={{ fontSize: '0.75rem', color: '#aaa' }}>
-                                        <span style={{ color: '#ef4444', fontWeight: 800 }}>CHANTIER (σ ≥ 2.5)</span> : Chaos total. Murs verticaux suivis de replats. Charge neuromusculaire élevée, impossible de lisser l'effort.
-                                    </li>
-                                </ul>
-                            </div>
-                        )}
+                        <span style={{ fontSize: '2rem', fontWeight: 900, color: '#fff', lineHeight: 0.9 }}>{pulsarIndex}</span>
                     </div>
-
-                    <button onClick={() => router.push(`/simulations/new?segmentId=${segment.id}`)} style={{ background: 'linear-gradient(135deg, #d04fd7, #8a2be2)', border: 'none', borderRadius: '14px', padding: '16px 32px', color: '#fff', fontWeight: 800, fontSize: '1rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', boxShadow: '0 0 30px rgba(208,79,215,0.4)', width: '100%', justifyContent: 'center' }}>
-                        <Zap size={20} fill="white" /> LANCER SIMULATION
-                    </button>
+                    <div style={{ height: '30px', width: '1px', background: 'rgba(255,255,255,0.1)' }}></div>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '0.8rem', color: sigmaData.color, fontWeight: 800 }}>{sigmaData.label}</span>
+                        <span style={{ fontSize: '0.65rem', color: '#888' }}>Profil de pente</span>
+                    </div>
                 </div>
             </div>
 
-            {/* DASHBOARD GRID (Reste inchangé) */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '1.5rem', height: '550px' }}>
+            {/* GRID DASHBOARD */}
+            {/* GRID DASHBOARD - RECTIFIÉE POUR LE TROU */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: '1.5rem', alignItems: 'stretch' }}>
                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <GlassCard style={{ flex: 2, position: 'relative' }}>
-                        <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 1000, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(10px)', padding: '6px 12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.1)', fontSize: '0.7rem', fontWeight: 700, color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}><MapPin size={12} color="#00f3ff" /> VUE SATELLITE</div>
+                    {/* MAP SATELLITE */}
+                    <GlassCard style={{ height: '350px', position: 'relative' }}>
+                        <div style={{ position: 'absolute', top: '20px', left: '20px', zIndex: 10, background: 'rgba(0,0,0,0.6)', padding: '6px 12px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 700 }}><MapPin size={12} color="#00f3ff" className="inline mr-2" /> VUE SATELLITE</div>
                         <SegmentMap polyline={polyline} hoveredPoint={hoveredPoint} segmentName={segment.name} category={segment.category} grade={segment.average_grade} />
                     </GlassCard>
 
-                    <GlassCard style={{ flex: 1, padding: '1.5rem 2rem 0 0', display: 'flex', flexDirection: 'column' }}>
-                        <div style={{ paddingLeft: '2rem', marginBottom: '5px', fontSize: '0.7rem', color: '#888', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1px' }}>Profil Altimétrique</div>
-                        <div style={{ flex: 1, width: '100%' }}>
+                    {/* PROFIL ALTIMÉTRIQUE - flex: 1 pour combler le vide */}
+                    <GlassCard style={{ flex: 1, padding: '1.5rem 2rem 0 0', display: 'flex', flexDirection: 'column', minHeight: '200px' }}>
+                        <div style={{ paddingLeft: '2rem', marginBottom: '5px', fontSize: '0.7rem', color: '#888', fontWeight: 700, textTransform: 'uppercase' }}>Profil Altimétrique</div>
+                        <div style={{ flex: 1 }}>
                             <SegmentProfileChart polyline={polyline} onHover={setHoveredPoint} />
                         </div>
                     </GlassCard>
                 </div>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    
+                    {/* STATS RAPIDES - CENTRÉES */}
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                        <GlassCard style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><StatItem icon={Navigation} label="Distance" value={(segment.distance_m / 1000).toFixed(2)} unit="km" color="#fff" /></GlassCard>
-                        <GlassCard style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><StatItem icon={Activity} label="Pente Moy." value={segment.average_grade.toFixed(1)} unit="%" color={segment.average_grade > 5 ? '#ef4444' : '#f59e0b'} /></GlassCard>
-                        <GlassCard style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><StatItem icon={Mountain} label="Dénivelé +" value={Math.round(segment.elevation_gain_m)} unit="m" color="#10b981" /></GlassCard>
-                        <GlassCard style={{ padding: '1.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><StatItem icon={ArrowDown} label="Dénivelé -" value={Math.round(elevationLoss)} unit="m" color="#3b82f6" /></GlassCard>
+                        <GlassCard style={{ padding: '1.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><StatItem icon={Navigation} label="Distance" value={(segment.distance_m / 1000).toFixed(2)} unit="km" color="#fff" /></GlassCard>
+                        <GlassCard style={{ padding: '1.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><StatItem icon={Activity} label="Pente Moy." value={segment.average_grade.toFixed(1)} unit="%" color="#ef4444" /></GlassCard>
+                        <GlassCard style={{ padding: '1.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><StatItem icon={Mountain} label="Dénivelé +" value={Math.round(segment.elevation_gain_m)} unit="m" color="#10b981" /></GlassCard>
+                        <GlassCard style={{ padding: '1.5rem', display: 'flex', justifyContent: 'center', alignItems: 'center' }}><StatItem icon={ArrowDown} label="Dénivelé -" value={Math.round(elevationLoss)} unit="m" color="#3b82f6" /></GlassCard>
                     </div>
 
+                    {/* MÉTRIQUES AVANCÉES */}
                     <GlassCard style={{ padding: '1.5rem', display:'flex', flexDirection:'column', justifyContent:'center', gap:'10px' }}>
-                        <div style={{ display:'flex', alignItems:'center', gap:'10px', color:'#888', fontSize:'0.75rem', fontWeight:700, textTransform:'uppercase', letterSpacing:'1px' }}>
-                            <Gauge size={16} /> Métriques Avancées
-                        </div>
-                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid rgba(255,255,255,0.05)', paddingBottom:'8px' }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:'10px', color:'#888', fontSize:'0.75rem', fontWeight:700, textTransform:'uppercase' }}><Gauge size={16} /> Métriques Avancées</div>
+                        <div style={{ display:'flex', justifyContent:'space-between', borderBottom:'1px solid rgba(255,255,255,0.05)', paddingBottom:'8px' }}>
                             <span style={{fontSize:'0.9rem', color:'#ccc'}}>Pente Maximale</span>
-                            <span style={{fontSize:'0.9rem', fontWeight:700, color: maxGrade > 15 ? '#ef4444' : '#fff'}}>{maxGrade.toFixed(1)} %</span>
+                            <span style={{fontSize:'0.9rem', fontWeight:800}}>{maxGrade.toFixed(1)} %</span>
                         </div>
-                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', borderBottom:'1px solid rgba(255,255,255,0.05)', paddingBottom:'8px' }}>
+                        <div style={{ display:'flex', justifyContent:'space-between', borderBottom:'1px solid rgba(255,255,255,0.05)', paddingBottom:'8px' }}>
                             <span style={{fontSize:'0.9rem', color:'#ccc'}}>Densité d'Effort</span>
-                            <span style={{fontSize:'0.9rem', fontWeight:700, color:'#fff'}}>{(segment.elevation_gain_m / (segment.distance_m/1000)).toFixed(0)} <small>m/km</small></span>
+                            <span style={{fontSize:'0.9rem', fontWeight:800}}>{density.toFixed(0)} <small>m/km</small></span>
                         </div>
-                        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                        <div style={{ display:'flex', justifyContent:'space-between' }}>
                             <span style={{fontSize:'0.9rem', color:'#ccc'}}>Point Culminant</span>
-                            <span style={{fontSize:'0.9rem', fontWeight:700, color:'#fff'}}>{Math.round(maxAlt)} m</span>
+                            <span style={{fontSize:'0.9rem', fontWeight:800}}>{Math.round(maxAlt)} m</span>
                         </div>
                     </GlassCard>
 
-                    {/* TOP 3 (Reste inchangé) */}
-                    <GlassCard style={{ flex: 1, padding: '2rem', background: 'linear-gradient(160deg, rgba(20,20,30,0.8), rgba(10,10,15,0.9))', display: 'flex', flexDirection: 'column' }}>
+                    {/* 🔥 BLOC OBJECTIF TOP 1 (STYLE ORIGINAL) */}
+                    <GlassCard style={{ 
+                        flex: 1, padding: '2rem', background: 'linear-gradient(160deg, rgba(20,20,30,0.8), rgba(10,10,15,0.9))', 
+                        border: '1px solid rgba(208, 79, 215, 0.2)', display: 'flex', flexDirection: 'column', justifyContent: 'space-between'
+                    }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '1.5rem' }}>
-                            <Trophy size={20} color="gold" />
-                            <h3 style={{ fontSize: '1rem', fontWeight: 800, letterSpacing: '1px', margin: 0 }}>TOP 3 PERSONNEL</h3>
+                            <Trophy size={20} color="#d04fd7" />
+                            <h3 style={{ fontSize: '1rem', fontWeight: 800 }}>OBJECTIF TOP 1</h3>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', flex: 1 }}>
-                            {top3Personal.length > 0 ? top3Personal.map((effort, i) => (
-                                <div key={effort.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', background: 'rgba(255,255,255,0.03)', borderRadius: '12px', border: i === 0 ? '1px solid rgba(255, 215, 0, 0.2)' : '1px solid rgba(255,255,255,0.05)' }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                        <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: i === 0 ? 'gold' : i === 1 ? 'silver' : '#cd7f32', color: '#000', fontWeight: 800, fontSize: '0.8rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{i+1}</div>
-                                        <div>
-                                            <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#fff' }}>{formatDuration(effort.duration_s)}</div>
-                                            <div style={{ fontSize: '0.75rem', color: '#666' }}>{new Date(effort.start_time).toLocaleDateString()}</div>
+                        {segment.efforts.length > 0 ? (() => {
+                            const top1 = [...segment.efforts].sort((a,b) => a.duration_s - b.duration_s)[0];
+                            const myBest = personalEfforts[0];
+                            if (myBest && myBest.id === top1.id) return (
+                                <div style={{ textAlign: 'center', padding: '1rem' }}>
+                                    <Zap size={40} color="#facc15" fill="#facc15" style={{ margin: '0 auto 15px' }} />
+                                    <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#fff' }}>ROI DU SEGMENT</div>
+                                </div>
+                            );
+                            
+                            const myWatts = myBest?.avg_power_w ?? 250;
+                            const myTime = myBest?.duration_s ?? 1;
+                            const estimatedTargetWatts = myBest ? Math.round(myWatts * (myTime / top1.duration_s)) : 350;
+                            const wattGain = myBest ? estimatedTargetWatts - myWatts : null;
+
+                            return (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                                    <div>
+                                        <div style={{ fontSize: '0.65rem', color: '#888', fontWeight: 700, textTransform: 'uppercase' }}>Temps à battre</div>
+                                        <div style={{ fontSize: '1.8rem', fontWeight: 900, color: '#fff', fontFamily: 'monospace' }}>{formatDuration(top1.duration_s)}</div>
+                                        <div style={{ fontSize: '0.75rem', color: '#00f3ff' }}>Détenteur : {top1.user?.name || 'Anonyme'}</div>
+                                    </div>
+
+                                    <div style={{ height: '1px', width: '100%', background: 'rgba(255,255,255,0.05)' }}></div>
+
+                                    <div style={{ background: 'rgba(208, 79, 215, 0.05)', padding: '15px', borderRadius: '12px', border: '1px solid rgba(208, 79, 215, 0.1)' }}>
+                                        <div style={{ fontSize: '0.65rem', color: '#d04fd7', fontWeight: 800, textTransform: 'uppercase', marginBottom: '8px' }}>Puissance Requise Est.</div>
+                                        <div style={{ fontSize: '2.2rem', fontWeight: 950, color: '#fff', lineHeight: 1 }}>{estimatedTargetWatts}<small style={{ fontSize: '0.4em', marginLeft: '5px', color: '#666' }}>W</small></div>
+                                        {wattGain !== null && <div style={{ fontSize: '0.8rem', color: '#ef4444', fontWeight: 700, marginTop: '5px' }}>+{wattGain}W par rapport à votre PR</div>}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '10px' }}>
+                                        <div style={{ flex: 1 }}>
+                                            <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: 800, textTransform: 'uppercase' }}>VAM Cible</div>
+                                            <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>{Math.round((segment.elevation_gain_m / top1.duration_s) * 3600)} <small style={{color:'#444'}}>m/h</small></div>
+                                        </div>
+                                        <div style={{ flex: 1, textAlign: 'right' }}>
+                                            <div style={{ fontSize: '0.55rem', color: '#555', fontWeight: 800, textTransform: 'uppercase' }}>W/Kg Cible</div>
+                                            <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>{(estimatedTargetWatts / 75).toFixed(2)} <small style={{color:'#444'}}>w/kg</small></div>
                                         </div>
                                     </div>
-                                    <div style={{ textAlign: 'right' }}>
-                                        <div style={{ fontWeight: 700, color: '#00f3ff' }}>{effort.avg_power_w || '-'}</div>
-                                        <div style={{ fontSize: '0.8rem', color: '#888' }}>{effort.avg_speed_kmh.toFixed(1)} km/h</div>
-                                    </div>
                                 </div>
-                            )) : <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#666', fontStyle: 'italic' }}>Aucun chrono enregistré</div>}
-                        </div>
+                            );
+                        })() : <div style={{ color: '#555', fontSize: '0.8rem', textAlign: 'center' }}>Données insuffisantes.</div>}
                     </GlassCard>
                 </div>
             </div>
 
-            <GlassCard style={{ padding: '0' }}>
-                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', padding: '0 1rem' }}>
-                    <button onClick={() => setActiveTab('personal')} style={{ padding: '1.5rem 2rem', background: 'transparent', border: 'none', borderBottom: activeTab === 'personal' ? '2px solid #d04fd7' : '2px solid transparent', color: activeTab === 'personal' ? '#fff' : '#666', fontWeight: 700, cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center' }}><Clock size={16} /> HISTORIQUE PERSONNEL</button>
-                    <button onClick={() => setActiveTab('global')} style={{ padding: '1.5rem 2rem', background: 'transparent', border: 'none', borderBottom: activeTab === 'global' ? '2px solid #00f3ff' : '2px solid transparent', color: activeTab === 'global' ? '#fff' : '#666', fontWeight: 700, cursor: 'pointer', display: 'flex', gap: '8px', alignItems: 'center' }}><Users size={16} /> CLASSEMENT GLOBAL</button>
+            {/* SECTION TABLEAU AVEC TRIS */}
+            <GlassCard style={{ padding: '0', marginTop: '1rem' }}>
+                <div style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', padding: '0 1rem', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex' }}>
+                        <button onClick={() => setActiveTab('personal')} style={{ padding: '1.5rem 2rem', background: 'transparent', border: 'none', borderBottom: activeTab === 'personal' ? '2px solid #d04fd7' : '2px solid transparent', color: activeTab === 'personal' ? '#fff' : '#666', fontWeight: 700, cursor: 'pointer' }}>HISTORIQUE</button>
+                        <button onClick={() => setActiveTab('global')} style={{ padding: '1.5rem 2rem', background: 'transparent', border: 'none', borderBottom: activeTab === 'global' ? '2px solid #00f3ff' : '2px solid transparent', color: activeTab === 'global' ? '#fff' : '#666', fontWeight: 700, cursor: 'pointer' }}>HALL OF LEGENDS</button>
+                    </div>
+                    {activeTab === 'global' && (
+                        <div style={{ display: 'flex', gap: '8px', paddingRight: '1rem' }}>
+                            <FilterSelect value={filterWeight} options={['All', '< 65kg', '65-80kg', '> 80kg']} onChange={setFilterWeight} icon={<Scale size={12}/>} />
+                            <FilterSelect value={filterAge} options={['All', 'Espoir', 'Senior', 'Master']} onChange={setFilterAge} icon={<User size={12}/>} />
+                        </div>
+                    )}
                 </div>
+
                 <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.9rem' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
                         <thead>
-                            <tr style={{ background: 'rgba(0,0,0,0.2)', color: '#666', textTransform: 'uppercase', fontSize: '0.7rem', fontWeight: 700, letterSpacing: '1px' }}>
-                                <th style={{ padding: '1rem 2rem', textAlign: 'left' }}>Rang</th>
-                                {activeTab === 'global' && <th style={{ padding: '1rem', textAlign: 'left' }}>Athlète</th>}
-                                <th style={{ padding: '1rem', textAlign: 'left' }}>Date</th>
-                                <th style={{ padding: '1rem', textAlign: 'center' }}>Temps</th>
-                                <th style={{ padding: '1rem', textAlign: 'center' }}>Puissance</th>
-                                <th style={{ padding: '1rem', textAlign: 'center' }}>Vitesse</th>
-                                <th style={{ padding: '1rem', textAlign: 'center' }}>FC</th>
-                                <th style={{ padding: '1rem', textAlign: 'center' }}>Cadence</th>
-                                <th style={{ padding: '1rem 2rem', textAlign: 'right' }}>Action</th>
+                            <tr style={{ background: 'rgba(0,0,0,0.2)', color: '#666', textTransform: 'uppercase', fontSize: '0.65rem', fontWeight: 800 }}>
+                                <th style={{ padding: '1.2rem 1.5rem', textAlign: 'left' }}>RANG</th>
+                                <SortHeader label="ATHLÈTE" active={sortBy === 'athlete'} onClick={() => handleSort('athlete')} />
+                                <SortHeader label="DATE" active={sortBy === 'date'} onClick={() => handleSort('date')} />
+                                <SortHeader label="TEMPS" active={sortBy === 'chrono'} onClick={() => handleSort('chrono')} center />
+                                <SortHeader label="WATT" active={sortBy === 'watts'} onClick={() => handleSort('watts')} center />
+                                <SortHeader label="W/KG" active={sortBy === 'wkg'} onClick={() => handleSort('wkg')} center color="#facc15" />
+                                <SortHeader label="KM/H" active={sortBy === 'speed'} onClick={() => handleSort('speed')} center />
+                                <SortHeader label="BPM" active={sortBy === 'heartrate'} onClick={() => handleSort('heartrate')} center color="#ef4444" />
+                                <SortHeader label="RPM" active={sortBy === 'cadence'} onClick={() => handleSort('cadence')} center color="#eab308" />
+                                <th style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>DÉTAILS</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {displayedEfforts.map((effort, i) => (
-                                <tr key={effort.id} className="hover:bg-white/5 transition-colors" style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
-                                    <td style={{ padding: '1rem 2rem', color: '#888', fontWeight: 700 }}>{i + 1}</td>
-                                    {activeTab === 'global' && (
-                                        <td style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                            <div style={{ width: '24px', height: '24px', borderRadius: '50%', background: '#333', overflow: 'hidden' }}>{effort.user?.avatar_url ? <img src={effort.user.avatar_url} alt="" style={{width:'100%', height:'100%'}} /> : <div style={{width:'100%', height:'100%', background: '#d04fd7'}}></div>}</div>
-                                            <span style={{ color: effort.user_id === currentUserId ? '#d04fd7' : '#fff', fontWeight: 600 }}>{effort.user?.name || 'Athlète Inconnu'} {effort.user_id === currentUserId && '(Moi)'}</span>
+                            {processedEfforts.map((effort: any, i) => {
+                                const w = effort.user?.weight || 75;
+                                const wkg = effort.avg_power_w ? (effort.avg_power_w / w).toFixed(2) : '-';
+                                const h = effort.user?.height || 180;
+                                const imc = (w / Math.pow(h/100, 2)).toFixed(1);
+                                return (
+                                    <tr key={effort.id} className="hover:bg-white/5 transition-colors" style={{ borderBottom: '1px solid rgba(255,255,255,0.02)' }}>
+                                        <td style={{ padding: '1.2rem 1.5rem', fontWeight: 800, color: i < 3 ? '#d04fd7' : '#444' }}>#{i + 1}</td>
+                                        <td style={{ padding: '1rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                                <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#222', overflow: 'hidden' }}>
+                                                    {effort.user?.avatar_url && <img src={effort.user.avatar_url} alt="" style={{width:'100%'}} />}
+                                                </div>
+                                                <div>
+                                                    <div style={{ fontWeight: 700, color: effort.user_id === currentUserId ? '#d04fd7' : '#fff' }}>{effort.user?.name || 'Anonyme'}</div>
+                                                    <div style={{ fontSize: '0.6rem', color: '#555' }}>IMC {imc} • {w}kg</div>
+                                                </div>
+                                            </div>
                                         </td>
-                                    )}
-                                    <td style={{ padding: '1rem', color: '#ccc' }}>{new Date(effort.start_time).toLocaleDateString()}</td>
-                                    <td style={{ padding: '1rem', textAlign: 'center', fontWeight: 700, color: '#fff', fontSize: '1.1rem' }}>{formatDuration(effort.duration_s)}</td>
-                                    <td style={{ padding: '1rem', textAlign: 'center', fontFamily: 'monospace', color: '#00f3ff' }}>{effort.avg_power_w || '-'}</td>
-                                    <td style={{ padding: '1rem', textAlign: 'center', fontFamily: 'monospace' }}>{effort.avg_speed_kmh.toFixed(1)}</td>
-                                    <td style={{ padding: '1rem', textAlign: 'center', color: '#ef4444', fontWeight: 600 }}><div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:'4px'}}><Heart size={12}/> {effort.avg_heartrate || '-'}</div></td>
-                                    <td style={{ padding: '1rem', textAlign: 'center', color: '#eab308' }}><div style={{display:'flex', alignItems:'center', justifyContent:'center', gap:'4px'}}><RotateCw size={12}/> {effort.avg_cadence || '-'}</div></td>
-                                    <td style={{ padding: '1rem 2rem', textAlign: 'right' }}><button onClick={() => router.push(`/activities/${effort.activity_id}`)} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', padding: '6px 10px', borderRadius: '6px', cursor: 'pointer', color: '#888' }} className="hover:text-white"><ArrowUpRight size={14} /></button></td>
-                                </tr>
-                            ))}
-                            {displayedEfforts.length === 0 && <tr><td colSpan={9} style={{ padding: '4rem', textAlign: 'center', color: '#666' }}>Aucune donnée disponible pour cet onglet.</td></tr>}
+                                        <td style={{ padding: '1rem', color: '#ccc', fontSize: '0.75rem' }}>{new Date(effort.start_time).toLocaleDateString()}</td>
+                                        <td style={{ padding: '1rem', textAlign: 'center', fontWeight: 800, fontSize: '1rem' }}>{formatDuration(effort.duration_s)}</td>
+                                        <td style={{ padding: '1rem', textAlign: 'center', color: '#00f3ff', fontWeight: 700 }}>{effort.avg_power_w || '-'}</td>
+                                        <td style={{ padding: '1rem', textAlign: 'center', color: '#facc15', fontWeight: 900 }}>{wkg}</td>
+                                        <td style={{ padding: '1rem', textAlign: 'center' }}>{effort.avg_speed_kmh?.toFixed(1)}</td>
+                                        <td style={{ padding: '1rem', textAlign: 'center', color: '#ef4444', fontWeight: 600 }}>{effort.avg_heartrate || '-'}</td>
+                                        <td style={{ padding: '1rem', textAlign: 'center', color: '#eab308' }}>{effort.avg_cadence || '-'}</td>
+                                        <td style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>
+                                            <button onClick={() => router.push(`/activities/${effort.activity_id}`)} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}><ArrowUpRight size={14} /></button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
             </GlassCard>
+        </div>
+    );
+}
+
+function SortHeader({ label, active, onClick, center, color }: any) {
+    return (
+        <th onClick={onClick} style={{ padding: '1rem', textAlign: center ? 'center' : 'left', cursor: 'pointer', color: active ? '#fff' : (color || '#666'), borderBottom: active ? '2px solid #d04fd7' : 'none' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}>{label} <ArrowUpDown size={10} style={{ opacity: active ? 1 : 0.2 }} /></div>
+        </th>
+    );
+}
+
+function FilterSelect({ value, options, onChange, icon }: any) {
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(255,255,255,0.03)', padding: '4px 12px', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.05)' }}>
+            <span style={{ color: '#666' }}>{icon}</span>
+            <select value={value} onChange={(e) => onChange(e.target.value)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '0.75rem', fontWeight: 700, outline: 'none', cursor: 'pointer' }}>
+                {options.map((opt: any) => (<option key={typeof opt === 'string' ? opt : opt.v} value={typeof opt === 'string' ? opt : opt.v} style={{background: '#0a0a0c'}}>{typeof opt === 'string' ? opt : opt.l}</option>))}
+            </select>
         </div>
     );
 }

@@ -1289,20 +1289,30 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
                     {/* BOUTON DE SCAN MANUEL */}
                     <button 
                         onClick={async (e) => {
-                            const btn = e.currentTarget;
-                            btn.disabled = true;
-                            btn.innerText = "Analyse en cours...";
-                            try {
-                                await fetch('/api/segments/match', {
-                                    method: 'POST',
-                                    headers: {'Content-Type': 'application/json'},
-                                    body: JSON.stringify({ mode: 'activity', id: activity.id })
-                                });
-                                window.location.reload(); // Recharger pour voir les résultats
-                            } catch (err) {
-                                btn.innerText = "Erreur";
-                            }
-                        }}
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        const originalText = btn.innerText;
+        btn.innerText = "Analyse...";
+        try {
+            const res = await fetch('/api/segments/match', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ mode: 'activity', id: activity.id })
+            });
+            if (res.ok) {
+                // 🔥 LA MAGIE EST ICI : refresh les données du serveur sans recharger la page
+                router.refresh(); 
+                btn.innerText = "Terminé !";
+            }
+        } catch (err) {
+            btn.innerText = "Erreur";
+        } finally {
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }, 2000);
+        }
+    }}
                         style={{
                             background: 'rgba(208, 79, 215, 0.1)', 
                             color: '#d04fd7', 

@@ -4,6 +4,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../lib/auth";
 import { supabaseAdmin } from "../../../lib/supabaseAdminClient";
 import { analyzeAndSaveActivity } from "../../../lib/analysisEngine"; 
+import { scanActivityAgainstSegments } from "../../../lib/segmentScanner";
 
 export async function POST(req: Request) {
   try {
@@ -13,11 +14,17 @@ export async function POST(req: Request) {
     const { activityId, stravaId } = await req.json();
     
     // 1. Récupération Token
-    const { data: user } = await supabaseAdmin.from("users").select("strava_access_token").eq("id", session.user.id).single();
+    const { data: user } = await supabaseAdmin
+        .from("users")
+        .select("strava_access_token")
+        .eq("id", session.user.id)
+        .single();
+
     if (!user) throw new Error("User not found");
     const accessToken = user.strava_access_token; 
 
     // 2. Fetch Strava
+    console.log(`[Sync Stream] 📥 Téléchargement de la télémétrie Strava pour ${stravaId}...`);
     const res = await fetch(
       `https://www.strava.com/api/v3/activities/${stravaId}/streams?keys=time,distance,altitude,latlng,watts,heartrate,cadence,temp&key_by_type=true`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
@@ -44,8 +51,7 @@ export async function POST(req: Request) {
         temp: extract('temp'),
     };
 
-    // --- CORRECTION TYPE ---
-    // On type explicitement pour dire que ça peut être un nombre OU null
+    // --- CORRECTION TYPE --- [cite: 1, 2]
     let avgPower: number | null = null;
     let avgHr: number | null = null;
     let maxHr: number | null = null;
@@ -61,8 +67,9 @@ export async function POST(req: Request) {
         maxHr = Math.max(...cleanStreams.heartrate);
     }
 
-    // 4. SAUVEGARDE
-    await supabaseAdmin
+    // 4. SAUVEGARDE EN BDD
+    console.log(`[Sync Stream] 💾 Enregistrement des flux en base pour l'ID Pulsar ${activityId}...`);
+    const { error: updateError } = await supabaseAdmin
         .from('activities')
         .update({ 
             streams_data: cleanStreams,
@@ -72,23 +79,46 @@ export async function POST(req: Request) {
         })
         .eq('id', activityId);
 
-    // 5. ANALYSE AVANCÉE
-    const { data: userProfile } = await supabaseAdmin.from('users').select('weight, ftp').eq('id', session.user.id).single();
+    if (updateError) throw updateError;
+
+    // 5. ANALYSE ET SCAN AUTOMATIQUE
+    const { data: userProfile } = await supabaseAdmin
+        .from('users')
+        .select('weight, ftp')
+        .eq('id', session.user.id)
+        .single();
     
+    // A. Records de puissance
     if (typeof analyzeAndSaveActivity === 'function') {
         await analyzeAndSaveActivity(
             activityId, 
             stravaId, 
-            cleanStreams, 
+            cleanStreams as any, 
             userProfile?.weight || 75, 
             userProfile?.ftp || 250
         );
+        console.log(`[Sync Stream] ⚡ Analyse de fitness terminée.`);
     }
 
-    return NextResponse.json({ success: true, streams: cleanStreams });
+    // B. 🔥 AUTO-SCAN DES SEGMENTS (Injection Directe) [cite: 3]
+    // On passe cleanStreams directement pour éviter le lag BDD
+    console.log(`[Sync Stream] 🚀 Déclenchement du scan de segments (AUTO)...`);
+    const scanResult = await scanActivityAgainstSegments(activityId, undefined, cleanStreams as any);
+    
+    if (scanResult.success) {
+        console.log(`[Sync Stream] ✅ Scan terminé : ${scanResult.matchesFound} efforts détectés.`);
+    } else {
+        console.error(`[Sync Stream] ❌ Échec scan auto :`, (scanResult as any).msg || (scanResult as any).error);
+    }
+
+    return NextResponse.json({ 
+        success: true, 
+        streams: cleanStreams,
+        matchesFound: scanResult.success ? scanResult.matchesFound : 0 
+    });
 
   } catch (error: any) {
-    console.error("[Sync Stream] Error:", error);
+    console.error("!!! [SYNC STREAM CRITICAL ERROR]:", error);
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

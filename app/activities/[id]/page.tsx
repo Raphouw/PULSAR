@@ -6,7 +6,6 @@ import { authOptions } from "../../../lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import ActivityDisplay from "./activityDisplay";
-import MatchedSegmentsList from "./MatchedSegmentsList";
 import type { ActivityStreams } from "../../../types/next-auth"; 
 import { AlertTriangle, ArrowLeft, Lock } from 'lucide-react';
 
@@ -17,9 +16,11 @@ export type SegmentMatch = {
   duration_s: number;
   avg_power_w: number;
   avg_speed_kmh: number;
-  // 🔥 Champs tactiques requis pour le Cockpit
   start_index: number;
   end_index: number;
+  // 🔥 Colonnes tactiques pour la gestion des records
+  is_pr: boolean;
+  pr_gap_seconds: number;
   np_w?: number;
   avg_heartrate?: number;
   max_heartrate?: number;
@@ -48,6 +49,7 @@ export type Activity = {
   avg_power_w: number | null;
   np_w: number | null;
   tss: number | null;
+  intensity_factor: number | null;
   calories_kcal: number | null;
   avg_heartrate: number | null;
   start_time: string;
@@ -75,7 +77,8 @@ export default async function ActivityPage({
   }
   const viewerId = session.user.id;
 
-  // 2. RÉCUPÉRATION DE L'ACTIVITÉ + USER + SEGMENTS (Requête nettoyée)
+  // 2. RÉCUPÉRATION DE L'ACTIVITÉ + USER + SEGMENTS
+  // On s'assure d'inclure is_pr et pr_gap_seconds dans la sélection
   const { data: activity, error } = await supabaseAdmin
     .from('activities')
     .select(`
@@ -92,6 +95,8 @@ export default async function ActivityPage({
         avg_speed_kmh,
         start_index,
         end_index,
+        is_pr,
+        pr_gap_seconds,
         np_w,
         avg_heartrate,
         max_heartrate,
@@ -118,8 +123,8 @@ export default async function ActivityPage({
     return (
         <div style={{ minHeight: '100vh', background: '#050505', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
             <AlertTriangle size={64} color="#ef4444" style={{ marginBottom: '1rem', filter: 'drop-shadow(0 0 20px rgba(239,68,68,0.4))' }} />
-            <h1 style={{ fontSize: '4rem', fontWeight: 900, color: '#ef4444', margin: 0, lineHeight: 1 }}>ERREUR CRITIQUE</h1>
-            <p style={{ fontSize: '1.2rem', color: '#888', marginBottom: '2rem', fontFamily: 'monospace' }}>ACT_ID_{activityId} :: NOT_FOUND</p>
+            <h1 style={{ fontSize: '4rem', fontWeight: 900, color: '#ef4444', margin: 0, lineHeight: 1 }}>ERREUR SYSTÈME</h1>
+            <p style={{ fontSize: '1.2rem', color: '#888', marginBottom: '2rem', fontFamily: 'monospace' }}>ID_{activityId} :: NOT_FOUND_OR_CORRUPTED</p>
             <Link href="/activities" style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#d04fd7', textDecoration: 'none', fontWeight: 700, border: '1px solid #d04fd7', padding: '10px 20px', borderRadius: '8px' }}>
                 <ArrowLeft size={20} /> RETOUR AU JOURNAL
             </Link>
@@ -127,7 +132,7 @@ export default async function ActivityPage({
     );
   }
 
-  // 4. 🛡️ SÉCURITÉ ACCÈS
+  // 4. 🛡️ SÉCURITÉ ACCÈS (Propriétaire ou Follower)
   const isOwner = String(activity.user_id) === String(viewerId);
   let hasAccess = isOwner;
 
@@ -154,17 +159,17 @@ export default async function ActivityPage({
         }}>
             <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '3rem', borderRadius: '20px', border: '1px solid #ef4444', textAlign: 'center', maxWidth: '500px' }}>
                 <Lock size={64} color="#ef4444" style={{ margin: '0 auto 1.5rem auto' }} />
-                <h1 style={{ fontSize: '2rem', fontWeight: 800, margin: 0, color: '#ef4444' }}>ACCÈS PRIVÉ</h1>
+                <h1 style={{ fontSize: '2rem', fontWeight: 800, margin: 0, color: '#ef4444' }}>ACCÈS RESTREINT</h1>
                 <p style={{ color: '#ccc', marginTop: '1rem', lineHeight: 1.6 }}>
-                    Cette activité appartient à un athlète que vous ne suivez pas. <br/>
-                    Abonnez-vous à son profil pour débloquer les données télémétriques complètes.
+                    Les données télémétriques de cette mission sont privées. <br/>
+                    Suivez cet athlète pour débloquer l'accès aux segments et analyses.
                 </p>
                 <div style={{ marginTop: '2rem', display: 'flex', gap: '1rem', justifyContent: 'center' }}>
                     <Link href="/friends" style={{ padding: '10px 20px', background: '#fff', color: '#000', fontWeight: 700, borderRadius: '8px', textDecoration: 'none' }}>
-                        Trouver l'athlète
+                        Rechercher un profil
                     </Link>
                     <Link href="/dashboard" style={{ padding: '10px 20px', border: '1px solid #555', color: '#aaa', fontWeight: 600, borderRadius: '8px', textDecoration: 'none' }}>
-                        Mon Dashboard
+                        Mon Cockpit
                     </Link>
                 </div>
             </div>
@@ -184,13 +189,13 @@ export default async function ActivityPage({
     ...activityWithoutUsers,
     user_weight,
     user_ftp,
-    // Cast sécurisé des segments vers le type étendu
-    activity_segments: (activity.activity_segments || []) as SegmentMatch[]
+    // On trie les segments par index de départ pour la chronologie du parcours
+    activity_segments: ((activity.activity_segments || []) as SegmentMatch[]).sort((a, b) => a.start_index - b.start_index)
   } as Activity;
 
   return (
     <div>
-        {/* Composant principal de contrôle de mission */}
+        {/* Lancement du composant de visualisation Mission Control */}
         <ActivityDisplay activity={formattedActivity} />
     </div>
   );

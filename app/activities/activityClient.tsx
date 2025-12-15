@@ -316,7 +316,7 @@ export default function ActivityClient({
         case 'pmoy_desc': return (b.avg_power_w ?? 0) - (a.avg_power_w ?? 0);
         case 'pmoy_asc': return (a.tss?? 0) - (b.avg_power_w ?? 0);
         case 'TSS_desc': return (b.tss ?? 0) - (a.tss ?? 0);
-        case 'TSS_asc': return (a.avg_power_w ?? 0) - (b.tss ?? 0);        
+        case 'TSS_asc': return (a.tss ?? 0) - (b.tss ?? 0);        
         case 'date_asc': return dateA - dateB; 
         case 'date_desc': default: return dateB - dateA;
       }

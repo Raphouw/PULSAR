@@ -1,8 +1,7 @@
-// Fichier : app/activities/[id]/SegmentDetailModal.tsx
 'use client';
 
 import React, { useMemo } from 'react';
-import { X, Zap, Activity, Clock, TrendingUp, ArrowUpRight, Gauge, Heart, Repeat } from 'lucide-react';
+import { X, Zap, Activity, Clock, TrendingUp, ArrowUpRight, Gauge, Heart, Target, ZapOff } from 'lucide-react';
 import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { ActivityStreams } from '../../../types/next-auth';
 
@@ -32,13 +31,13 @@ type SegmentMatch = {
 };
 
 type ChartDataPoint = {
-    dist: number;
-    ele: number;
-    watts: number;
-    hr: number;
+  dist: number;
+  Altitude: number;
+  watts: number;
+  BPM: number;
 };
 
-// --- HELPERS SCORING (Synchronisés avec le catalogue) ---
+// --- HELPERS SCORING ---
 
 const getDist = (lat1: number, lon1: number, lat2: number, lon2: number) => {
     const R = 6371e3; const φ1 = lat1 * Math.PI / 180; const φ2 = lat2 * Math.PI / 180;
@@ -52,39 +51,27 @@ const calculatePulsarIndex = (segment: any): { index: number, density: number } 
     const AvgP = Math.max(0, segment.average_grade); 
     const density = H / (L / 1000); 
 
-    let maxAlt = -Infinity;
     let sigma = 0;
-    let sigmaGrades: number[] = []; 
-
-    if (segment.polyline && Array.isArray(segment.polyline) && segment.polyline.length > 0) {
-        const polyline = segment.polyline[0].length >= 3 ? segment.polyline : segment.polyline.map((p: number[]) => [p[0], p[1], 0]);
-        maxAlt = polyline.reduce((max: number, p: number[]) => Math.max(max, p[2]), -Infinity);
-
-        if (polyline.length > 5) {
-            let distAccSigma = 0;
-            let lastEleSigma = polyline[0][2];
-            for (let i = 1; i < polyline.length; i++) {
-                const p = polyline[i];
-                const prevP = polyline[i-1];
-                const stepDist = getDist(prevP[0], prevP[1], p[0], p[1]);
-                distAccSigma += stepDist;
-                if (distAccSigma >= 25) { 
-                    const eleDiff = p[2] - lastEleSigma;
-                    if (distAccSigma > 0) sigmaGrades.push((eleDiff / distAccSigma) * 100);
-                    distAccSigma = 0; lastEleSigma = p[2];
-                }
+    if (segment.polyline && Array.isArray(segment.polyline) && segment.polyline.length > 5) {
+        let sigmaGrades: number[] = [];
+        let distAcc = 0;
+        let lastEle = segment.polyline[0][2];
+        for (let i = 1; i < segment.polyline.length; i++) {
+            const stepDist = getDist(segment.polyline[i-1][0], segment.polyline[i-1][1], segment.polyline[i][0], segment.polyline[i][1]);
+            distAcc += stepDist;
+            if (distAcc >= 25) {
+                sigmaGrades.push(((segment.polyline[i][2] - lastEle) / distAcc) * 100);
+                distAcc = 0; lastEle = segment.polyline[i][2];
             }
         }
         if (sigmaGrades.length > 1) {
             const mean = sigmaGrades.reduce((a, b) => a + b, 0) / sigmaGrades.length;
-            const variance = sigmaGrades.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / sigmaGrades.length;
-            sigma = Math.sqrt(variance);
+            sigma = Math.sqrt(sigmaGrades.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / sigmaGrades.length);
         }
     }
     
-    const Alt = (maxAlt > -Infinity && maxAlt > 0) ? maxAlt : H;
+    const Alt = H;
     if (sigma === 0) sigma = AvgP > 3 ? 1.2 : 0.5;
-
     const Base = (20 * (Math.pow(H, 2) / L)) + (3 * H);
     const Oxygen = 1 + (Alt / 8000);
     const Pivot = 1 + ((sigma * (AvgP - 8)) / 50);
@@ -100,165 +87,289 @@ const getCategoryBadge = (index: number, segment: any, density: number) => {
     if (index > 3000) return { label: 'CAT 2', color: '#eab308', textColor: '#000' }; 
     if (index > 1500) return { label: 'CAT 3', color: '#84cc16', textColor: '#000' }; 
     if (index > 1000) return { label: 'CAT 4', color: '#10b981', textColor: '#fff' }; 
-    if (index > 500) return { label: 'COTE REGION', color: '#0077B6', textColor:'#fff' }; 
-    return { label: 'PLAT', color: '#3b82f6', textColor:'#fff' };
+    return { label: 'COTE REGION', color: '#0077B6', textColor:'#fff' };
 };
-
-// --- UI COMPONENTS ---
 
 const Badge = ({ data }: { data: any }) => (
     <span style={{ 
-        background: data.color, color: data.textColor, padding: '4px 10px', borderRadius: '6px', 
-        fontSize: '0.7rem', fontWeight: 800, letterSpacing: '0.5px', 
+        background: data.color, color: data.textColor, padding: '6px 14px', borderRadius: '8px', 
+        fontSize: '0.75rem', fontWeight: 900, letterSpacing: '0.5px', 
         border: data.border ? '1px solid #d04fd7' : 'none', 
-        boxShadow: data.label === 'ICONIC' ? '0 0 15px rgba(208, 79, 215, 0.4)' : 'none'
+        boxShadow: data.label === 'ICONIC' ? '0 0 15px rgba(208, 79, 215, 0.4)' : 'none',
+        textTransform: 'uppercase'
     }}>
         {data.label}
     </span>
 );
 
-const sliceStreams = (streams: ActivityStreams, start: number, end: number): ChartDataPoint[] => {
-    if (!streams || start === undefined || end === undefined) return [];
-    const dist = streams.distance || [];
-    const alt = streams.altitude || [];
-    const watts = streams.watts || [];
-    const hr = streams.heartrate || [];
-
-    const data: ChartDataPoint[] = [];
-    const startDist = dist[start] || 0;
-
-    for (let i = start; i <= end; i++) {
-        if (dist[i] === undefined || dist[i] === null) continue;
-        data.push({
-            dist: parseFloat((((dist[i] ?? 0) - startDist) / 1000).toFixed(2)),
-            ele: alt[i] || 0,
-            watts: watts[i] || 0,
-            hr: hr[i] || 0,
-        });
-    }
-    return data;
+const smoothData = (data: (number | null)[], windowSize: number = 5): number[] => {
+  return data.map((_, idx, arr) => {
+    const start = Math.max(0, idx - Math.floor(windowSize / 2));
+    const end = Math.min(arr.length, idx + Math.ceil(windowSize / 2));
+    const subset = arr.slice(start, end).filter((v): v is number => v !== null);
+    if (subset.length === 0) return 0;
+    return Math.round(subset.reduce((a, b) => a + b, 0) / subset.length);
+  });
 };
 
-// --- MAIN MODAL ---
+// --- MAIN COMPONENT ---
 
-export default function SegmentDetailModal({ match, streams, onClose, userWeight = 75 }: { match: SegmentMatch, streams: ActivityStreams | null, onClose: () => void, userWeight?: number }) {
-    if (!match) return null;
+export default function SegmentDetailModal({ match, streams, onClose, user }: { match: SegmentMatch, streams: ActivityStreams | null, onClose: () => void, user?: any }) {
+  if (!match) return null;
 
-    const chartData = useMemo(() => {
-        return sliceStreams(streams!, match.start_index, match.end_index);
-    }, [streams, match]);
+  const USER_FTP = user?.ftp || 300; 
 
-    const { pulsarIndex, category, scoreColor, pacing } = useMemo(() => {
-        const { index, density } = calculatePulsarIndex(match.segment);
-        const cat = getCategoryBadge(index, match.segment, density);
-        const color = index > 5000 ? '#ef4444' : index > 2500 ? '#F77F00' : index > 1500 ? '#d04fd7' : '#10B981';
+  const { chartData, stats, pulsar, powerZones } = useMemo(() => {
+    const { index, density } = calculatePulsarIndex(match.segment);
+    const cat = getCategoryBadge(index, match.segment, density);
+    
+    const defaultStats = {
+      tss: 0, if: "0.00", p1: 0, p2: 0, diffPercent: 0,
+      pacingStatus: { label: 'EFFORT RÉGULIER', color: '#666', icon: Target }
+    };
 
-        let pVal = 0;
-        if (chartData.length > 0) {
-            const mid = Math.floor(chartData.length / 2);
-            const fHalf = chartData.slice(0, mid).map(d => d.watts);
-            const sHalf = chartData.slice(mid).map(d => d.watts);
-            const fAvg = fHalf.length ? fHalf.reduce((a, b) => a + b, 0) / fHalf.length : 0;
-            const sAvg = sHalf.length ? sHalf.reduce((a, b) => a + b, 0) / sHalf.length : 0;
-            pVal = sAvg - fAvg;
+    if (!streams) return { chartData: [] as ChartDataPoint[], stats: defaultStats, pulsar: { index, cat }, powerZones: [] };
+    
+    const rawWatts = streams.watts || [];
+    const smoothedWatts = smoothData(rawWatts, 5);
+    const dists = streams.distance || [];
+    const alts = streams.altitude || [];
+    const hrs = streams.heartrate || [];
+    
+    const data: ChartDataPoint[] = [];
+    const startDist = dists[match.start_index] || 0;
+
+    // --- CALCUL ZONES Z1-Z7 ---
+    const zoneDef = [
+      { name: 'Z7', min: 1.51, color: '#ffffff', label: 'Neuromusculaire' },
+      { name: 'Z6', min: 1.21, color: '#9333ea', label: 'Cap. Anaérobie' },
+      { name: 'Z5', min: 1.06, color: '#ef4444', label: 'PMA' },
+      { name: 'Z4', min: 0.91, color: '#f97316', label: 'Seuil' },
+      { name: 'Z3', min: 0.76, color: '#eab308', label: 'Tempo' },
+      { name: 'Z2', min: 0.56, color: '#10b981', label: 'Endurance' },
+      { name: 'Z1', min: 0, color: '#3b82f6', label: 'Récupération' },
+    ];
+
+    const counts = new Array(zoneDef.length).fill(0);
+
+    for (let i = match.start_index; i <= match.end_index; i++) {
+      const w = rawWatts[i] || 0;
+      const ratio = w / USER_FTP;
+      data.push({
+        dist: parseFloat((((dists[i] ?? 0) - startDist) / 1000).toFixed(2)),
+        Altitude: alts[i] ?? 0,
+        watts: smoothedWatts[i] ?? 0,
+        BPM: hrs[i] ?? 0
+      });
+
+      for (let z = 0; z < zoneDef.length; z++) {
+        if (ratio >= zoneDef[z].min) {
+          counts[z]++;
+          break;
         }
+      }
+    }
 
-        return { pulsarIndex: index, category: cat, scoreColor: color, pacing: pVal };
-    }, [match, chartData]);
+    const totalPoints = (match.end_index - match.start_index) || 1;
+    const powerZonesData = zoneDef.map((z, i) => ({
+      ...z,
+      percent: (counts[i] / totalPoints) * 100
+    })).reverse(); // On inverse pour afficher de Z1 en bas à Z7 en haut ou vice-versa
 
-    const pacingColor = pacing >= 0 ? '#10b981' : '#ef4444';
+    const np = match.np_w || match.avg_power_w || 1;
+    const intensityFactor = np / USER_FTP;
+    const tss = Math.round((match.duration_s * np * intensityFactor) / (USER_FTP * 36));
 
-    return (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(12px)', backgroundColor: 'rgba(0,0,0,0.85)' }} onClick={onClose}>
-            <div style={{ width: '100%', maxWidth: '1000px', background: '#0A0A0F', border: '1px solid #222', borderRadius: '24px', overflow: 'hidden', boxShadow: '0 0 50px rgba(0,0,0,0.8)' }} onClick={e => e.stopPropagation()}>
-                
-                {/* HEADER TACTIQUE */}
-                <div style={{ padding: '2rem', borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', justifyContent: 'space-between', background: 'linear-gradient(180deg, rgba(208, 79, 215, 0.05), transparent)' }}>
-                    <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
-                            <Badge data={category} />
-                            <div style={{ fontSize: '1rem', fontWeight: 900, color: scoreColor, fontFamily: 'monospace' }}>{pulsarIndex} <small style={{fontSize:'0.6em', opacity:0.6}}>IDX</small></div>
-                        </div>
-                        <h2 style={{ fontSize: '2.2rem', fontWeight: 900, color: '#fff', margin: 0, letterSpacing: '-1px' }}>{match.segment.name}</h2>
-                        <div style={{ display: 'flex', gap: '15px', marginTop: '5px', color: '#666', fontSize: '0.9rem', fontWeight: 600 }}>
-                            <span>{(match.segment.distance_m / 1000).toFixed(2)} km</span>
-                            <span>•</span>
-                            <span style={{color: match.segment.average_grade > 5 ? '#ef4444' : '#10b981'}}>{match.segment.average_grade}% MOY</span>
-                        </div>
-                    </div>
-                    <button onClick={onClose} style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid #333', borderRadius: '50%', width: '40px', height: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', cursor: 'pointer' }} className="hover:bg-white/10">
-                        <X size={20} />
-                    </button>
-                </div>
+    const mid = Math.floor(data.length / 2);
+    const p1 = data.slice(0, mid).reduce((a, b) => a + b.watts, 0) / (mid || 1);
+    const p2 = data.slice(mid).reduce((a, b) => a + b.watts, 0) / ((data.length - mid) || 1);
+    const diffPercent = p1 !== 0 ? ((p2 - p1) / p1) * 100 : 0;
 
-                {/* DASHBOARD DE PERFORMANCE */}
-                <div style={{ padding: '2rem', display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '2rem' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem' }}>
-                        <KpiCard label="Chrono" value={new Date(match.duration_s * 1000).toISOString().substr(14, 5)} unit="" icon={Clock} color="#fff" />
-                        <KpiCard label="Watts (NP)" value={match.np_w || match.avg_power_w} unit="W" icon={Zap} color="#d04fd7" />
-                        <KpiCard label="Vitesse" value={match.avg_speed_kmh.toFixed(1)} unit="km/h" icon={Activity} color="#00f3ff" />
-                        <KpiCard label="W/kg" value={match.w_kg?.toFixed(2)} unit="" icon={Gauge} color="#f59e0b" />
-                        <KpiCard label="VAM" value={match.vam} unit="m/h" icon={ArrowUpRight} color="#10b981" />
-                        <KpiCard label="Cardio" value={match.avg_heartrate || '--'} unit="bpm" icon={Heart} color="#ef4444" />
-                    </div>
+    let pacingStatus = { label: 'EFFORT RÉGULIER', color: '#666', icon: Target };
+    if (diffPercent > 7) pacingStatus = { label: 'NEGATIVE SPLIT', color: '#10b981', icon: TrendingUp };
+    if (diffPercent < -7) pacingStatus = { label: 'EXPLOSION DÉTECTÉE', color: '#ef4444', icon: ZapOff };
 
-                    <div style={{ background: 'rgba(255,255,255,0.02)', borderRadius: '20px', padding: '1.5rem', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-                        <div style={{ fontSize: '0.7rem', color: '#666', fontWeight: 800, textTransform: 'uppercase', marginBottom: '1.5rem', display:'flex', alignItems:'center', gap:'8px' }}>
-                            <TrendingUp size={14} /> Analyse du Pacing (Split)
-                        </div>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                            <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#555', marginBottom: '5px' }}>START</div>
-                                <div style={{ fontSize: '1.4rem', fontWeight: 900, color: '#fff' }}>{Math.round((match.avg_power_w || 0) - pacing / 2)}W</div>
-                            </div>
-                            <div style={{ height: '2px', flex: 1, background: 'linear-gradient(90deg, #333, #666, #333)', margin: '0 20px' }}></div>
-                            <div style={{ textAlign: 'center' }}>
-                                <div style={{ fontSize: '0.65rem', color: '#555', marginBottom: '5px' }}>FINISH</div>
-                                <div style={{ fontSize: '1.4rem', fontWeight: 900, color: pacingColor }}>{Math.round((match.avg_power_w || 0) + pacing / 2)}W</div>
-                            </div>
-                        </div>
-                        <div style={{ textAlign: 'center', padding: '12px', background: `${pacingColor}10`, borderRadius: '12px', border: `1px solid ${pacingColor}30` }}>
-                            <div style={{ color: pacingColor, fontWeight: 900, fontSize: '0.9rem' }}>{pacing >= 0 ? 'NEGATIVE SPLIT ✅' : 'EXPLOSION DETECTÉE ⚠️'}</div>
-                            <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '2px' }}>Différence de {Math.abs(Math.round(pacing))} Watts entre les deux moitiés</div>
-                        </div>
-                    </div>
-                </div>
+    return { 
+      chartData: data, 
+      stats: { tss, if: intensityFactor.toFixed(2), p1, p2, diffPercent, pacingStatus },
+      pulsar: { index, cat },
+      powerZones: powerZonesData
+    };
+  }, [streams, match, USER_FTP]);
 
-                {/* GRAPH ANALYTIQUE */}
-                <div style={{ height: '300px', width: '100%', padding: '0 2rem 2rem 2rem' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'10px' }}>
-                        <span style={{ fontSize: '0.7rem', color: '#444', fontWeight: 800, textTransform: 'uppercase' }}>Télémétrie Mission</span>
-                        <div style={{ display:'flex', gap:'15px', fontSize:'0.7rem', fontWeight:700 }}>
-                            <span style={{color:'#fff'}}>● Altitude</span>
-                            <span style={{color:'#d04fd7'}}>● Puissance</span>
-                            <span style={{color:'#ef4444'}}>● Cardio</span>
-                        </div>
-                    </div>
-                    <ResponsiveContainer width="100%" height="100%">
-                        <ComposedChart data={chartData}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#1A1A1F" />
-                            <XAxis dataKey="dist" stroke="#444" fontSize={10} tickFormatter={(v) => `${v}km`} />
-                            <YAxis yAxisId="alt" hide domain={['dataMin - 20', 'auto']} />
-                            <YAxis yAxisId="pwr" orientation="right" stroke="#d04fd7" fontSize={10} domain={[0, 'auto']} />
-                            <Tooltip contentStyle={{ background: '#000', border: '1px solid #333', borderRadius: '12px' }} />
-                            <Area yAxisId="alt" type="monotone" dataKey="ele" fill="#222" stroke="#444" fillOpacity={0.3} />
-                            <Line yAxisId="pwr" type="monotone" dataKey="watts" stroke="#d04fd7" strokeWidth={3} dot={false} isAnimationActive={true} />
-                            <Line yAxisId="pwr" type="monotone" dataKey="hr" stroke="#ef4444" strokeWidth={2} dot={false} strokeDasharray="5 5" opacity={0.6} />
-                        </ComposedChart>
-                    </ResponsiveContainer>
-                </div>
+const formatTime = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = Math.floor(seconds % 60);
+
+    // Si l'effort dure plus d'une heure
+    if (h > 0) {
+        return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+    
+    // Pour les efforts de moins d'une heure (ex: 38:04)
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
+
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.85)' }} onClick={onClose}>
+      <div style={{ width: '100%', maxWidth: '1200px', background: '#0A0A0C', border: '1px solid #222', borderRadius: '32px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }} onClick={e => e.stopPropagation()}>
+        
+        {/* HEADER */}
+        <div style={{ padding: '2rem 3rem', borderBottom: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(to bottom, #111, #0A0A0C)' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '8px' }}>
+                <h2 style={{ fontSize: '2.4rem', fontWeight: 950, color: '#fff', margin: 0, letterSpacing: '-1.5px' }}>{match.segment.name.toUpperCase()}</h2>
+                <Badge data={pulsar.cat} />
             </div>
+            <div style={{ display: 'flex', gap: '20px', color: '#666', fontSize: '1rem', fontWeight: 700 }}>
+              <span style={{ color: '#d04fd7' }}>{(match.segment.distance_m / 1000).toFixed(2)} KM</span>
+              <span>•</span>
+              <span style={{ color: match.segment.average_grade > 5 ? '#ef4444' : '#10b981' }}>{match.segment.average_grade.toFixed(2)}% MOY</span>
+              <span>•</span>
+              <span style={{ color: '#fff' }}>SCORE PULSAR : <span style={{ color: '#d04fd7', fontFamily: 'monospace' }}>{pulsar.index}</span></span>
+            </div>
+          </div>
+          <button onClick={onClose} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '16px', padding: '12px', color: '#fff', cursor: 'pointer' }}>
+            <X size={24} />
+          </button>
         </div>
-    );
+
+        {/* DASHBOARD GRID */}
+        <div style={{ 
+          padding: '2rem 3rem', 
+          display: 'grid', 
+          gridTemplateColumns: '1.1fr 1fr 0.9fr', 
+          gap: '1.5rem',
+          alignItems: 'stretch' 
+        }}>
+
+            
+          
+          {/* COL 1: KPIs COMPACTS */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
+            <KpiCard label="Chrono" value={formatTime(match.duration_s)} icon={Clock} color="#fff" compact />
+            <KpiCard label="Watts NP" value={match.np_w || match.avg_power_w} unit="W" icon={Zap} color="#d04fd7" compact />
+            <KpiCard label="Cardio Moy" value={match.avg_heartrate || '--'} unit="BPM" icon={Heart} color="#ff4d4d" compact />
+            <KpiCard label="Rapport W/Kg" value={match.w_kg?.toFixed(2)} unit="w/kg" icon={Gauge} color="#f59e0b" compact />
+            <KpiCard label="Score TSS" value={stats.tss} unit="pts" icon={Target} color="#10b981" compact />
+            <KpiCard label="Intensité (IF)" value={stats.if} unit="if" icon={Activity} color="#00f3ff" compact />
+            <KpiCard label="Vitesse Moy." value={match.avg_speed_kmh} unit="km/h" icon={Target} color="#3f185bff" compact />
+            <KpiCard label="VAM" value={match.vam} unit="m/h" icon={Activity} color="#b2af0bff" compact />
+          </div>
+
+          {/* COL 2: ZONES Z1-Z7 */}
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #1a1a1a', borderRadius: '24px', padding: '1.2rem' }}>
+            <div style={{ fontSize: '0.6rem', color: '#7e7d7dff', fontWeight: 900, textTransform: 'uppercase', marginBottom: '1rem', letterSpacing: '1px' }}>Répartition Zones Power</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+              {powerZones.slice().reverse().map((zone) => (
+                <div key={zone.name} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ fontSize: '1.05rem', color: zone.percent > 0 ? '#fff' : '#7e7d7dff', fontWeight: 900, width: '20px' }}>{zone.name}</span>
+                  <div style={{ flex: 1, height: '10px', background: '#111', borderRadius: '3px', overflow: 'hidden' }}>
+                    <div style={{ width: `${zone.percent}%`, height: '100%', background: zone.color, boxShadow: zone.percent > 0 ? `0 0 8px ${zone.color}40` : 'none', transition: 'width 1s ease' }} />
+                  </div>
+                  <span style={{ fontSize: '0.55rem', color: '#666', fontWeight: 800, width: '25px', textAlign: 'right' }}>{Math.round(zone.percent)}%</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* COL 3: PACING / GESTION EFFORT */}
+          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #1a1a1a', borderRadius: '24px', padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+            <div style={{ fontSize: '0.65rem', color: '#7e7d7dff', fontWeight: 900, textTransform: 'uppercase', marginBottom: '1.2rem', letterSpacing: '1px' }}>Gestion de l'effort</div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+              <div style={{ textAlign: 'left' }}>
+                <div style={{ fontSize: '0.6rem', color: '#555' }}>DÉBUT</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#fff' }}>{Math.round(stats.p1)}<small style={{fontSize: '0.5em', marginLeft: '2px'}}>W</small></div>
+              </div>
+              <div style={{ flex: 1, height: '2px', background: '#1a1a1a', margin: '0 15px', position: 'relative' }}>
+                <div style={{ position: 'absolute', top: '-4px', left: `${Math.min(100, Math.max(0, 50 + stats.diffPercent))}%`, width: '10px', height: '10px', borderRadius: '50%', background: stats.pacingStatus.color, boxShadow: `0 0 10px ${stats.pacingStatus.color}` }} />
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '0.6rem', color: '#555' }}>FIN</div>
+                <div style={{ fontSize: '1.6rem', fontWeight: 900, color: stats.pacingStatus.color }}>{Math.round(stats.p2)}<small style={{fontSize: '0.5em', marginLeft: '2px'}}>W</small></div>
+              </div>
+            </div>
+            <div style={{ textAlign: 'center', fontSize: '0.85rem', fontWeight: 950, color: stats.pacingStatus.color, background: `${stats.pacingStatus.color}10`, padding: '12px', borderRadius: '14px', border: `1px solid ${stats.pacingStatus.color}20` }}>
+              {stats.pacingStatus.label}
+              <div style={{ fontSize: '0.6rem', opacity: 0.7, marginTop: '2px' }}>Variation de {stats.diffPercent > 0 ? '+' : ''}{stats.diffPercent.toFixed(1)}%</div>
+            </div>
+          </div>
+        </div>
+
+        {/* CHART PORTION */}
+        <div style={{ height: '330px', width: '100%', padding: '0 3rem 2rem 3rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
+             <span style={{ fontSize: '0.7rem', color: '#7e7d7dff', fontWeight: 900, textTransform: 'uppercase' }}>Analyse télémétrique portion</span>
+             <div style={{ display: 'flex', gap: '20px', fontSize: '0.65rem', fontWeight: 800 }}>
+                <span style={{ color: '#ffffffff', opacity: 0.4 }}>● Altitude</span>
+                <span style={{ color: '#d04fd7' }}>● Watts (5s)</span>
+                <span style={{ color: '#ff4d4d' }}>● FC</span>
+             </div>
+          </div>
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={chartData}>
+              <defs>
+                <linearGradient id="pwrGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#d04fd7" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#d04fd7" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#111" />
+              <XAxis dataKey="dist" hide />
+              <YAxis yAxisId="pwr" orientation="right" hide domain={[0, 'auto']} />
+              <YAxis yAxisId="alt" hide domain={['dataMin - 10', 'auto']} />
+              <Tooltip 
+                contentStyle={{ background: '#050505', border: '1px solid #222', borderRadius: '12px' }} 
+                itemStyle={{ fontSize: '11px', fontWeight: 700 }}
+              />
+              <Area yAxisId="alt" type="monotone" dataKey="Altitude" fill="#181818ff" stroke="#8a8888ff" fillOpacity={1} isAnimationActive={false} />
+              <Area yAxisId="pwr" type="monotone" dataKey="watts" stroke="#d04fd7" strokeWidth={2} fill="url(#pwrGrad)" />
+              <Line yAxisId="pwr" type="monotone" dataKey="BPM" stroke="#ff0707ff" strokeWidth={2} dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-const KpiCard = ({ label, value, unit, icon: Icon, color }: any) => (
-    <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: '16px', padding: '12px', textAlign: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', fontSize: '0.6rem', color: '#666', fontWeight: 800, textTransform: 'uppercase', marginBottom: '5px' }}>
-            <Icon size={12} color={color} /> {label}
-        </div>
-        <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#fff', lineHeight: 1 }}>
-            {value}<small style={{fontSize:'0.5em', color:'#666', marginLeft:'2px'}}>{unit}</small>
-        </div>
+const KpiCard = ({ label, value, unit, icon: Icon, color, compact }: any) => (
+  <div style={{ 
+    background: '#0E0E11', 
+    border: '1px solid #1a1a1a', 
+    borderRadius: '16px', 
+    padding: compact ? '10px 14px' : '12px 16px',
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'center',
+    minHeight: compact ? '68px' : '80px',
+  }}>
+    <div style={{ 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'space-between',
+      fontSize: '0.55rem', 
+      color: '#7e7d7dff', 
+      fontWeight: 900, 
+      textTransform: 'uppercase', 
+      marginBottom: '2px' 
+    }}>
+      <span>{label}</span>
+      <Icon size={10} color={color} />
     </div>
+    <div style={{ 
+      fontSize: compact ? '1.5rem' : '1.8rem', 
+      fontWeight: 950, 
+      color: '#fff', 
+      lineHeight: 1,
+      display: 'flex',
+      alignItems: 'baseline',
+      gap: '3px'
+    }}>
+      {value}
+      {unit && <span style={{ fontSize: '0.65rem', color: '#333', fontWeight: 800 }}>{unit}</span>}
+    </div>
+  </div>
 );

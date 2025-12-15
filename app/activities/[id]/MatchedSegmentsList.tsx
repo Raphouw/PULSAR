@@ -1,214 +1,233 @@
-// Fichier : app/activities/[id]/MatchedSegmentsList.tsx
 'use client';
 
-import React, { useState } from 'react';
-import { Trophy, Zap, Clock, ChevronRight, Activity, Heart, Repeat, Mountain } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Trophy, Zap, BarChart3, TrendingUp, Target, ChevronRight, Award, ExternalLink, Medal, Activity } from 'lucide-react';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, ReferenceArea } from 'recharts';
 import SegmentDetailModal from './SegmentDetailModal';
-import { ActivityStreams } from '../../../types/next-auth';
+import { calculatePulsarScore, getPulsarCategory } from '../../../lib/physics';
+import { useRouter } from 'next/navigation';
 
-// --- TYPES ---
-type MatchedSegment = {
-  id: number;
-  segment_id: number;
-  duration_s: number;
-  avg_power_w: number;
-  avg_speed_kmh: number;
-  start_index: number;
-  end_index: number;
-  np_w?: number;
-  avg_heartrate?: number;
-  max_heartrate?: number;
-  avg_cadence?: number;
-  vam?: number;
-  w_kg?: number;
-  segment: {
-    name: string;
-    distance_m: number;
-    average_grade: number;
-    elevation_gain_m: number;
-    category: string | null;
-    polyline?: number[][];
-    tags?: { label: string; color: string; }[] | null;
+// --- UI COMPONENTS ---
+
+const ActivityElevationProfile = ({ streams, highlightRange }: { streams: any, highlightRange: [number, number] | null }) => {
+    const data = useMemo(() => {
+        if (!streams?.altitude) return [];
+        return streams.altitude.map((alt: number, i: number) => ({ index: i, alt: alt }));
+    }, [streams]);
+
+    return (
+        <div className="sticky top-4 z-50 bg-[#0a0a0c]/80 border border-white/5 rounded-3xl p-4 mb-8 backdrop-blur-xl h-[100px] shadow-2xl">
+            <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={data}>
+                    <defs>
+                        <linearGradient id="elevationGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#d04fd7" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#d04fd7" stopOpacity={0}/>
+                        </linearGradient>
+                    </defs>
+                    {highlightRange && (
+                        <ReferenceArea x1={highlightRange[0]} x2={highlightRange[1]} fill="#fff" fillOpacity={0.1} stroke="rgba(255,255,255,0.2)" />
+                    )}
+                    <Area type="monotone" dataKey="alt" stroke="#d04fd7" strokeWidth={2} fill="url(#elevationGradient)" isAnimationActive={false} />
+                    <XAxis dataKey="index" hide />
+                    <YAxis domain={['dataMin - 10', 'dataMax + 10']} hide />
+                </AreaChart>
+            </ResponsiveContainer>
+        </div>
+    );
+};
+
+export default function MatchedSegmentsList({ segments, streams, userWeight }: { segments: any[], streams?: any, userWeight: number }) {
+  const router = useRouter();
+  const [selectedMatch, setSelectedMatch] = useState<any | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [hoveredRange, setHoveredRange] = useState<[number, number] | null>(null);
+
+  const sortedSegments = useMemo(() => {
+    return [...segments].sort((a, b) => a.start_index - b.start_index);
+  }, [segments]);
+
+  const formatTime = (s: number) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${m}:${sec.toString().padStart(2, '0')}`;
   };
-};
 
-// --- HELPERS PHYSIQUES (Alignés sur Segments & Cols) ---
+  // Logique pour déterminer le type de badge PR (Or, Argent, Bronze)
+  const getPRStatus = (match: any) => {
+    if (match.is_pr) return { label: 'PR', color: 'text-yellow-400', bg: 'bg-yellow-400/10', icon: Zap };
+    // Ici on simule une logique 2e/3e temps si les données sont dispo, sinon on reste simple
+    if (match.pr_gap_seconds < 10 && match.pr_gap_seconds > 0) return { label: 'Top 3', color: 'text-slate-300', bg: 'bg-slate-300/10', icon: Medal };
+    return null;
+  };
 
-const getDist = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371e3; const φ1 = lat1 * Math.PI / 180; const φ2 = lat2 * Math.PI / 180;
-    const a = Math.sin(((lat2-lat1)*Math.PI/180)/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(((lon2-lon1)*Math.PI/180)/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-};
+  return (
+    <div className="mt-8 font-sans text-[#F1F1F1]">
+      <ActivityElevationProfile streams={streams} highlightRange={hoveredRange} />
 
-const calculatePulsarIndex = (segment: any): { index: number, sigma: number, density: number } => {
-    const H = Math.max(1, segment.elevation_gain_m || 0); 
-    const L = Math.max(100, segment.distance_m); 
-    const AvgP = Math.max(0, segment.average_grade); 
-    const density = H / (L / 1000); 
+      <div className="flex flex-col gap-4">
+        {sortedSegments.map((match, i) => {
+          const isExpanded = expandedId === match.id;
+          const prStatus = getPRStatus(match);
+          const { index, density } = calculatePulsarScore(
+              match.segment.distance_m, 
+              match.segment.elevation_gain_m, 
+              match.segment.average_grade, 
+              match.segment.polyline
+          );
+          const cat = getPulsarCategory(index, match.segment.distance_m, density);
 
-    let maxAlt = -Infinity;
-    let sigma = 0;
-    let sigmaGrades: number[] = []; 
+          return (
+            <div 
+                key={`${match.id}-${i}`} 
+                onMouseEnter={() => setHoveredRange([match.start_index, match.end_index])}
+                onMouseLeave={() => setHoveredRange(null)}
+                className="flex flex-col"
+            >
+              <div 
+                onClick={() => setExpandedId(isExpanded ? null : match.id)}
+                className={`
+                  relative transition-all duration-300 cursor-pointer p-6 flex items-center justify-between
+                  ${isExpanded ? 'bg-white/10 rounded-t-3xl border-x border-t border-white/10' : 'bg-white/[0.03] border border-white/5 rounded-3xl hover:bg-white/[0.06] hover:border-white/20'}
+                `}
+              >
+                {match.is_pr && <div className="absolute left-0 top-6 bottom-6 w-1 bg-yellow-400 rounded-r-full shadow-[0_0_15px_rgba(250,204,21,0.4)]" />}
+                
+                <div className="flex items-center gap-6">
+                    <span className="text-xs text-gray-600 font-medium">{(i + 1).toString().padStart(2, '0')}</span>
+                    <div>
+                        <div className="flex items-center gap-3">
+                            <h4 className="font-semibold text-white text-lg tracking-tight">{match.segment.name}</h4>
+                            {prStatus && (
+                                <div className={`flex items-center gap-1 ${prStatus.bg} px-2 py-0.5 rounded-full border border-white/5`}>
+                                    <prStatus.icon size={12} className={`${prStatus.color} fill-current`} />
+                                    <span className={`text-[10px] font-bold ${prStatus.color}`}>{prStatus.label}</span>
+                                </div>
+                            )}
+                        </div>
+                        <div className="text-[11px] text-gray-500 font-medium mt-0.5">
+                            {(match.segment.distance_m/1000).toFixed(2)}km • {match.segment.average_grade.toFixed(1)}% gradient
+                        </div>
+                    </div>
+                </div>
 
-    if (segment.polyline && Array.isArray(segment.polyline) && segment.polyline.length > 0) {
-        const polyline = segment.polyline[0].length >= 3 ? segment.polyline : segment.polyline.map((p: number[]) => [p[0], p[1], 0]);
-        maxAlt = polyline.reduce((max: number, p: number[]) => Math.max(max, p[2]), -Infinity);
+                <div className="flex items-center gap-8">
+                    <div className="px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider" style={{ background: cat.color, color: cat.textColor, border: cat.border ? '1px solid #d04fd7' : 'none' }}>
+                        {cat.label}
+                    </div>
 
-        if (polyline.length > 5) {
-            let distAccSigma = 0;
-            let lastEleSigma = polyline[0][2];
-            for (let i = 1; i < polyline.length; i++) {
-                const p = polyline[i];
-                const prevP = polyline[i-1];
-                const stepDist = getDist(prevP[0], prevP[1], p[0], p[1]);
-                distAccSigma += stepDist;
-                if (distAccSigma >= 25) { 
-                    const eleDiff = p[2] - lastEleSigma;
-                    if (distAccSigma > 0) sigmaGrades.push((eleDiff / distAccSigma) * 100);
-                    distAccSigma = 0; lastEleSigma = p[2];
-                }
-            }
-        }
-        if (sigmaGrades.length > 1) {
-            const mean = sigmaGrades.reduce((a, b) => a + b, 0) / sigmaGrades.length;
-            const variance = sigmaGrades.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / sigmaGrades.length;
-            sigma = Math.sqrt(variance);
-        }
-    }
-    
-    const Alt = (maxAlt > -Infinity && maxAlt > 0) ? maxAlt : H;
-    if (sigma === 0) sigma = AvgP > 3 ? 1.2 : 0.5;
+                    <div className="flex gap-10 items-center">
+                        <div className="text-right">
+                            <div className="text-[10px] text-gray-600 font-semibold uppercase tracking-tight">Temps</div>
+                            <div className="text-xl font-medium text-white">{formatTime(match.duration_s)}</div>
+                        </div>
+                        <div className="text-right">
+                            <div className="text-[10px] text-gray-600 font-semibold uppercase tracking-tight">Puissance</div>
+                            <div className="text-xl font-medium text-[#d04fd7]">{match.np_w || match.avg_power_w}W</div>
+                        </div>
+                    </div>
 
-    const Base = (20 * (Math.pow(H, 2) / L)) + (3 * H);
-    const Oxygen = 1 + (Alt / 8000);
-    const Pivot = 1 + ((sigma * (AvgP - 8)) / 50);
-    
-    return { index: Math.round(Base * Oxygen * Pivot), sigma, density };
-};
+                    <div className={`p-2 transition-transform duration-300 ${isExpanded ? 'rotate-90 text-[#d04fd7]' : 'text-gray-700'}`}>
+                        <ChevronRight size={20} />
+                    </div>
+                </div>
+              </div>
 
-const getCategoryData = (index: number, segment: any, density: number) => {
-    if (segment.distance_m >= 50000 && density < 30) return { label: 'BOUCLE MYTHIQUE', color: '#00f3ff', textColor: '#000' };
-    if (index > 7500) return { label: 'ICONIC', color: '#000', textColor: '#d04fd7', border: true }; 
-    if (index > 6500) return { label: 'HC', color: '#ef4444', textColor: '#fff' }; 
-    if (index > 5000) return { label: 'CAT 1', color: '#f97316', textColor: '#fff' }; 
-    if (index > 3000) return { label: 'CAT 2', color: '#eab308', textColor: '#000' }; 
-    if (index > 1500) return { label: 'CAT 3', color: '#84cc16', textColor: '#000' }; 
-    if (index > 1000) return { label: 'CAT 4', color: '#10b981', textColor: '#fff' }; 
-    if (index > 500) return { label: 'COTE REGION', color: '#0077B6', textColor:'#fff' }; 
-    return { label: 'PLAT', color: '#3b82f6', textColor:'#fff' };
-};
+              {/* CLASSEMENT DÉPLIÉ */}
+              {isExpanded && (
+                <div className="bg-white/[0.05] border-x border-b border-white/10 rounded-b-3xl p-8 animate-in slide-in-from-top-2 duration-300">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+                    <div className="flex flex-col gap-6">
+                        <div className="flex items-center gap-2 text-xs font-bold text-[#d04fd7] uppercase tracking-wider">
+                            <TrendingUp size={16}/> Analyse de l'effort
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <MetricCard label="Score Pulsar" value={index} icon={<Activity size={16}/>} />
+                            <MetricCard label="Puissance Relative" value={`${match.w_kg?.toFixed(2) || '-'} w/kg`} icon={<Zap size={16}/>} />
+                        </div>
+                        
+                        {!match.is_pr && match.pr_gap_seconds > 0 && (
+                            <div className="p-5 bg-red-500/5 border border-red-500/10 rounded-2xl">
+                                <div className="flex items-center gap-2 text-xs font-bold text-white mb-2">
+                                    <Target size={14} className="text-red-400" /> RETARD PR : <span className="text-red-400">+{formatTime(match.pr_gap_seconds)}</span>
+                                </div>
+                                <p className="text-[13px] text-gray-400 leading-relaxed">
+                                    Il te manque environ <span className="text-white font-semibold">{Math.round(match.avg_power_w * (match.pr_gap_seconds / match.duration_s))}W</span> de moyenne pour égaler ton record.
+                                </p>
+                            </div>
+                        )}
+                    </div>
 
-// --- COMPOSANTS UI ---
+                    <div className="flex flex-col gap-4">
+                        <div className="flex justify-between items-center mb-2">
+                            <div className="text-xs font-bold text-[#00f3ff] uppercase tracking-wider flex items-center gap-2">
+                                <Trophy size={16}/> Leaderboard Session
+                            </div>
+                        </div>
+                        
+                        <div className="space-y-2">
+                             <LeaderRow rank={1} name="Actuel" value={formatTime(match.duration_s)} isUser watts={match.np_w || match.avg_power_w} />
+                        </div>
 
-const Badge = ({ data, border = false }: { data: any, border?: boolean }) => (
-    <span style={{ 
-        background: data.color, color: data.textColor, padding: '3px 8px', borderRadius: '6px', 
-        fontSize: '0.6rem', fontWeight: 800, letterSpacing: '0.5px', 
-        border: border || data.border ? '1px solid #d04fd7' : '1px solid transparent', 
-        boxShadow: data.label === 'ICONIC' ? '0 0 15px rgba(208, 79, 215, 0.4)' : 'none', 
-        whiteSpace: 'nowrap', display: 'inline-block'
-    }}>
-        {data.label}
-    </span>
-);
+                        <div className="grid grid-cols-2 gap-3 mt-4">
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); router.push(`/segments/${match.segment_id}`); }} 
+                                className="flex items-center justify-center gap-2 py-3 bg-white/5 border border-white/10 rounded-xl text-[11px] font-bold uppercase tracking-wider text-gray-300 hover:bg-white/10 transition-all"
+                            >
+                                <ExternalLink size={14} /> Page du Segment
+                            </button>
+                            <button 
+                                onClick={(e) => { e.stopPropagation(); setSelectedMatch(match); }} 
+                                className="flex items-center justify-center gap-2 py-3 bg-[#d04fd7] border border-[#d04fd7] rounded-xl text-[11px] font-bold uppercase tracking-wider text-black hover:bg-[#b03fb7] transition-all"
+                            >
+                                <BarChart3 size={14} /> Analyse Flux
+                            </button>
+                        </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
 
-const TacticalMetric = ({ icon: Icon, value, unit, color, label }: any) => (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1 }}>
-        <div style={{ fontSize: '0.6rem', color: '#666', fontWeight: 700, textTransform: 'uppercase', marginBottom: '4px' }}>{label}</div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <Icon size={12} color={color} />
-            <span style={{ fontSize: '1rem', fontWeight: 700, color: '#fff' }}>{value}<small style={{fontSize: '0.6em', color: '#888', marginLeft: '2px'}}>{unit}</small></span>
+      {selectedMatch && (
+          <SegmentDetailModal 
+            match={selectedMatch} 
+            streams={streams} 
+            user={{ weight: userWeight, ftp: 300 }} 
+            onClose={() => setSelectedMatch(null)} 
+          />
+      )}
+    </div>
+  );
+}
+
+// --- SUB-COMPONENTS ---
+
+const MetricCard = ({ label, value, icon }: any) => (
+    <div className="bg-white/[0.03] p-4 rounded-2xl border border-white/5 flex items-center gap-4">
+        <div className="text-[#d04fd7]">{icon}</div>
+        <div>
+            <div className="text-[10px] text-gray-500 font-semibold uppercase">{label}</div>
+            <div className="text-lg font-bold text-white leading-none mt-1">{value}</div>
         </div>
     </div>
 );
 
-export default function MatchedSegmentsList({ segments, streams, userWeight }: { segments: MatchedSegment[], streams?: ActivityStreams | null, userWeight?: number }) {
-  const [selectedSegment, setSelectedSegment] = useState<MatchedSegment | null>(null);
-
-  if (!segments || segments.length === 0) return null;
-
-  const formatTime = (s: number) => {
-    const min = Math.floor(s / 60);
-    const sec = Math.floor(s % 60);
-    return `${min}:${sec.toString().padStart(2, '0')}`;
-  };
-
-  return (
-    <>
-      <div style={{ marginTop: '0rem' }}>
-        <h3 style={{ fontSize: '1.1rem', fontWeight: 800, color: '#fff', marginBottom: '1.5rem', display:'flex', alignItems:'center', gap:'10px' }}>
-          <Trophy size={18} color="#d04fd7" /> SEGMENTS OFFICIELS ({segments.length})
-        </h3>
-        
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: '1.5rem' }}>
-          {segments.map((match, i) => {
-            const { index: pIndex, density } = calculatePulsarIndex(match.segment);
-            const category = getCategoryData(pIndex, match.segment, density);
-            const scoreColor = pIndex > 5000 ? '#ef4444' : pIndex > 2500 ? '#F77F00' : pIndex > 1500 ? '#d04fd7' : '#10B981';
-
-            return (
-                <div 
-                    key={match.id} 
-                    onClick={() => setSelectedSegment(match)}
-                    style={{ 
-                        background: 'linear-gradient(145deg, rgba(20, 20, 25, 0.9) 0%, rgba(10, 10, 15, 0.95) 100%)', 
-                        borderRadius: '20px', border: '1px solid rgba(255,255,255,0.08)', padding: '1.5rem',
-                        cursor: 'pointer', transition: 'all 0.2s', position: 'relative', overflow: 'hidden'
-                    }}
-                    className="hover:scale-[1.02] hover:border-[#d04fd7]/50"
-                >
-                    {/* Header: Nom & Index */}
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
-                        <div style={{ display: 'flex', gap: '12px', flex: 1, overflow: 'hidden' }}>
-                            <div style={{ fontSize: '0.8rem', fontWeight: 900, color: '#444', fontFamily: 'monospace' }}>{(i+1).toString().padStart(2,'0')}</div>
-                            <div style={{ overflow: 'hidden' }}>
-                                <h4 style={{ fontSize: '1rem', fontWeight: 800, color: '#fff', margin: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{match.segment.name}</h4>
-                                <div style={{ fontSize: '0.7rem', color: '#888', marginTop: '2px' }}>{(match.segment.distance_m/1000).toFixed(2)}km à {match.segment.average_grade}%</div>
-                            </div>
-                        </div>
-                        <div style={{ textAlign: 'right', display:'flex', flexDirection:'column', alignItems:'flex-end', gap:'4px' }}>
-                            <Badge data={category} />
-                            <div style={{ fontSize: '0.9rem', fontWeight: 900, color: scoreColor }}>{pIndex} <small style={{fontSize:'0.5em', color:'#666'}}>IDX</small></div>
-                        </div>
-                    </div>
-
-                    {/* Grille Tactique de Performance */}
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', background: 'rgba(255,255,255,0.02)', padding: '1rem', borderRadius: '12px', marginBottom: '10px' }}>
-                        <TacticalMetric label="Temps" value={formatTime(match.duration_s)} unit="" icon={Clock} color="#fff" />
-                        <TacticalMetric label="Watts (NP)" value={match.np_w || match.avg_power_w} unit="W" icon={Zap} color="#d04fd7" />
-                        <TacticalMetric label="Vitesse" value={match.avg_speed_kmh.toFixed(1)} unit="km/h" icon={Activity} color="#00f3ff" />
-                    </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0 0.5rem' }}>
-                        <div style={{ display: 'flex', gap: '15px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', color: '#aaa' }}>
-                                <Heart size={10} color="#ef4444" /> {match.avg_heartrate || '--'}
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '0.7rem', color: '#aaa' }}>
-                                <Repeat size={10} color="#10b981" /> {match.avg_cadence || '--'}
-                            </div>
-                        </div>
-                        <div style={{ display: 'flex', gap: '10px' }}>
-                            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#f59e0b' }}>{match.w_kg?.toFixed(2)} <small>W/kg</small></span>
-                            {match.vam && <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#10b981' }}>{Math.round(match.vam)} <small>VAM</small></span>}
-                        </div>
-                    </div>
-
-                    <div style={{ position: 'absolute', bottom: '10px', right: '10px', opacity: 0.1 }}><ChevronRight size={16} /></div>
-                </div>
-            );
-          })}
+const LeaderRow = ({ rank, name, value, isUser, watts }: any) => (
+    <div className={`
+        flex items-center justify-between p-4 rounded-2xl border 
+        ${isUser ? 'bg-[#00f3ff]/5 border-[#00f3ff]/20' : 'bg-white/5 border-white/5'}
+    `}>
+        <div className="flex items-center gap-4">
+            <span className={`text-xs font-bold ${isUser ? 'text-[#00f3ff]' : 'text-gray-500'}`}>#{rank}</span>
+            <span className={`text-sm font-semibold ${isUser ? 'text-white' : 'text-gray-400'}`}>{name}</span>
         </div>
-      </div>
-
-      {selectedSegment && (
-          <SegmentDetailModal 
-            match={selectedSegment} 
-            streams={streams ?? null} 
-            userWeight={userWeight}
-            onClose={() => setSelectedSegment(null)} 
-          />
-      )}
-    </>
-  );
-}
+        <div className="flex items-center gap-6">
+            <span className="text-xs text-gray-500 font-medium">{watts}W</span>
+            <span className={`text-sm font-bold ${isUser ? 'text-[#00f3ff]' : 'text-white'}`}>{value}</span>
+        </div>
+    </div>
+);
