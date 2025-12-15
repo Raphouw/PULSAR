@@ -29,21 +29,26 @@ export async function GET(req: Request) {
     if (!session?.user?.id) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
 
     const userId = session.user.id;
-    if (!session.access_token) return NextResponse.json({ message: "Pas de token" });
+    if (!session.access_token) return NextResponse.json({ message: "Pas de token Strava" });
 
+    // 1. Récupérer les nouvelles activités depuis l'API Strava
     const newActivities = await fetchNewStravaActivities(userId, session.access_token);
 
     if (newActivities.length === 0) {
-      return NextResponse.json({ success: true, imported: 0, message: "À jour.", hasStrava: true });
+      return NextResponse.json({ success: true, imported: 0, message: "Déjà à jour.", hasStrava: true });
     }
 
+    // 2. Import initial (création des lignes dans la table activities)
     const importResult = await importActivities(userId, newActivities);
 
+    // 3. Récupération profil pour l'analyse de puissance
     const { data: userProfile } = await supabaseAdmin.from('users').select('weight, ftp').eq('id', userId).single();
     
     let analyzedCount = 0;
     let totalBrokenRecords: any[] = [];
+    const newJobActivities: number[] = [];
 
+    // 4. Boucle de traitement des données détaillées (Streams)
     const analysisPromises = newActivities.map(async (stravaActivity: any) => {
         try {
             const { data: dbActivity } = await supabaseAdmin
@@ -59,23 +64,25 @@ export async function GET(req: Request) {
                     if (Array.isArray(rawStreams)) return rawStreams.find((s: any) => s.type === key)?.data || [];
                     return [];
                 };
+
                 const cleanStreams = {
                     time: extract('time'), distance: extract('distance'), altitude: extract('altitude'),
                     latlng: extract('latlng'), watts: extract('watts'), heartrate: extract('heartrate'),
                     cadence: extract('cadence'), temp: extract('temp'),
                 };
 
-                // --- CORRECTION TYPE ---
+                // Calcul puissance moyenne si capteur présent
                 let avgPower: number | null = null;
-                
                 if (cleanStreams.watts.length > 0) {
                     avgPower = Math.round(cleanStreams.watts.reduce((a, b) => a + b, 0) / cleanStreams.watts.length);
                 }
 
+                // MISE À JOUR BDD : Trigger SQL 'on_activity_coordinates_sync' calculera les bornes ici
                 await supabaseAdmin.from('activities')
                     .update({ streams_data: cleanStreams, avg_power_w: avgPower })
                     .eq('id', dbActivity.id);
 
+                // Analyse de fitness (Power Curve, TSS, IF...)
                 const result = await analyzeAndSaveActivity(
                     dbActivity.id, 
                     stravaActivity.id, 
@@ -87,6 +94,9 @@ export async function GET(req: Request) {
                 if (result.success) {
                     analyzedCount++;
                     if (result.brokenRecords?.length > 0) totalBrokenRecords.push(...result.brokenRecords);
+                    
+                    // On ajoute cet ID à la liste pour le futur Job de scan de segments
+                    newJobActivities.push(dbActivity.id);
                 }
             }
         } catch (err) {
@@ -96,16 +106,34 @@ export async function GET(req: Request) {
 
     await Promise.all(analysisPromises);
 
+    // 5. 🔥 CRÉATION DU JOB DE SCAN (Pour le Command Center)
+    // Au lieu de bloquer l'utilisateur, on délègue le scan des segments au worker admin
+    if (newJobActivities.length > 0) {
+        await supabaseAdmin.from('admin_jobs').insert({
+            type: 'segment_scan',
+            status: 'pending',
+            total: newJobActivities.length,
+            progress: 0,
+            payload: { 
+                segmentId: null, // null = Scanner contre TOUS les segments
+                segmentName: `Nouvel import : ${newJobActivities.length} sortie(s)`,
+                queue: newJobActivities 
+            },
+            created_at: new Date().toISOString()
+        });
+        console.log(`[Check Latest] 🛰️ ${newJobActivities.length} activités envoyées au registre des missions.`);
+    }
+
     return NextResponse.json({ 
       ...importResult, 
       analyzed: analyzedCount,
       brokenRecords: totalBrokenRecords,
-      message: `+${importResult.imported} activités.`,
+      message: `+${importResult.imported} activités synchronisées.`,
       hasStrava: true 
     });
 
   } catch (err: any) {
-    console.error(err);
+    console.error("💥 [Check Latest Critical Error]:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

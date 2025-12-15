@@ -1,3 +1,5 @@
+//fichier app/activities/page.tsx
+
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../lib/auth";
 import { supabaseAdmin } from "./../../lib/supabaseAdminClient.js";

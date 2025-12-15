@@ -13,7 +13,7 @@ export async function POST(req: Request) {
     }
 
     const { mode, id } = await req.json();
-    const isAdmin = session.user.id === '1' || session.user.id === '2';
+    const isAdmin = session.user.id === '1';
 
     // --- CAS 1 : SCAN D'UNE ACTIVITÉ (Nouvelle sortie ou re-scan manuel) ---
     if (mode === 'activity') {

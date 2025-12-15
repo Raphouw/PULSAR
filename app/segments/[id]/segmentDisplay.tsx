@@ -177,6 +177,7 @@ export default function SegmentDisplay({ segment, currentUserId }: { segment: Se
                 case 'speed': valA = a.avg_speed_kmh || 0; valB = b.avg_speed_kmh || 0; break;
                 case 'heartrate': valA = a.avg_heartrate || 0; valB = b.avg_heartrate || 0; break;
                 case 'cadence': valA = a.avg_cadence || 0; valB = b.avg_cadence || 0; break;
+                case 'vam': valA = a.vam || 0;  valB = b.vam || 0; break;
                 default: valA = a.duration_s; valB = b.duration_s;
             }
             return sortOrder === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
@@ -343,6 +344,8 @@ export default function SegmentDisplay({ segment, currentUserId }: { segment: Se
                                 <SortHeader label="KM/H" active={sortBy === 'speed'} onClick={() => handleSort('speed')} center />
                                 <SortHeader label="BPM" active={sortBy === 'heartrate'} onClick={() => handleSort('heartrate')} center color="#ef4444" />
                                 <SortHeader label="RPM" active={sortBy === 'cadence'} onClick={() => handleSort('cadence')} center color="#eab308" />
+                                <SortHeader label="VAM" active={sortBy === 'vam'} onClick={() => handleSort('vam')} center color="#17ea08ff" />
+
                                 <th style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>DÉTAILS</th>
                             </tr>
                         </thead>
@@ -373,6 +376,8 @@ export default function SegmentDisplay({ segment, currentUserId }: { segment: Se
                                         <td style={{ padding: '1rem', textAlign: 'center' }}>{effort.avg_speed_kmh?.toFixed(1)}</td>
                                         <td style={{ padding: '1rem', textAlign: 'center', color: '#ef4444', fontWeight: 600 }}>{effort.avg_heartrate || '-'}</td>
                                         <td style={{ padding: '1rem', textAlign: 'center', color: '#eab308' }}>{effort.avg_cadence || '-'}</td>
+                                        <td style={{ padding: '1rem', textAlign: 'center', color: '#17ea08ff' }}>{effort.vam || '-'}</td>
+
                                         <td style={{ padding: '1rem 1.5rem', textAlign: 'right' }}>
                                             <button onClick={() => router.push(`/activities/${effort.activity_id}`)} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', padding: '6px', borderRadius: '6px', cursor: 'pointer' }}><ArrowUpRight size={14} /></button>
                                         </td>

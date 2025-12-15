@@ -19,16 +19,19 @@ type StravaActivity = {
   average_speed: number;
   max_speed: number;
   average_watts?: number;
-  weighted_average_watts?: number; // C'est le NP
+  weighted_average_watts?: number;
   kilojoules?: number;
   device_watts?: boolean;
   average_heartrate?: number;
   max_heartrate?: number;
-  suffer_score?: number; // C'est le TSS
+  suffer_score?: number;
   map: {
     id: string;
-    summary_polyline: string; // C'est le polyline
+    summary_polyline: string;
   };
+  // 🔥 AJOUTE CES DEUX LIGNES ICI
+  start_latlng?: [number, number];
+  end_latlng?: [number, number];
 };
 
 // ---
@@ -167,29 +170,31 @@ export async function fetchNewStravaActivities(userId: string, sessionToken?: st
 export async function importActivities(userId: string, activities: StravaActivity[]) {
     if (activities.length === 0) return { success: true, imported: 0 };
 
-    const toUpsert = activities.map(act => ({
+   const toUpsert = activities.map(act => ({
         user_id: userId,
         strava_id: act.id,
         name: act.name,
-        type: act.type || act.sport_type || "Unknown", // Type général
+        type: act.type || act.sport_type || "Unknown",
         distance_km: parseFloat((act.distance / 1000).toFixed(2)),
         elevation_gain_m: act.total_elevation_gain,
         duration_s: act.moving_time,
         start_time: act.start_date,
-        
         avg_speed_kmh: parseFloat((act.average_speed * 3.6).toFixed(2)),
         max_speed_kmh: parseFloat((act.max_speed * 3.6).toFixed(2)),
-        
-        // 🔥 CORRECTION : Ajout de la FC Moyenne et Max
         avg_heartrate: (act.average_heartrate && act.average_heartrate > 0) ? Math.round(act.average_heartrate) : null,
         max_heart_rate: (act.max_heartrate && act.max_heartrate > 0) ? Math.round(act.max_heartrate) : null,
-        
         avg_power_w: act.average_watts || null,
         np_w: act.weighted_average_watts || null,
         tss: act.suffer_score || null,
-        
         calories_kcal: act.kilojoules ? act.kilojoules / 4.184 : null,
         polyline: act.map?.summary_polyline ? { polyline: act.map.summary_polyline } : null,
+        
+        // 🔥 INJECTION DES COORDONNÉES DE BASE (Start/End)
+        // Cela permet au trigger de fonctionner et au filtrage géographique d'être actif de suite
+        lat_start: act.start_latlng?.[0] || null,
+        lon_start: act.start_latlng?.[1] || null,
+        lat_end: act.end_latlng?.[0] || null,
+        lon_end: act.end_latlng?.[1] || null
     }));
 
     const { error } = await supabaseAdmin

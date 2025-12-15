@@ -9,7 +9,7 @@ import {
   ChevronRight, Zap, 
   Pin, PinOff, 
   Menu, X, 
-  PanelLeftClose, PanelLeftOpen 
+  PanelLeftClose, PanelLeftOpen, Settings2 
 } from 'lucide-react';
 
 const HEADER_HEIGHT = 72;
@@ -63,6 +63,7 @@ const Icons = {
       <path d="M9 10h2" className="line-3"/>
     </svg>
   ),
+  
   Simulation: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-simulation">
       <path className="wind-line-1" d="M2 6h20" strokeDasharray="12 8"></path>
@@ -134,6 +135,7 @@ const Icons = {
       <circle cx="6" cy="15" r="1.5" className="net-node-3" opacity="0.3"></circle>
     </svg>
   ),
+  Admin: <Settings2 size={18} strokeWidth={1.5} className="icon-group" />
 };
 
 const groups = [
@@ -178,6 +180,7 @@ const updateGlobalWidth = (width: string) => {
 export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
+  const isAdmin = session?.user?.id === "1";
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   
@@ -532,6 +535,51 @@ export default function Sidebar() {
               </ul>
             </div>
           ))}
+          {isAdmin && (
+  <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+    <div style={{ 
+        marginBottom: '0.6rem', paddingLeft: !isSidebarOpen ? 0 : '0.8rem', 
+        textAlign: !isSidebarOpen ? 'center' : 'left', display: 'flex', alignItems: 'center'
+    }}>
+        {!isSidebarOpen ? (
+          <div style={{ width: '20px', height: '2px', background: '#d04fd7', margin: '10px auto' }} />
+        ) : (
+          <span style={groupTitleStyle}>ADMINISTRATION</span>
+        )}
+    </div>
+    <ul style={ulStyle}>
+      <li style={{ marginBottom: !isSidebarOpen ? '2px' : '4px' }}>
+        <Link
+          href="/admin"
+          className="nav-link"
+          style={{
+              ...getLinkStyle(pathname === '/admin', hoveredLink === '/admin'),
+              padding: !isSidebarOpen ? '0.5rem' : '0.55rem 0.8rem',
+              justifyContent: !isSidebarOpen ? 'center' : 'flex-start'
+          }}
+          onMouseEnter={() => setHoveredLink('/admin')}
+          onMouseLeave={() => setHoveredLink(null)}
+        >
+          {pathname === '/admin' && <div style={activeIndicatorStyle} />}
+          <span style={{ 
+              marginRight: !isSidebarOpen ? 0 : '12px', display: 'flex', 
+              color: pathname === '/admin' ? '#d04fd7' : 'rgba(255,255,255,0.6)' 
+          }}>
+            {Icons.Admin}
+          </span>
+          <span className="link-text" style={{ 
+              fontSize: '0.85rem', fontWeight: pathname === '/admin' ? 600 : 400,
+              color: pathname === '/admin' ? '#fff' : 'rgba(255,255,255,0.8)',
+              opacity: !isSidebarOpen ? 0 : 1, width: !isSidebarOpen ? 0 : 'auto',
+              transition: 'all 0.3s', overflow: 'hidden', whiteSpace: 'nowrap'
+          }}>
+            Command Center
+          </span>
+        </Link>
+      </li>
+    </ul>
+  </div>
+)}
         </div>
 
         {/* --- ZONE DU BAS : PIN BUTTON & USER --- */}
