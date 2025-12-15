@@ -26,6 +26,8 @@ export type SegmentMatch = {
   max_heartrate?: number;
   avg_cadence?: number;
   vam?: number;
+  rank_global?: number | null;
+  rank_personal?: number | null;
   w_kg?: number;
   segment: {
     name: string;
@@ -103,6 +105,8 @@ export default async function ActivityPage({
         avg_cadence,
         vam,
         w_kg,
+        rank_global,   
+        rank_personal,
         segment:segments (
             name,
             distance_m,

@@ -4,6 +4,41 @@ import { matchSegmentInStream, ActivityStreamForMatching, SegmentIdentity } from
 import { calculatePulsarScore, NPformulaCoggan } from "./physics";
 
 /**
+ * Helper: Calcule le rang Global et Personnel avant insertion
+ */
+async function calculateRanks(supabase: any, segmentId: number, userId: string, durationSeconds: number) {
+  // 1. GLOBAL : Combien de gens ont fait mieux (strictement plus rapide) ?
+  const { count: fasterGlobalCount, error: errGlobal } = await supabase
+    .from('activity_segments')
+    .select('*', { count: 'exact', head: true })
+    .eq('segment_id', segmentId)
+    .lt('duration_s', durationSeconds); // lt = lower than
+
+  // 2. PERSO : Combien de fois TU as fait mieux ?
+  const { count: fasterPersonalCount, error: errPerso } = await supabase
+    .from('activity_segments')
+    .select('*', { count: 'exact', head: true })
+    .eq('segment_id', segmentId)
+    .eq('user_id', userId)
+    .lt('duration_s', durationSeconds);
+
+  if (errGlobal || errPerso) {
+    console.error("Erreur calcul rangs:", errGlobal || errPerso);
+    // Valeurs par défaut safe pour ne pas bloquer
+    return { rank_global: null, rank_personal: null, is_pr: false }; 
+  }
+
+  // Le rang = (Nombre de personnes plus rapides) + 1
+  const rank_global = (fasterGlobalCount || 0) + 1;
+  const rank_personal = (fasterPersonalCount || 0) + 1;
+  
+  // Si je suis 1er perso, c'est un PR
+  const is_pr = rank_personal === 1;
+
+  return { rank_global, rank_personal, is_pr };
+}
+
+/**
  * Scanne une activité contre les segments certifiés.
  * Supporte l'injection directe de streams pour l'onboarding rapide.
  */
@@ -109,6 +144,7 @@ export async function scanActivityAgainstSegments(
           matchesForThisSegment.push({
             activity_id: activityId,
             segment_id: seg.id,
+            user_id: userId, // 🔥 AJOUT CRUCIAL POUR LES INDEX SQL
             duration_s: result.duration_s,
             avg_power_w: Math.round(avgPwr),
             avg_speed_kmh: result.avg_speed_kmh,
@@ -130,39 +166,56 @@ export async function scanActivityAgainstSegments(
         }
       }
 
-      // --- DÉTECTION PR & GAP (LOGIQUE ATOMIQUE) ---
+      // --- DÉTECTION PR & RANKING (CALCUL VIA BDD) ---
       if (matchesForThisSegment.length > 0) {
+        
+        // On récupère le meilleur temps historique pour calculer le GAP si besoin
         const { data: globalBest } = await supabaseAdmin
           .from('activity_segments')
-          .select(`duration_s, activities!inner ( user_id )`)
+          .select('duration_s')
           .eq('segment_id', seg.id)
-          .eq('activities.user_id', userId)
-          .neq('activity_id', activityId) 
+          .eq('user_id', userId)
           .order('duration_s', { ascending: true })
           .limit(1)
           .maybeSingle();
 
         const historicalBestTime = globalBest?.duration_s || Infinity;
-        const bestDurationInSession = [...matchesForThisSegment].sort((a, b) => a.duration_s - b.duration_s)[0].duration_s;
 
-        matchesForThisSegment.forEach(m => {
-          const isBestOfSession = m.duration_s === bestDurationInSession;
-          // Uniquement si c'est le meilleur du jour ET qu'il bat l'histoire
-          m.is_pr = isBestOfSession && (m.duration_s < historicalBestTime);
-          
-          // Gap par rapport à l'histoire si elle existe, sinon par rapport au meilleur du jour
-          m.pr_gap_seconds = (historicalBestTime !== Infinity) 
-            ? (m.duration_s - historicalBestTime) 
-            : (m.duration_s - bestDurationInSession);
-          
-          allNewMatches.push(m);
-        });
+        // 🔥 CALCUL ASYNCHRONE DES RANGS POUR CHAQUE MATCH 🔥
+        // On utilise Promise.all pour attendre que tous les calculs soient finis
+        await Promise.all(matchesForThisSegment.map(async (m) => {
+             // 1. Calculer les rangs réels
+             const { rank_global, rank_personal, is_pr } = await calculateRanks(
+                 supabaseAdmin, 
+                 seg.id, 
+                 userId, 
+                 m.duration_s
+             );
+
+             // 2. Assigner les rangs
+             m.rank_global = rank_global;
+             m.rank_personal = rank_personal;
+             m.is_pr = is_pr;
+
+             // 3. Calcul du GAP
+             // Si c'est un PR, le gap est 0 (ou négatif, mais restons sur 0 pour l'UI)
+             // Sinon, c'est la diff avec l'ancien record
+             if (is_pr) {
+                 m.pr_gap_seconds = 0;
+             } else {
+                 m.pr_gap_seconds = (historicalBestTime !== Infinity) 
+                    ? (m.duration_s - historicalBestTime) 
+                    : 0;
+             }
+
+             allNewMatches.push(m);
+        }));
       }
     }
 
     // 3. INSERTION FINALE (Blindage contre les doublons via start_index)
     if (allNewMatches.length > 0) {
-      console.log(`[SCANNER] Sauvegarde de ${allNewMatches.length} efforts détectés...`);
+      console.log(`[SCANNER] Sauvegarde de ${allNewMatches.length} efforts détectés avec rangs...`);
       const { error: upsertError } = await supabaseAdmin
         .from('activity_segments')
         .upsert(allNewMatches, { onConflict: 'activity_id, segment_id, start_index' });

@@ -359,3 +359,13 @@ TRUNCATE TABLE public.users, public.activities, public.segments, public.simulati
 METEO SEGMENTS 
 
 
+
+Pour migrer vers un truc plus "pro"
+
+
+Composant,Solution Actuelle,"Solution ""Pro"" (Strava-like)"
+Fichiers GPS,Colonne JSON dans Postgres ❌,Object Storage (S3 / R2) ✅
+Meta-données,Postgres,Postgres (Cluster géré)
+Géospatial,Calculs JS / SQL simple,PostGIS Indexing
+File d'attente,Table SQL (admin_jobs),Redis / SQS / Kafka
+Hébergement,Vercel (Front) + Supabase (Back),Kubernetes (AWS EKS / GCP GKE)

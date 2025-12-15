@@ -1073,6 +1073,7 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
                     <div style={{display: 'flex', justifyContent: 'space-between'}}>
                         <div>
                             <button onClick={() => router.push('/activities')} style={styles.backButton}><ArrowLeft size={16} /> RETOUR</button>
+                            <h1>{activity.user_id}</h1>
                             <h1 style={styles.title}>{activity.name}</h1>
 
                             <div style={{ 

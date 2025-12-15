@@ -18,6 +18,7 @@ node_modules
 # Fichiers systèmes inutiles
 .DS_Store
 *.pem
+Tasks.txt
 
 # Logs d'erreurs
 npm-debug.log*
