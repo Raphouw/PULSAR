@@ -146,24 +146,44 @@ export default function SegmentDisplay({ segment, currentUserId }: { segment: Se
     }, [segment.efforts, currentUserId]);
 
     const processedEfforts = useMemo(() => {
+        // 1. Choix de la source
         let base = activeTab === 'personal' ? personalEfforts : segment.efforts;
 
+        // 2. SI CLASSEMENT GLOBAL : DÉDUPLICATION PAR USER (On garde le meilleur temps)
         if (activeTab === 'global') {
+            const uniqueUsersMap = new Map();
+            
+            base.forEach((effort: any) => {
+                const uId = effort.user_id;
+                // Si on n'a pas encore vu ce user, ou si ce chrono est meilleur que celui stocké
+                if (!uniqueUsersMap.has(uId) || effort.duration_s < uniqueUsersMap.get(uId).duration_s) {
+                    uniqueUsersMap.set(uId, effort);
+                }
+            });
+            
+            // On transforme la Map en Tableau
+            base = Array.from(uniqueUsersMap.values());
+
+            // 3. Application des filtres (Poids/Age) APRES déduplication
             base = base.filter((e: any) => {
                 const w = e.user?.weight || 75;
                 const a = e.user?.age || 35;
+                
                 let weightMatch = true;
                 if (filterWeight === '< 65kg') weightMatch = w < 65;
                 else if (filterWeight === '65-80kg') weightMatch = w >= 65 && w <= 80;
                 else if (filterWeight === '> 80kg') weightMatch = w > 80;
+
                 let ageMatch = true;
                 if (filterAge === 'Espoir') ageMatch = a < 30;
                 else if (filterAge === 'Senior') ageMatch = a >= 30 && a <= 45;
                 else if (filterAge === 'Master') ageMatch = a > 45;
+
                 return weightMatch && ageMatch;
             });
         }
 
+        // 4. Tri Final
         return [...base].sort((a: any, b: any) => {
             let valA, valB;
             switch (sortBy) {
@@ -178,8 +198,16 @@ export default function SegmentDisplay({ segment, currentUserId }: { segment: Se
                 case 'heartrate': valA = a.avg_heartrate || 0; valB = b.avg_heartrate || 0; break;
                 case 'cadence': valA = a.avg_cadence || 0; valB = b.avg_cadence || 0; break;
                 case 'vam': valA = a.vam || 0;  valB = b.vam || 0; break;
+                case 'duration_s': valA = a.duration_s; valB = b.duration_s; break;
                 default: valA = a.duration_s; valB = b.duration_s;
             }
+            if (valA === valB) {
+    // Si les valeurs sont identiques, on trie par date (le plus vieux en premier)
+    // Cela respecte la logique "Premier arrivé, Premier servi" pour l'affichage
+    const dateA = new Date(a.start_time).getTime();
+    const dateB = new Date(b.start_time).getTime();
+    return dateA - dateB;
+}
             return sortOrder === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
         });
     }, [segment.efforts, activeTab, personalEfforts, filterWeight, filterAge, sortBy, sortOrder]);
@@ -321,7 +349,7 @@ export default function SegmentDisplay({ segment, currentUserId }: { segment: Se
                 <div style={{ borderBottom: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', padding: '0 1rem', justifyContent: 'space-between' }}>
                     <div style={{ display: 'flex' }}>
                         <button onClick={() => setActiveTab('personal')} style={{ padding: '1.5rem 2rem', background: 'transparent', border: 'none', borderBottom: activeTab === 'personal' ? '2px solid #d04fd7' : '2px solid transparent', color: activeTab === 'personal' ? '#fff' : '#666', fontWeight: 700, cursor: 'pointer' }}>HISTORIQUE</button>
-                        <button onClick={() => setActiveTab('global')} style={{ padding: '1.5rem 2rem', background: 'transparent', border: 'none', borderBottom: activeTab === 'global' ? '2px solid #00f3ff' : '2px solid transparent', color: activeTab === 'global' ? '#fff' : '#666', fontWeight: 700, cursor: 'pointer' }}>HALL OF LEGENDS</button>
+                        <button onClick={() => setActiveTab('global')} style={{ padding: '1.5rem 2rem', background: 'transparent', border: 'none', borderBottom: activeTab === 'global' ? '2px solid #00f3ff' : '2px solid transparent', color: activeTab === 'global' ? '#fff' : '#666', fontWeight: 700, cursor: 'pointer' }}>CLASSEMENT</button>
                     </div>
                     {activeTab === 'global' && (
                         <div style={{ display: 'flex', gap: '8px', paddingRight: '1rem' }}>

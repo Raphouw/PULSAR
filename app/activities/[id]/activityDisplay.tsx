@@ -1281,6 +1281,7 @@ export default function ActivityDisplay({ activity }: { activity: Activity }) {
                 segments={officialSegments} 
                 streams={localStreams} // 🔥 AJOUTER CECI
                 userWeight={activity.user_weight || 75} // 🔥 AJOUTER CECI
+                currentUserId={String(activity.user_id)}
             />
         ) : (
             <div style={styles.glassCard}>

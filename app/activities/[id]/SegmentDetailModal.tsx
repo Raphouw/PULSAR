@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useMemo } from 'react';
-import { X, Zap, Activity, Clock, TrendingUp, ArrowUpRight, Gauge, Heart, Target, ZapOff } from 'lucide-react';
+import React, { useMemo, useState, useEffect } from 'react';
+import { X, Zap, Activity, Clock, TrendingUp, Gauge, Heart, Target, ZapOff, Ghost } from 'lucide-react';
 import { ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { ActivityStreams } from '../../../types/next-auth';
 
@@ -32,75 +32,76 @@ type SegmentMatch = {
 
 type ChartDataPoint = {
   dist: number;
+  time: number;
   Altitude: number;
   watts: number;
   BPM: number;
+  speed: number;
+  gradient: number;
+  ghostWatts?: number | null;
 };
 
-// --- HELPERS SCORING ---
+// --- ANIMATION COMPONENT ---
+const NumberTicker = ({ value, duration = 1500, delay = 0, decimals = 0 }: { value: number, duration?: number, delay?: number, decimals?: number }) => {
+    const [count, setCount] = useState(0);
+    useEffect(() => { setCount(0); }, [value]);
+    useEffect(() => {
+      let startTimestamp: number | null = null;
+      const step = (timestamp: number) => {
+        if (!startTimestamp) startTimestamp = timestamp;
+        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+        const ease = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+        setCount(ease * value);
+        if (progress < 1) window.requestAnimationFrame(step);
+      };
+      const timer = setTimeout(() => window.requestAnimationFrame(step), delay);
+      return () => clearTimeout(timer);
+    }, [value, duration, delay]);
+    return <>{count.toFixed(decimals)}</>;
+};
 
-const getDist = (lat1: number, lon1: number, lat2: number, lon2: number) => {
-    const R = 6371e3; const φ1 = lat1 * Math.PI / 180; const φ2 = lat2 * Math.PI / 180;
-    const a = Math.sin(((lat2-lat1)*Math.PI/180)/2)**2 + Math.cos(φ1)*Math.cos(φ2)*Math.sin(((lon2-lon1)*Math.PI/180)/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+// --- HELPERS ---
+
+// 🔥 NOUVELLE FONCTION : Rééchantillonnage intelligent
+// Permet d'adapter le tableau du Ghost (qui a X points) au tableau actuel (qui a Y points)
+// via une interpolation linéaire pour éviter les pics/trous artificiels.
+// 🔥 NOUVELLE FONCTION : Rééchantillonnage intelligent
+const resampleArray = (data: number[], targetLength: number): number[] => {
+    if (!data || data.length === 0) return new Array(targetLength).fill(0);
+    if (data.length === targetLength) return data;
+
+    // CORRECTION ICI : on ajoute le type : number[]
+    const newData: number[] = []; 
+    const step = (data.length - 1) / (targetLength - 1);
+
+    for (let i = 0; i < targetLength; i++) {
+        const exactIndex = i * step;
+        const lowerIndex = Math.floor(exactIndex);
+        const upperIndex = Math.ceil(exactIndex);
+        const weight = exactIndex - lowerIndex;
+
+        const val1 = data[lowerIndex] || 0;
+        const val2 = data[upperIndex] || val1; 
+
+        // Interpolation simple
+        newData.push(val1 * (1 - weight) + val2 * weight);
+    }
+    return newData;
 };
 
 const calculatePulsarIndex = (segment: any): { index: number, density: number } => {
     const H = Math.max(1, segment.elevation_gain_m || 0); 
     const L = Math.max(100, segment.distance_m); 
-    const AvgP = Math.max(0, segment.average_grade); 
-    const density = H / (L / 1000); 
-
-    let sigma = 0;
-    if (segment.polyline && Array.isArray(segment.polyline) && segment.polyline.length > 5) {
-        let sigmaGrades: number[] = [];
-        let distAcc = 0;
-        let lastEle = segment.polyline[0][2];
-        for (let i = 1; i < segment.polyline.length; i++) {
-            const stepDist = getDist(segment.polyline[i-1][0], segment.polyline[i-1][1], segment.polyline[i][0], segment.polyline[i][1]);
-            distAcc += stepDist;
-            if (distAcc >= 25) {
-                sigmaGrades.push(((segment.polyline[i][2] - lastEle) / distAcc) * 100);
-                distAcc = 0; lastEle = segment.polyline[i][2];
-            }
-        }
-        if (sigmaGrades.length > 1) {
-            const mean = sigmaGrades.reduce((a, b) => a + b, 0) / sigmaGrades.length;
-            sigma = Math.sqrt(sigmaGrades.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / sigmaGrades.length);
-        }
-    }
-    
-    const Alt = H;
-    if (sigma === 0) sigma = AvgP > 3 ? 1.2 : 0.5;
     const Base = (20 * (Math.pow(H, 2) / L)) + (3 * H);
-    const Oxygen = 1 + (Alt / 8000);
-    const Pivot = 1 + ((sigma * (AvgP - 8)) / 50);
-    
-    return { index: Math.round(Base * Oxygen * Pivot), density };
+    return { index: Math.round(Base * (1 + H/8000)), density: H / (L/1000) };
 };
 
-const getCategoryBadge = (index: number, segment: any, density: number) => {
-    if (segment.distance_m >= 50000 && density < 30) return { label: 'BOUCLE MYTHIQUE', color: '#00f3ff', textColor: '#000' };
+const getCategoryBadge = (index: number) => {
     if (index > 7500) return { label: 'ICONIC', color: '#000', textColor: '#d04fd7', border: true }; 
-    if (index > 6500) return { label: 'HC', color: '#ef4444', textColor: '#fff' }; 
-    if (index > 5000) return { label: 'CAT 1', color: '#f97316', textColor: '#fff' }; 
-    if (index > 3000) return { label: 'CAT 2', color: '#eab308', textColor: '#000' }; 
-    if (index > 1500) return { label: 'CAT 3', color: '#84cc16', textColor: '#000' }; 
-    if (index > 1000) return { label: 'CAT 4', color: '#10b981', textColor: '#fff' }; 
-    return { label: 'COTE REGION', color: '#0077B6', textColor:'#fff' };
+    if (index > 5000) return { label: 'HC', color: '#ef4444', textColor: '#fff' }; 
+    if (index > 1000) return { label: 'CAT 1', color: '#f97316', textColor: '#fff' }; 
+    return { label: 'REGIONAL', color: '#0077B6', textColor:'#fff' };
 };
-
-const Badge = ({ data }: { data: any }) => (
-    <span style={{ 
-        background: data.color, color: data.textColor, padding: '6px 14px', borderRadius: '8px', 
-        fontSize: '0.75rem', fontWeight: 900, letterSpacing: '0.5px', 
-        border: data.border ? '1px solid #d04fd7' : 'none', 
-        boxShadow: data.label === 'ICONIC' ? '0 0 15px rgba(208, 79, 215, 0.4)' : 'none',
-        textTransform: 'uppercase'
-    }}>
-        {data.label}
-    </span>
-);
 
 const smoothData = (data: (number | null)[], windowSize: number = 5): number[] => {
   return data.map((_, idx, arr) => {
@@ -112,54 +113,250 @@ const smoothData = (data: (number | null)[], windowSize: number = 5): number[] =
   });
 };
 
-// --- MAIN COMPONENT ---
+const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+};
 
+// --- SUB-COMPONENTS ---
+const Badge = ({ data }: { data: any }) => (
+    <span className={`px-3.5 py-1.5 rounded-lg text-xs font-black tracking-wider uppercase ${data.border ? 'border border-[#d04fd7]' : ''} ${data.label === 'ICONIC' ? 'shadow-[0_0_15px_rgba(208,79,215,0.4)]' : ''}`} style={{ backgroundColor: data.color, color: data.textColor }}>{data.label}</span>
+);
+
+const KpiCard = ({ label, value, unit, icon: Icon, color, compact, ghostValue }: any) => (
+  <div className={`bg-[#0E0E11] border border-white/5 rounded-2xl flex flex-col justify-center ${compact ? 'p-2.5 min-h-[68px]' : 'p-3 min-h-[80px]'}`}>
+    <div className="flex items-center justify-between text-[0.55rem] text-[#7e7d7d] font-black uppercase mb-0.5 tracking-wider">
+      <span>{label}</span>
+      <Icon size={10} color={color} />
+    </div>
+    <div className="flex items-end flex-wrap gap-x-2">
+        <div className={`flex items-baseline gap-0.5 font-black text-white leading-none ${compact ? 'text-2xl' : 'text-3xl'}`}>
+            {value}
+            {unit && <span className="text-[0.65rem] text-gray-700 font-extrabold ml-1">{unit}</span>}
+        </div>
+        {ghostValue !== undefined && ghostValue !== null && (
+            <div className="text-[10px] font-bold text-amber-500 mb-1 animate-in fade-in slide-in-from-bottom-1 whitespace-nowrap">
+                ({ghostValue}{unit})
+            </div>
+        )}
+    </div>
+  </div>
+);
+
+// CUSTOM TOOLTIP
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const watts = payload.find((p: any) => p.dataKey === 'watts')?.value;
+      const bpm = payload.find((p: any) => p.dataKey === 'BPM')?.value;
+      const ghost = payload.find((p: any) => p.dataKey === 'ghostWatts')?.value;
+  
+      return (
+        <div className="bg-[#050505]/95 backdrop-blur-md border border-white/10 p-3 rounded-xl shadow-2xl min-w-[120px]">
+          <div className="text-[10px] text-gray-500 font-black mb-2 uppercase tracking-wider border-b border-white/5 pb-1">
+            {label} km
+          </div>
+          <div className="space-y-1">
+            <div className="flex justify-between items-center gap-4">
+                <span className="text-[10px] font-bold text-[#d04fd7]">PUISSANCE</span>
+                <span className="text-sm font-black text-white">{watts}w</span>
+            </div>
+            {ghost !== undefined && (
+                <div className="flex justify-between items-center gap-4">
+                    <span className="text-[10px] font-bold text-amber-500">GHOST PR</span>
+                    <span className="text-sm font-black text-amber-100">{ghost}w</span>
+                </div>
+            )}
+            <div className="flex justify-between items-center gap-4">
+                <span className="text-[10px] font-bold text-red-500">CARDIO</span>
+                <span className="text-sm font-black text-white">{bpm}bpm</span>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    return null;
+  };
+
+// --- MAIN COMPONENT ---
 export default function SegmentDetailModal({ match, streams, onClose, user }: { match: SegmentMatch, streams: ActivityStreams | null, onClose: () => void, user?: any }) {
   if (!match) return null;
 
   const USER_FTP = user?.ftp || 300; 
+  const USER_WEIGHT = user?.weight || 68; 
+  
+  const [showGhost, setShowGhost] = useState(false);
+  const [ghostData, setGhostData] = useState<number[] | null>(null);
+  
+  const [ghostStats, setGhostStats] = useState<{ 
+      watts: number, 
+      time: number, 
+      hr: number, 
+      speed: number,
+      vam: number,
+      wkg: number,
+      tss: number,
+      if: number
+  } | null>(null);
+  
+  const [ghostLoading, setGhostLoading] = useState(false);
+  const [isPrMatch, setIsPrMatch] = useState(false);
+
+  useEffect(() => {
+      const checkPrStatus = async () => {
+          try {
+              const res = await fetch(`/api/segments/leaderboard?segment_id=${match.segment_id}`);
+              if(res.ok) {
+                  const data = await res.json();
+                  const pr = data.personal?.[0];
+                  if (pr && pr.id === match.id) setIsPrMatch(true);
+              }
+          } catch(e) { console.error("Err check PR", e) }
+      };
+      checkPrStatus();
+  }, [match.id, match.segment_id]);
+
+ const fetchGhostStreams = async () => {
+      if (ghostData || ghostLoading) {
+          setShowGhost(!showGhost);
+          return;
+      }
+      setGhostLoading(true);
+      try {
+          // 1. On récupère les infos du Leaderboard (pour avoir l'ID du PR et ses index)
+          const lbRes = await fetch(`/api/segments/leaderboard?segment_id=${match.segment_id}`);
+          const lbData = await lbRes.json();
+          const prEffort = lbData.personal?.[0];
+
+          if (!prEffort || !prEffort.activity_id) {
+              console.warn("Pas de PR trouvé ou pas d'activité liée");
+              setGhostLoading(false);
+              return;
+          }
+
+          // --- CALCULS DES STATS (Code existant inchangé...) ---
+          const prTime = prEffort.duration_s || 1;
+          const prPower = prEffort.avg_power_w || 0;
+          let calcSpeed = prEffort.avg_speed_kmh;
+          if (!calcSpeed || calcSpeed === 0) calcSpeed = (match.segment.distance_m / prTime) * 3.6;
+          
+          const prIF = prPower / USER_FTP;
+          const prTSS = Math.round((prTime * prPower * prIF) / (USER_FTP * 36));
+          const prWkg = prEffort.w_kg || (prPower / USER_WEIGHT);
+          const prVam = prEffort.vam || ((match.segment.elevation_gain_m / prTime) * 3600);
+
+          setGhostStats({
+              watts: prPower,
+              time: prTime,
+              hr: prEffort.avg_heartrate || 0,
+              speed: calcSpeed, 
+              vam: Math.round(prVam),
+              wkg: prWkg,
+              tss: prTSS,
+              if: Number(prIF.toFixed(2))
+          });
+          // -----------------------------------------------------
+
+          // 2. RÉCUPÉRATION DES STREAMS DÉCOUPÉS
+          // 🔥 C'est ici que la magie opère : on demande à l'API de couper pour nous
+          let url = `/api/activities/${prEffort.activity_id}/streams`;
+          
+          // On vérifie que les index existent bien dans la réponse du leaderboard
+          if (prEffort.start_index !== undefined && prEffort.end_index !== undefined) {
+              url += `?start=${prEffort.start_index}&end=${prEffort.end_index}`;
+          }
+
+          const streamsRes = await fetch(url); 
+          if (!streamsRes.ok) throw new Error("Streams PR introuvables");
+          
+          const streamsJson = await streamsRes.json();
+          
+          // Maintenant streamsJson.watts contient UNIQUEMENT le segment.
+          // Plus besoin de faire de slice manuel ici si l'API a fait le job.
+          const segmentWatts = streamsJson.watts || [];
+          
+          setGhostData(segmentWatts); 
+          setShowGhost(true);
+
+      } catch (err) {
+          console.error("Erreur Ghost:", err);
+      } finally {
+          setGhostLoading(false);
+      }
+  };
 
   const { chartData, stats, pulsar, powerZones } = useMemo(() => {
     const { index, density } = calculatePulsarIndex(match.segment);
-    const cat = getCategoryBadge(index, match.segment, density);
+    const cat = getCategoryBadge(index);
     
-    const defaultStats = {
-      tss: 0, if: "0.00", p1: 0, p2: 0, diffPercent: 0,
-      pacingStatus: { label: 'EFFORT RÉGULIER', color: '#666', icon: Target }
-    };
-
+    const defaultStats = { tss: 0, if: "0.00", p1: 0, p2: 0, diffPercent: 0, pacingStatus: { label: 'EFFORT RÉGULIER', color: '#666', icon: Target } };
+    
     if (!streams) return { chartData: [] as ChartDataPoint[], stats: defaultStats, pulsar: { index, cat }, powerZones: [] };
     
     const rawWatts = streams.watts || [];
-    const smoothedWatts = smoothData(rawWatts, 5);
+    // Données actuelles lissées
+    const smoothedWatts = smoothData(rawWatts, 5); 
+    
+    // 🔥 PRÉPARATION DU GHOST AVEC RÉÉCHANTILLONNAGE
+    // On veut autant de points Ghost que de points Actuels pour l'affichage
+    const totalCurrentPoints = (match.end_index - match.start_index) + 1;
+    
+    let alignedGhostWatts: number[] | null = null;
+
+    if (ghostData && ghostData.length > 0) {
+        // 1. D'abord on lisse le Ghost brut pour enlever les micros-coupures (spikes à 0)
+        // On utilise un windowSize plus grand (ex: 10 ou 15) car c'est un "fond" comparatif
+        const smoothedRawGhost = smoothData(ghostData, 10);
+        
+        // 2. Ensuite on le redimensionne pour qu'il ait EXACTEMENT la taille du tableau actuel
+        alignedGhostWatts = resampleArray(smoothedRawGhost, totalCurrentPoints);
+    }
+
     const dists = streams.distance || [];
     const alts = streams.altitude || [];
     const hrs = streams.heartrate || [];
+    const speeds = (streams as any).velocity_smooth || []; 
     
     const data: ChartDataPoint[] = [];
     const startDist = dists[match.start_index] || 0;
+    let accumulatedTime = 0;
 
-    // --- CALCUL ZONES Z1-Z7 ---
     const zoneDef = [
-      { name: 'Z7', min: 1.51, color: '#ffffff', label: 'Neuromusculaire' },
-      { name: 'Z6', min: 1.21, color: '#9333ea', label: 'Cap. Anaérobie' },
-      { name: 'Z5', min: 1.06, color: '#ef4444', label: 'PMA' },
-      { name: 'Z4', min: 0.91, color: '#f97316', label: 'Seuil' },
-      { name: 'Z3', min: 0.76, color: '#eab308', label: 'Tempo' },
-      { name: 'Z2', min: 0.56, color: '#10b981', label: 'Endurance' },
-      { name: 'Z1', min: 0, color: '#3b82f6', label: 'Récupération' },
+      { name: 'Z7', min: 1.51, color: '#ffffff' },
+      { name: 'Z6', min: 1.21, color: '#9333ea' },
+      { name: 'Z5', min: 1.06, color: '#ef4444' },
+      { name: 'Z4', min: 0.91, color: '#f97316' },
+      { name: 'Z3', min: 0.76, color: '#eab308' },
+      { name: 'Z2', min: 0.56, color: '#10b981' },
+      { name: 'Z1', min: 0, color: '#3b82f6' },
     ];
-
     const counts = new Array(zoneDef.length).fill(0);
 
     for (let i = match.start_index; i <= match.end_index; i++) {
       const w = rawWatts[i] || 0;
       const ratio = w / USER_FTP;
+      
+      // Index local (de 0 à N)
+      const localIndex = i - match.start_index;
+
+      // Récupération de la valeur Ghost alignée
+      let currentGhostWatt: number | null = null;
+      if (alignedGhostWatts) {
+          // On prend simplement l'index correspondant car les tableaux font la même taille maintenant !
+          currentGhostWatt = alignedGhostWatts[localIndex] || 0;
+      } else if (showGhost && !ghostData) {
+           currentGhostWatt = smoothedWatts[i] * 1.05; 
+      }
+
       data.push({
         dist: parseFloat((((dists[i] ?? 0) - startDist) / 1000).toFixed(2)),
+        time: accumulatedTime++,
         Altitude: alts[i] ?? 0,
         watts: smoothedWatts[i] ?? 0,
-        BPM: hrs[i] ?? 0
+        BPM: hrs[i] ?? 0,
+        speed: speeds[i] ? parseFloat((speeds[i] * 3.6).toFixed(1)) : 0,
+        gradient: 0,
+        ghostWatts: currentGhostWatt ? Math.round(currentGhostWatt) : null
       });
 
       for (let z = 0; z < zoneDef.length; z++) {
@@ -171,10 +368,7 @@ export default function SegmentDetailModal({ match, streams, onClose, user }: { 
     }
 
     const totalPoints = (match.end_index - match.start_index) || 1;
-    const powerZonesData = zoneDef.map((z, i) => ({
-      ...z,
-      percent: (counts[i] / totalPoints) * 100
-    })).reverse(); // On inverse pour afficher de Z1 en bas à Z7 en haut ou vice-versa
+    const powerZonesData = zoneDef.map((z, i) => ({ ...z, percent: (counts[i] / totalPoints) * 100 })).reverse(); 
 
     const np = match.np_w || match.avg_power_w || 1;
     const intensityFactor = np / USER_FTP;
@@ -195,117 +389,95 @@ export default function SegmentDetailModal({ match, streams, onClose, user }: { 
       pulsar: { index, cat },
       powerZones: powerZonesData
     };
-  }, [streams, match, USER_FTP]);
-
-const formatTime = (seconds: number) => {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-
-    // Si l'effort dure plus d'une heure
-    if (h > 0) {
-        return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    }
-    
-    // Pour les efforts de moins d'une heure (ex: 38:04)
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-};
-
+  }, [streams, match, USER_FTP, ghostData, showGhost]);
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '20px', backdropFilter: 'blur(20px)', backgroundColor: 'rgba(0,0,0,0.85)' }} onClick={onClose}>
-      <div style={{ width: '100%', maxWidth: '1200px', background: '#0A0A0C', border: '1px solid #222', borderRadius: '32px', overflow: 'hidden', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' }} onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200" onClick={onClose}>
+      <div className="w-full max-w-[1200px] bg-[#0A0A0C] border border-white/10 rounded-[32px] overflow-hidden shadow-2xl animate-in zoom-in-95 duration-200 scrollbar-hide" onClick={e => e.stopPropagation()}>
         
         {/* HEADER */}
-        <div style={{ padding: '2rem 3rem', borderBottom: '1px solid #1a1a1a', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'linear-gradient(to bottom, #111, #0A0A0C)' }}>
+        <div className="px-12 py-8 border-b border-white/5 flex justify-between items-center bg-gradient-to-b from-[#111] to-[#0A0A0C]">
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '15px', marginBottom: '8px' }}>
-                <h2 style={{ fontSize: '2.4rem', fontWeight: 950, color: '#fff', margin: 0, letterSpacing: '-1.5px' }}>{match.segment.name.toUpperCase()}</h2>
+            <div className="flex items-center gap-4 mb-2">
+                <h2 className="text-4xl font-black text-white uppercase tracking-tighter m-0">{match.segment.name}</h2>
                 <Badge data={pulsar.cat} />
             </div>
-            <div style={{ display: 'flex', gap: '20px', color: '#666', fontSize: '1rem', fontWeight: 700 }}>
-              <span style={{ color: '#d04fd7' }}>{(match.segment.distance_m / 1000).toFixed(2)} KM</span>
+            <div className="flex gap-5 text-gray-500 text-base font-bold">
+              <span className="text-[#d04fd7]">{(match.segment.distance_m / 1000).toFixed(2)} KM</span>
               <span>•</span>
-              <span style={{ color: match.segment.average_grade > 5 ? '#ef4444' : '#10b981' }}>{match.segment.average_grade.toFixed(2)}% MOY</span>
-              <span>•</span>
-              <span style={{ color: '#fff' }}>SCORE PULSAR : <span style={{ color: '#d04fd7', fontFamily: 'monospace' }}>{pulsar.index}</span></span>
+              <span className={match.segment.average_grade > 5 ? 'text-red-500' : 'text-emerald-500'}>{match.segment.average_grade.toFixed(2)}% MOY</span>
             </div>
           </div>
-          <button onClick={onClose} style={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: '16px', padding: '12px', color: '#fff', cursor: 'pointer' }}>
-            <X size={24} />
-          </button>
+          
+          <div className="flex gap-4">
+            <button onClick={fetchGhostStreams} disabled={isPrMatch} className={`flex items-center gap-2 px-4 py-3 rounded-xl font-bold transition-all border ${isPrMatch ? 'bg-yellow-500/10 border-yellow-500 text-yellow-500 cursor-default' : showGhost ? 'bg-amber-500/10 border-amber-500 text-amber-500 shadow-[0_0_15px_rgba(245,158,11,0.3)]' : 'bg-[#1a1a1a] border-[#333] text-gray-500 hover:text-white'}`}>
+                {isPrMatch ? <><Target size={18}/> C'EST LE PR !</> : <><Ghost size={18}/> {ghostLoading ? 'CHARGEMENT...' : 'VS PR'}</>}
+            </button>
+            <button onClick={onClose} className="bg-[#1a1a1a] border border-[#333] rounded-2xl p-3 text-white hover:bg-white/10 transition-colors"><X size={24} /></button>
+          </div>
         </div>
 
         {/* DASHBOARD GRID */}
-        <div style={{ 
-          padding: '2rem 3rem', 
-          display: 'grid', 
-          gridTemplateColumns: '1.1fr 1fr 0.9fr', 
-          gap: '1.5rem',
-          alignItems: 'stretch' 
-        }}>
-
-            
-          
-          {/* COL 1: KPIs COMPACTS */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
-            <KpiCard label="Chrono" value={formatTime(match.duration_s)} icon={Clock} color="#fff" compact />
-            <KpiCard label="Watts NP" value={match.np_w || match.avg_power_w} unit="W" icon={Zap} color="#d04fd7" compact />
-            <KpiCard label="Cardio Moy" value={match.avg_heartrate || '--'} unit="BPM" icon={Heart} color="#ff4d4d" compact />
-            <KpiCard label="Rapport W/Kg" value={match.w_kg?.toFixed(2)} unit="w/kg" icon={Gauge} color="#f59e0b" compact />
-            <KpiCard label="Score TSS" value={stats.tss} unit="pts" icon={Target} color="#10b981" compact />
-            <KpiCard label="Intensité (IF)" value={stats.if} unit="if" icon={Activity} color="#00f3ff" compact />
-            <KpiCard label="Vitesse Moy." value={match.avg_speed_kmh} unit="km/h" icon={Target} color="#3f185bff" compact />
-            <KpiCard label="VAM" value={match.vam} unit="m/h" icon={Activity} color="#b2af0bff" compact />
+        <div className="p-12 grid grid-cols-1 lg:grid-cols-[1.1fr_1fr_0.9fr] gap-6 items-stretch">
+          <div className="grid grid-cols-2 gap-3">
+            <KpiCard label="Chrono" value={formatTime(match.duration_s)} icon={Clock} color="#fff" compact ghostValue={showGhost && ghostStats ? formatTime(ghostStats.time) : undefined} />
+            <KpiCard label="Watts NP" value={<NumberTicker value={match.np_w || match.avg_power_w} />} unit="W" icon={Zap} color="#d04fd7" compact ghostValue={showGhost && ghostStats ? ghostStats.watts : undefined} />
+            <KpiCard label="Cardio Moy" value={<NumberTicker value={match.avg_heartrate || 0} />} unit="BPM" icon={Heart} color="#ff4d4d" compact ghostValue={showGhost && ghostStats ? ghostStats.hr : undefined} />
+            <KpiCard label="Vitesse Moy." value={<NumberTicker value={match.avg_speed_kmh} decimals={1} />} unit="km/h" icon={Gauge} color="#3f185b" compact ghostValue={showGhost && ghostStats ? ghostStats.speed.toFixed(1) : undefined} />
+            <KpiCard label="Score TSS" value={<NumberTicker value={stats.tss} />} unit="pts" icon={Target} color="#10b981" compact ghostValue={showGhost && ghostStats ? ghostStats.tss : undefined} />
+            <KpiCard label="Intensité (IF)" value={stats.if} unit="if" icon={Activity} color="#00f3ff" compact ghostValue={showGhost && ghostStats ? ghostStats.if : undefined} />
+            <KpiCard label="Rapport W/Kg" value={<NumberTicker value={match.w_kg || 0} decimals={2} />} unit="w/kg" icon={Gauge} color="#f59e0b" compact ghostValue={showGhost && ghostStats ? ghostStats.wkg.toFixed(2) : undefined} />
+            <KpiCard label="VAM" value={<NumberTicker value={match.vam || 0} />} unit="m/h" icon={Activity} color="#b2af0b" compact ghostValue={showGhost && ghostStats ? Math.round(ghostStats.vam) : undefined} />
           </div>
 
-          {/* COL 2: ZONES Z1-Z7 */}
-          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #1a1a1a', borderRadius: '24px', padding: '1.2rem' }}>
-            <div style={{ fontSize: '0.6rem', color: '#7e7d7dff', fontWeight: 900, textTransform: 'uppercase', marginBottom: '1rem', letterSpacing: '1px' }}>Répartition Zones Power</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-5">
+            <div className="text-[0.6rem] text-[#7e7d7d] font-black uppercase mb-4 tracking-widest">Répartition Zones Power</div>
+            <div className="flex flex-col gap-1.5">
               {powerZones.slice().reverse().map((zone) => (
-                <div key={zone.name} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '1.05rem', color: zone.percent > 0 ? '#fff' : '#7e7d7dff', fontWeight: 900, width: '20px' }}>{zone.name}</span>
-                  <div style={{ flex: 1, height: '10px', background: '#111', borderRadius: '3px', overflow: 'hidden' }}>
-                    <div style={{ width: `${zone.percent}%`, height: '100%', background: zone.color, boxShadow: zone.percent > 0 ? `0 0 8px ${zone.color}40` : 'none', transition: 'width 1s ease' }} />
+                <div key={zone.name} className="flex items-center gap-2">
+                  <span className={`text-base font-black w-5 ${zone.percent > 0 ? 'text-white' : 'text-[#7e7d7d]'}`}>{zone.name}</span>
+                  <div className="flex-1 h-2.5 bg-[#111] rounded-sm overflow-hidden">
+                    <div className="h-full transition-all duration-[1500ms] ease-out w-0 animate-in slide-in-from-left-0" style={{ width: `${zone.percent}%`, background: zone.color, boxShadow: zone.percent > 0 ? `0 0 8px ${zone.color}40` : 'none' }} />
                   </div>
-                  <span style={{ fontSize: '0.55rem', color: '#666', fontWeight: 800, width: '25px', textAlign: 'right' }}>{Math.round(zone.percent)}%</span>
+                  <span className="text-[0.55rem] text-gray-500 font-extrabold w-6 text-right"><NumberTicker value={zone.percent} />%</span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* COL 3: PACING / GESTION EFFORT */}
-          <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid #1a1a1a', borderRadius: '24px', padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <div style={{ fontSize: '0.65rem', color: '#7e7d7dff', fontWeight: 900, textTransform: 'uppercase', marginBottom: '1.2rem', letterSpacing: '1px' }}>Gestion de l'effort</div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <div style={{ textAlign: 'left' }}>
-                <div style={{ fontSize: '0.6rem', color: '#555' }}>DÉBUT</div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#fff' }}>{Math.round(stats.p1)}<small style={{fontSize: '0.5em', marginLeft: '2px'}}>W</small></div>
+          <div className="bg-white/[0.02] border border-white/5 rounded-3xl p-6 flex flex-col justify-center">
+            <div className="text-[0.65rem] text-[#7e7d7d] font-black uppercase mb-5 tracking-widest">Gestion de l'effort</div>
+            <div className="flex justify-between items-center mb-6">
+              <div className="text-left">
+                <div className="text-[0.6rem] text-[#555] font-bold">DÉBUT</div>
+                <div className="text-2xl font-black text-white"><NumberTicker value={stats?.p1 ?? 0} /><span className="text-[0.5em] ml-0.5 text-gray-600">W</span></div>
               </div>
-              <div style={{ flex: 1, height: '2px', background: '#1a1a1a', margin: '0 15px', position: 'relative' }}>
-                <div style={{ position: 'absolute', top: '-4px', left: `${Math.min(100, Math.max(0, 50 + stats.diffPercent))}%`, width: '10px', height: '10px', borderRadius: '50%', background: stats.pacingStatus.color, boxShadow: `0 0 10px ${stats.pacingStatus.color}` }} />
+              <div className="flex-1 h-0.5 bg-[#1a1a1a] mx-4 relative">
+                <div className="absolute top-[-4px] w-2.5 h-2.5 rounded-full shadow-[0_0_10px_currentColor] transition-all duration-[2000ms] ease-out left-1/2" style={{ left: `${Math.min(100, Math.max(0, 50 + (stats?.diffPercent ?? 0)))}%`, backgroundColor: stats?.pacingStatus?.color ?? '#666', color: stats?.pacingStatus?.color ?? '#666' }} />
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <div style={{ fontSize: '0.6rem', color: '#555' }}>FIN</div>
-                <div style={{ fontSize: '1.6rem', fontWeight: 900, color: stats.pacingStatus.color }}>{Math.round(stats.p2)}<small style={{fontSize: '0.5em', marginLeft: '2px'}}>W</small></div>
+              <div className="text-right">
+                <div className="text-[0.6rem] text-[#555] font-bold">FIN</div>
+                <div className="text-2xl font-black" style={{ color: stats?.pacingStatus?.color ?? '#666' }}><NumberTicker value={stats?.p2 ?? 0} /><span className="text-[0.5em] ml-0.5 opacity-60">W</span></div>
               </div>
             </div>
-            <div style={{ textAlign: 'center', fontSize: '0.85rem', fontWeight: 950, color: stats.pacingStatus.color, background: `${stats.pacingStatus.color}10`, padding: '12px', borderRadius: '14px', border: `1px solid ${stats.pacingStatus.color}20` }}>
-              {stats.pacingStatus.label}
-              <div style={{ fontSize: '0.6rem', opacity: 0.7, marginTop: '2px' }}>Variation de {stats.diffPercent > 0 ? '+' : ''}{stats.diffPercent.toFixed(1)}%</div>
+            <div className="text-center text-sm font-black py-3 rounded-xl border" style={{ color: stats?.pacingStatus?.color ?? '#666', background: `${stats?.pacingStatus?.color ?? '#666'}10`, borderColor: `${stats?.pacingStatus?.color ?? '#666'}20` }}>
+              {stats?.pacingStatus?.label ?? 'N/A'}
+              <div className="text-[0.6rem] opacity-70 mt-0.5 font-bold">Variation de {(stats?.diffPercent ?? 0) > 0 ? '+' : ''}{(stats?.diffPercent ?? 0).toFixed(1)}%</div>
             </div>
           </div>
         </div>
 
         {/* CHART PORTION */}
-        <div style={{ height: '330px', width: '100%', padding: '0 3rem 2rem 3rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-             <span style={{ fontSize: '0.7rem', color: '#7e7d7dff', fontWeight: 900, textTransform: 'uppercase' }}>Analyse télémétrique portion</span>
-             <div style={{ display: 'flex', gap: '20px', fontSize: '0.65rem', fontWeight: 800 }}>
-                <span style={{ color: '#ffffffff', opacity: 0.4 }}>● Altitude</span>
-                <span style={{ color: '#d04fd7' }}>● Watts (5s)</span>
-                <span style={{ color: '#ff4d4d' }}>● FC</span>
+        <div className="h-[330px] w-full px-12 pb-8">
+          <div className="flex justify-between mb-4">
+             <span className="text-[0.7rem] text-[#7e7d7d] font-black uppercase tracking-widest flex items-center gap-2">
+               Analyse télémétrique portion
+             </span>
+             <div className="flex gap-5 text-[0.65rem] font-extrabold">
+                <span className="text-white opacity-40">● Altitude</span>
+                <span className="text-[#d04fd7]">● Watts (5s)</span>
+                {showGhost && <span className="text-amber-500">● GHOST PR (Lissé)</span>}
+                <span className="text-[#ff4d4d]">● FC</span>
              </div>
           </div>
           <ResponsiveContainer width="100%" height="100%">
@@ -320,56 +492,20 @@ const formatTime = (seconds: number) => {
               <XAxis dataKey="dist" hide />
               <YAxis yAxisId="pwr" orientation="right" hide domain={[0, 'auto']} />
               <YAxis yAxisId="alt" hide domain={['dataMin - 10', 'auto']} />
-              <Tooltip 
-                contentStyle={{ background: '#050505', border: '1px solid #222', borderRadius: '12px' }} 
-                itemStyle={{ fontSize: '11px', fontWeight: 700 }}
-              />
-              <Area yAxisId="alt" type="monotone" dataKey="Altitude" fill="#181818ff" stroke="#8a8888ff" fillOpacity={1} isAnimationActive={false} />
-              <Area yAxisId="pwr" type="monotone" dataKey="watts" stroke="#d04fd7" strokeWidth={2} fill="url(#pwrGrad)" />
-              <Line yAxisId="pwr" type="monotone" dataKey="BPM" stroke="#ff0707ff" strokeWidth={2} dot={false} />
+              
+              <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#fff', strokeWidth: 1, strokeDasharray: '4 4' }} wrapperStyle={{ outline: 'none' }} />
+              
+              <Area yAxisId="alt" type="monotone" dataKey="Altitude" fill="#181818" stroke="#333" fillOpacity={1} isAnimationActive={false} />
+              <Area yAxisId="pwr" type="monotone" dataKey="watts" stroke="#d04fd7" strokeWidth={2} fill="url(#pwrGrad)" animationDuration={1500} />
+              
+              {showGhost && <Line yAxisId="pwr" type="monotone" dataKey="ghostWatts" stroke="#f59e0b" strokeWidth={2} strokeDasharray="4 4" opacity={0.6} dot={false} animationDuration={1000} />}
+              
+              <Line yAxisId="pwr" type="monotone" dataKey="BPM" stroke="#ff0707" strokeWidth={2} dot={false} animationDuration={1500} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
+
       </div>
     </div>
   );
 }
-
-const KpiCard = ({ label, value, unit, icon: Icon, color, compact }: any) => (
-  <div style={{ 
-    background: '#0E0E11', 
-    border: '1px solid #1a1a1a', 
-    borderRadius: '16px', 
-    padding: compact ? '10px 14px' : '12px 16px',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    minHeight: compact ? '68px' : '80px',
-  }}>
-    <div style={{ 
-      display: 'flex', 
-      alignItems: 'center', 
-      justifyContent: 'space-between',
-      fontSize: '0.55rem', 
-      color: '#7e7d7dff', 
-      fontWeight: 900, 
-      textTransform: 'uppercase', 
-      marginBottom: '2px' 
-    }}>
-      <span>{label}</span>
-      <Icon size={10} color={color} />
-    </div>
-    <div style={{ 
-      fontSize: compact ? '1.5rem' : '1.8rem', 
-      fontWeight: 950, 
-      color: '#fff', 
-      lineHeight: 1,
-      display: 'flex',
-      alignItems: 'baseline',
-      gap: '3px'
-    }}>
-      {value}
-      {unit && <span style={{ fontSize: '0.65rem', color: '#333', fontWeight: 800 }}>{unit}</span>}
-    </div>
-  </div>
-);

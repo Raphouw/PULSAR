@@ -7,14 +7,15 @@ import { calculatePulsarScore, NPformulaCoggan } from "./physics";
  * Helper: Calcule le rang Global et Personnel avant insertion
  */
 async function calculateRanks(supabase: any, segmentId: number, userId: string, durationSeconds: number) {
-  // 1. GLOBAL : Combien de gens ont fait mieux (strictement plus rapide) ?
-  const { count: fasterGlobalCount, error: errGlobal } = await supabase
-    .from('activity_segments')
-    .select('*', { count: 'exact', head: true })
-    .eq('segment_id', segmentId)
-    .lt('duration_s', durationSeconds); // lt = lower than
+  
+  // 1. GLOBAL : On utilise la fonction SQL "Unique User"
+  const { data: rankGlobal, error: errGlobal } = await supabase
+    .rpc('get_global_rank_unique', { 
+        _segment_id: segmentId, 
+        _duration_s: durationSeconds 
+    });
 
-  // 2. PERSO : Combien de fois TU as fait mieux ?
+  // 2. PERSO : Calcul classique (combien de fois MOI j'ai fait mieux)
   const { count: fasterPersonalCount, error: errPerso } = await supabase
     .from('activity_segments')
     .select('*', { count: 'exact', head: true })
@@ -24,18 +25,14 @@ async function calculateRanks(supabase: any, segmentId: number, userId: string, 
 
   if (errGlobal || errPerso) {
     console.error("Erreur calcul rangs:", errGlobal || errPerso);
-    // Valeurs par défaut safe pour ne pas bloquer
     return { rank_global: null, rank_personal: null, is_pr: false }; 
   }
 
-  // Le rang = (Nombre de personnes plus rapides) + 1
-  const rank_global = (fasterGlobalCount || 0) + 1;
+  // rankGlobal est déjà le bon chiffre (calculé par la fonction SQL)
   const rank_personal = (fasterPersonalCount || 0) + 1;
-  
-  // Si je suis 1er perso, c'est un PR
   const is_pr = rank_personal === 1;
 
-  return { rank_global, rank_personal, is_pr };
+  return { rank_global: rankGlobal, rank_personal, is_pr };
 }
 
 /**

@@ -135,7 +135,9 @@ const Icons = {
       <circle cx="6" cy="15" r="1.5" className="net-node-3" opacity="0.3"></circle>
     </svg>
   ),
-  Admin: <Settings2 size={18} strokeWidth={1.5} className="icon-group" />
+  Admin: <Settings2 size={18} strokeWidth={1.5} className="icon-group" />,
+  Legend : <Settings2 size={18} strokeWidth={1.5} className="icon-group" />,
+
 };
 
 const groups = [
@@ -167,6 +169,7 @@ const groups = [
       { href: '/events', label: 'Événements', icon: Icons.Events },
       { href: '/profildata', label: 'Mon Profil', icon: Icons.Profile },
       { href: '/algo', label: 'Algorithmes', icon: Icons.Algo },
+      { href: '/legend', label: 'LEGEND', icon: Icons.Legend },
     ]
   },
 ];

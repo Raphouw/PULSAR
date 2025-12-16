@@ -1,10 +1,11 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
-import { ChevronRight, Crown, Medal, Trophy, Activity, Zap, Gauge, TrendingUp, ExternalLink, Globe, Award, Star, User, ChevronDown, ListOrdered } from 'lucide-react';
+import { ChevronRight, Crown, Medal, Trophy, Activity, Zap, Gauge, TrendingUp, ExternalLink, Globe, Award, Star, User, ChevronDown, ListOrdered, Timer, ArrowBigDown, ArrowBigRightDashIcon, ArrowDownAZ, ArrowUpCircleIcon, ArrowUpLeftSquare, ArrowUpRightSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import SegmentDetailModal from './SegmentDetailModal';
-import { AreaChart, Area, ResponsiveContainer, XAxis, YAxis, ReferenceArea } from 'recharts';
+import SegmentLeaderboard from './SegmentLeaderboard'; 
+import { AreaChart, Area, ResponsiveContainer, ReferenceArea } from 'recharts';
 
 // --- STYLES & CONFIG ---
 const containerStyle = { fontFamily: '"Inter", sans-serif' };
@@ -18,6 +19,15 @@ const styleSheet = `
   animation: wiggly 0.3s ease-in-out infinite;
 }
 `;
+
+// --- UTILS ---
+const formatChrono = (seconds: number) => {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+};
 
 // --- TYPES ---
 type SegmentLane = {
@@ -46,7 +56,6 @@ const calculateSegmentLanes = (segments: any[], totalPoints: number): { lanes: S
             results.push({ laneIndex: lanes.length - 1, segment: seg });
         }
     });
-
     return { lanes: results, maxLanes: lanes.length };
 };
 
@@ -56,13 +65,15 @@ const InteractiveActivityChart = ({
     segments, 
     hoveredRange, 
     hoveredId,
-    onHover 
+    onHover,
+    onBarClick 
 }: { 
     streams: any, 
     segments: any[], 
     hoveredRange: [number, number] | null,
     hoveredId: number | null,
-    onHover: (id: number | null, range: [number, number] | null) => void
+    onHover: (id: number | null, range: [number, number] | null) => void,
+    onBarClick: (segment: any) => void
 }) => {
     const data = useMemo(() => {
         if (!streams?.altitude) return [];
@@ -77,13 +88,28 @@ const InteractiveActivityChart = ({
         return calculateSegmentLanes(segments, streams.altitude.length);
     }, [segments, streams]);
 
+    const hoveredSegmentName = useMemo(() => {
+        if (!hoveredId) return null;
+        return segments.find(s => s.id === hoveredId)?.segment.name;
+    }, [hoveredId, segments]);
+
     if (!data || data.length === 0) return null;
     const totalPoints = streams.altitude.length;
 
     return (
         <div className="sticky top-4 z-40 bg-[#050505]/95 backdrop-blur-xl border border-white/10 rounded-2xl p-4 mb-6 shadow-2xl transition-all duration-300">
-            <div className="flex justify-between items-center mb-2 px-2">
-                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">PROFIL & SÉQUENCES</span>
+            {/* Header Dynamique */}
+            <div className="flex justify-between items-center mb-2 px-2 h-6">
+                {hoveredSegmentName ? (
+                    <span className="text-xs font-black text-[#d04fd7] uppercase tracking-widest animate-in fade-in slide-in-from-bottom-1">
+                        {hoveredSegmentName}
+                    </span>
+                ) : (
+                    // 🔥 RENOMMAGE ICI
+                    <span className="text-[10px] font-bold text-gray-500 uppercase tracking-widest transition-all">
+                        PROFIL & SEGMENTS
+                    </span>
+                )}
             </div>
 
             <div className="h-[100px] w-full relative">
@@ -120,8 +146,13 @@ const InteractiveActivityChart = ({
                     return (
                         <div
                             key={segment.id}
+                            title={segment.segment.name}
                             onMouseEnter={() => onHover(segment.id, [segment.start_index, segment.end_index])}
                             onMouseLeave={() => onHover(null, null)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onBarClick(segment);
+                            }}
                             className={`
                                 absolute h-1.5 rounded-full transition-all duration-200 cursor-pointer 
                                 ${barColor} 
@@ -140,8 +171,7 @@ const InteractiveActivityChart = ({
     );
 };
 
-// --- BADGES ---
-// (J'ai compressé pour la lisibilité, c'est le même code qu'avant)
+// --- BADGES (Inchangés) ---
 const GradeBadge = ({ grade }: { grade: number }) => {
     let colorClass = 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10';
     if (grade > 4) colorClass = 'text-yellow-400 border-yellow-500/30 bg-yellow-500/10';
@@ -149,7 +179,6 @@ const GradeBadge = ({ grade }: { grade: number }) => {
     if (grade > 10) colorClass = 'text-red-500 border-red-500/30 bg-red-500/10';
     return <span className={`px-2 py-0.5 rounded text-[11px] font-bold border ${colorClass} font-mono ml-3`}>{grade.toFixed(2)}%</span>;
 };
-
 const PersonalBadge = ({ rank }: { rank?: number }) => {
     const boxBase = "flex items-center justify-center gap-1.5 px-2 h-7 rounded border min-w-[50px] transition-all";
     if (rank === 1) return <div className={`${boxBase} bg-yellow-500/20 border-yellow-500/60 text-yellow-300 shadow-[0_0_12px_rgba(250,204,21,0.3)]`}><Crown size={12} fill="currentColor" /><span className="text-[11px] font-black tracking-wide">PR</span></div>;
@@ -160,7 +189,6 @@ const PersonalBadge = ({ rank }: { rank?: number }) => {
     if (rank && rank > 5) return <div className={`${boxBase} border-white/10 bg-white/[0.05] text-gray-400`}><User size={10} className="opacity-50" /><span className="text-[10px] font-mono font-bold">#{rank}</span></div>;
     return <div className={`${boxBase} border-white/5 bg-white/[0.02] text-gray-600 opacity-50`}><span className="text-[10px] font-mono font-bold">-</span></div>;
 };
-
 const GlobalBadge = ({ rank }: { rank?: number }) => {
     if (!rank) return null;
     const boxBase = "flex items-center justify-center gap-1.5 px-2 h-7 rounded border min-w-[55px] transition-all";
@@ -170,14 +198,12 @@ const GlobalBadge = ({ rank }: { rank?: number }) => {
     if (rank >= 6 && rank <= 10) return <div className={`${boxBase} bg-indigo-500/10 border-indigo-500/30 text-indigo-400`}><Trophy size={10} className="opacity-80" /><span className="text-[11px] font-bold">#{rank}</span></div>;
     return <div className={`${boxBase} bg-[#0A0A0C] border-white/10 text-gray-500`}><Globe size={10} className="opacity-50" /><span className="text-[11px] font-mono font-bold">#{rank}</span></div>;
 };
-
 const StatCell = ({ value, unit, color = "text-white", label, icon: Icon }: any) => (
     <div className="flex flex-col items-center justify-center h-full w-full">
         <span className="text-[9px] text-gray-500 font-bold uppercase flex items-center gap-1.5 mb-0.5 tracking-wide opacity-70">{Icon && <Icon size={10} />} {label}</span>
         <div className={`text-base font-extrabold ${color} leading-none mt-0.5`}>{value}<span className="text-[10px] text-gray-600 ml-0.5 font-sans font-bold">{unit}</span></div>
     </div>
 );
-
 const getSegmentTheme = (rankGlobal: number | undefined, rankPerso: number | undefined) => {
     if (rankGlobal === 1) return { bar: 'bg-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.8)]', bg: 'bg-purple-900/20 hover:bg-purple-900/30', border: 'border-purple-500/30' };
     if (rankGlobal === 2) return { bar: 'bg-cyan-400 shadow-[0_0_15px_rgba(34,211,238,0.6)]', bg: 'bg-cyan-900/20 hover:bg-cyan-900/30', border: 'border-cyan-500/20' };
@@ -190,12 +216,11 @@ const getSegmentTheme = (rankGlobal: number | undefined, rankPerso: number | und
 
 // --- MAIN COMPONENT ---
 
-export default function MatchedSegmentsList({ segments, streams, userWeight }: { segments: any[], streams?: any, userWeight: number }) {
+export default function MatchedSegmentsList({ segments, streams, userWeight, currentUserId }: { segments: any[], streams?: any, userWeight: number, currentUserId: string }) {
   const router = useRouter();
   
-  // États d'interactions
-  const [selectedMatchForModal, setSelectedMatchForModal] = useState<any | null>(null); // Pour la Modal
-  const [expandedId, setExpandedId] = useState<number | null>(null); // Pour le "dépliage"
+  const [selectedMatchForModal, setSelectedMatchForModal] = useState<any | null>(null); 
+  const [expandedId, setExpandedId] = useState<number | null>(null); 
   const [hoveredRange, setHoveredRange] = useState<[number, number] | null>(null);
   const [hoveredId, setHoveredId] = useState<number | null>(null);
 
@@ -203,10 +228,23 @@ export default function MatchedSegmentsList({ segments, streams, userWeight }: {
     return [...segments].sort((a, b) => a.start_index - b.start_index);
   }, [segments]);
 
-  // Fonction pour basculer l'ouverture (Accordion)
   const toggleExpand = (id: number) => {
     if (expandedId === id) setExpandedId(null);
     else setExpandedId(id);
+  };
+
+  const handleTimelineClick = (match: any) => {
+      setExpandedId(match.id);
+      setSelectedMatchForModal(match);
+      setTimeout(() => {
+          const element = document.getElementById(`segment-row-${match.id}`);
+          if (element) {
+              element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              element.style.transition = 'background 0.5s';
+              element.style.background = 'rgba(208, 79, 215, 0.2)';
+              setTimeout(() => { element.style.background = ''; }, 1000);
+          }
+      }, 100);
   };
 
   return (
@@ -223,6 +261,7 @@ export default function MatchedSegmentsList({ segments, streams, userWeight }: {
                 setHoveredId(id);
                 setHoveredRange(range);
             }}
+            onBarClick={handleTimelineClick}
         />
 
         {/* LISTE DES SEGMENTS */}
@@ -244,10 +283,13 @@ export default function MatchedSegmentsList({ segments, streams, userWeight }: {
                 let sideBarColor: string | null = theme.bar;
 
                 return (
-                    <div key={match.id} className="relative transition-all duration-300">
+                    <div 
+                        key={match.id} 
+                        id={`segment-row-${match.id}`}
+                        className="relative transition-all duration-300"
+                    >
                         {/* LIGNE PRINCIPALE DU SEGMENT */}
                         <div 
-                            // 1. Hover pour le graphe
                             onMouseEnter={() => {
                                 setHoveredRange([match.start_index, match.end_index]);
                                 setHoveredId(match.id);
@@ -256,12 +298,14 @@ export default function MatchedSegmentsList({ segments, streams, userWeight }: {
                                 setHoveredRange(null);
                                 setHoveredId(null);
                             }}
-                            // 2. Clic principal pour DÉPLIER (Accordion)
                             onClick={() => toggleExpand(match.id)}
+                            // 🔥 HOVER STYLISÉ ICI : 
                             className={`
                                 kom-animate group relative grid grid-cols-[auto_35%_1fr_auto] items-center h-[68px] px-2 rounded-xl border cursor-pointer transition-all duration-300
                                 ${theme.bg} ${theme.border}
-                                ${isHovered ? 'shadow-xl z-10 scale-[1.005] border-opacity-50' : 'border-opacity-30'}
+                                ${isHovered 
+                                    ? 'shadow-xl z-10 scale-[1.005] border-opacity-50' 
+                                    : 'border-opacity-30 hover:border-[#d04fd7]/30 hover:bg-white/[0.07] hover:shadow-[0_0_15px_rgba(208,79,215,0.05)]'} 
                                 ${isExpanded ? 'rounded-b-none border-b-transparent bg-opacity-100 z-20' : ''}
                             `}
                         >
@@ -281,76 +325,45 @@ export default function MatchedSegmentsList({ segments, streams, userWeight }: {
                             </div>
 
                             {/* Stats */}
-                            <div className="hidden lg:grid grid-cols-4 h-full items-center mx-2 w-full">
+                            <div className="hidden lg:grid grid-cols-5 h-full items-center mx-2 w-full">
+                                <StatCell label="TEMPS" value={formatChrono(match.duration_s)} unit="" icon={Timer} color="text-white" />
                                 <StatCell label="VIT." value={speed} unit="km/h" icon={Gauge} color="text-blue-400" />
-                                <StatCell label="PWR" value={power} unit="w" icon={Zap} color="text-[#d04fd7]" />
-                                <StatCell label="HR" value={hr} unit="bpm" icon={Activity} color="text-red-400" />
+                                <StatCell label="Puiss." value={power} unit="w" icon={Zap} color="text-[#d04fd7]" />
+                                <StatCell label="FC" value={hr} unit="bpm" icon={Activity} color="text-red-400" />
                                 <StatCell label="VAM" value={vam} unit="m/h" icon={TrendingUp} color="text-emerald-400" />
                             </div>
 
                             {/* Actions (Boutons) */}
                             <div className="flex items-center gap-1 pl-4 h-8 border-l border-white/5 ml-2">
-                                {/* BOUTON GAUCHE: EXTERNAL LINK (Nouvel onglet) */}
                                 <button 
                                     onClick={(e) => { 
-                                        e.stopPropagation(); // On empêche le clic de déplier la ligne
-                                        window.open(`/segments/${match.segment_id}`, '_blank'); // Ouvre dans un nouvel onglet
+                                        e.stopPropagation(); 
+                                        window.open(`/segments/${match.segment_id}`, '_blank'); 
                                     }} 
                                     className="p-2 text-gray-500 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
                                 >
                                     <ExternalLink size={16} />
                                 </button>
                                 
-                                {/* BOUTON DROITE: MODALE DÉTAILS */}
                                 <button 
                                     onClick={(e) => { 
-                                        e.stopPropagation(); // On empêche le clic de déplier la ligne
+                                        e.stopPropagation(); 
                                         setSelectedMatchForModal(match); 
                                     }} 
                                     className="p-2 text-gray-500 group-hover:text-[#d04fd7] transition-colors"
                                 >
-                                    {isExpanded ? <ChevronDown size={20} /> : <ChevronRight size={20} />}
+                                    {<ArrowBigRightDashIcon size={20} />}
                                 </button>
                             </div>
                             
-                            {/* Barre latérale colorée */}
                             {sideBarColor && <div className={`absolute left-0 top-3 bottom-3 w-1 rounded-r-full z-20 ${sideBarColor}`} />}
                         </div>
 
                         {/* ZONE DÉPLIÉE (ACCORDION) */}
                         {isExpanded && (
-                            <div className="bg-[#08080a] border border-t-0 border-white/10 rounded-b-xl p-4 animate-in slide-in-from-top-2 fade-in duration-200">
-                                <div className="flex items-start gap-6">
-                                    {/* Placeholder pour les classements */}
-                                    <div className="flex-1">
-                                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                            <ListOrdered size={14} /> Classement Global (Top 10)
-                                        </h4>
-                                        <div className="bg-white/5 rounded-lg p-4 text-center text-sm text-gray-500 border border-white/5 border-dashed">
-                                            Chargement des classements en temps réel...
-                                            <br/>
-                                            <span className="text-xs opacity-50">(Cette fonctionnalité nécessitera un appel API supplémentaire pour récupérer la liste des autres athlètes)</span>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="flex-1">
-                                        <h4 className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-2">
-                                            <Activity size={14} /> Historique Personnel
-                                        </h4>
-                                        <div className="flex flex-col gap-2">
-                                            <div className="flex justify-between items-center bg-white/5 p-2 rounded px-3 border border-white/5">
-                                                <span className="text-xs text-gray-400">Aujourd'hui</span>
-                                                <span className="font-mono font-bold text-[#d04fd7]">{power}w</span>
-                                            </div>
-                                            {match.is_pr && (
-                                                <div className="flex justify-between items-center bg-yellow-500/10 p-2 rounded px-3 border border-yellow-500/20">
-                                                    <span className="text-xs text-yellow-500 font-bold flex gap-1"><Crown size={12}/> Record Personnel</span>
-                                                    <span className="font-mono font-bold text-yellow-400">PR !</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
+                            <div className="bg-[#08080a] border border-t-0 border-white/10 rounded-b-xl p-4 animate-in slide-in-from-top-2 fade-in duration-200 cursor-default" onClick={(e) => e.stopPropagation()}>
+                                {/* 🔥 CORRECTION CRITIQUE : segmentId={match.segment_id} */}
+                                <SegmentLeaderboard segmentId={match.segment_id} currentUserId={currentUserId} currentEffort={match} />
                             </div>
                         )}
                     </div>
@@ -358,7 +371,7 @@ export default function MatchedSegmentsList({ segments, streams, userWeight }: {
             })}
         </div>
 
-        {/* MODALE (Si cliqué sur le bouton de droite) */}
+        {/* MODALE */}
         {selectedMatchForModal && (
             <SegmentDetailModal 
                 match={selectedMatchForModal} 
