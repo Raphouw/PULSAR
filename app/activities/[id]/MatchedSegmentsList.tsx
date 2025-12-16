@@ -189,14 +189,55 @@ const PersonalBadge = ({ rank }: { rank?: number }) => {
     if (rank && rank > 5) return <div className={`${boxBase} border-white/10 bg-white/[0.05] text-gray-400`}><User size={10} className="opacity-50" /><span className="text-[10px] font-mono font-bold">#{rank}</span></div>;
     return <div className={`${boxBase} border-white/5 bg-white/[0.02] text-gray-600 opacity-50`}><span className="text-[10px] font-mono font-bold">-</span></div>;
 };
-const GlobalBadge = ({ rank }: { rank?: number }) => {
+const GlobalBadge = ({ rank, bestRank }: { rank?: number, bestRank?: number | null }) => {
+    // Si pas de rang du tout pour aujourd'hui, on n'affiche rien
     if (!rank) return null;
-    const boxBase = "flex items-center justify-center gap-1.5 px-2 h-7 rounded border min-w-[55px] transition-all";
-    if (rank === 1) return <div className={`${boxBase} bg-purple-600/20 border-purple-500/60 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.4)]`}><div className="kom-icon"><Crown size={12} fill="currentColor" /></div><span className="text-[11px] font-black tracking-wide">KOM</span></div>;
-    if (rank === 2) return <div className={`${boxBase} bg-cyan-500/10 border-cyan-500/50 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.2)]`}><Trophy size={12} strokeWidth={2.5} /><span className="text-[11px] font-bold">#2</span></div>;
-    if (rank >= 3 && rank <= 5) return <div className={`${boxBase} bg-blue-500/10 border-blue-500/30 text-blue-400`}><Trophy size={11} /><span className="text-[11px] font-bold">#{rank}</span></div>;
-    if (rank >= 6 && rank <= 10) return <div className={`${boxBase} bg-indigo-500/10 border-indigo-500/30 text-indigo-400`}><Trophy size={10} className="opacity-80" /><span className="text-[11px] font-bold">#{rank}</span></div>;
-    return <div className={`${boxBase} bg-[#0A0A0C] border-white/10 text-gray-500`}><Globe size={10} className="opacity-50" /><span className="text-[11px] font-mono font-bold">#{rank}</span></div>;
+
+    // 1. Rendu du badge principal (Performance du jour)
+    const renderMainBadge = () => {
+        const boxBase = "flex items-center justify-center gap-1.5 px-2 h-7 rounded border min-w-[55px] transition-all";
+        
+        if (rank === 1) return <div className={`${boxBase} bg-purple-600/20 border-purple-500/60 text-purple-300 shadow-[0_0_15px_rgba(168,85,247,0.4)]`}><div className="kom-icon"><Crown size={12} fill="currentColor" /></div><span className="text-[11px] font-black tracking-wide">KOM</span></div>;
+        if (rank === 2) return <div className={`${boxBase} bg-cyan-500/10 border-cyan-500/50 text-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.2)]`}><Trophy size={12} strokeWidth={2.5} /><span className="text-[11px] font-bold">#2</span></div>;
+        if (rank >= 3 && rank <= 5) return <div className={`${boxBase} bg-blue-500/10 border-blue-500/30 text-blue-400`}><Trophy size={11} /><span className="text-[11px] font-bold">#{rank}</span></div>;
+        if (rank >= 6 && rank <= 10) return <div className={`${boxBase} bg-indigo-500/10 border-indigo-500/30 text-indigo-400`}><Trophy size={10} className="opacity-80" /><span className="text-[11px] font-bold">#{rank}</span></div>;
+        
+        // Par défaut (Au-delà du top 10)
+        return <div className={`${boxBase} bg-[#0A0A0C] border-white/10 text-gray-500`}><Globe size={10} className="opacity-50" /><span className="text-[11px] font-mono font-bold">#{rank}</span></div>;
+    };
+
+    // 2. Rendu du "Fantôme" (Si ton historique est meilleur que ce jour)
+    // On affiche le rappel SEULEMENT si tu es KOM ou TOP 10 historiquement, mais pas aujourd'hui
+    const renderGhostStatus = () => {
+        if (!bestRank) return null;
+        if (bestRank >= rank) return null; 
+        
+        if (bestRank === 1) {
+            return (
+                <div title="Tu détiens le KOM sur ce segment" className="flex items-center justify-center w-6 h-6 rounded-full bg-purple-500/10 border border-purple-500/30 text-purple-400 opacity-80 hover:opacity-100 transition-opacity">
+                    <Crown size={10} fill="currentColor" />
+                </div>
+            );
+        }
+        
+        if (bestRank <= 10) {
+             return (
+                <div title={`Ton record : #${bestRank}`} className="flex items-center justify-center w-6 h-6 rounded-full bg-blue-500/10 border border-blue-500/30 text-blue-400 opacity-60 hover:opacity-100 transition-opacity">
+                    <span className="text-[9px] font-bold">#{bestRank}</span>
+                </div>
+            );
+        }
+
+        return null;
+    };
+
+    return (
+        // On utilise gap-1 pour coller les deux éléments proprement
+        <div className="flex items-center gap-1">
+            {renderMainBadge()}
+            {renderGhostStatus()}
+        </div>
+    );
 };
 const StatCell = ({ value, unit, color = "text-white", label, icon: Icon }: any) => (
     <div className="flex flex-col items-center justify-center h-full w-full">
@@ -278,6 +319,7 @@ export default function MatchedSegmentsList({ segments, streams, userWeight, cur
 
                 const rankPerso = match.rank_personal || (match.is_pr ? 1 : undefined);
                 const rankGlobal = match.rank_global || undefined;
+                const bestRankEver = match.user_best_rank;
 
                 const theme = getSegmentTheme(rankGlobal, rankPerso);
                 let sideBarColor: string | null = theme.bar;
@@ -310,9 +352,9 @@ export default function MatchedSegmentsList({ segments, streams, userWeight, cur
                             `}
                         >
                             {/* Badges */}
-                            <div className="flex items-center gap-2 mr-4 w-[115px]">
+                            <div className="flex items-center gap-2 mr-4 w-[145px]">
                                 <PersonalBadge rank={rankPerso} />
-                                <GlobalBadge rank={rankGlobal} />
+                                <GlobalBadge rank={rankGlobal} bestRank={bestRankEver} />
                             </div>
 
                             {/* Identité */}
