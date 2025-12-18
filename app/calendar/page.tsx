@@ -20,54 +20,57 @@ export default async function CalendarPage() {
     redirect('/auth/signin');
   }
 
-  const userId = session.user.id;
+  // ⚡ FIX: Conversion de l'ID en nombre pour la cohérence BDD
+  const userId = Number(session.user.id);
 
   // 1. RÉCUPÉRATION DES ACTIVITÉS
-  const { data: activities } = await supabaseAdmin
+  const { data: activitiesData } = await supabaseAdmin
     .from('activities')
     .select('id, strava_id, name, start_time, distance_km, avg_speed_kmh, elevation_gain_m, duration_s, tss, type, avg_power_w, avg_heartrate, polyline, weather_code, temp_min, temp_max, temp_avg') 
     .eq('user_id', userId)
     .order('start_time', { ascending: true });
 
+  const activities = (activitiesData || []) as any[];
+
   // 2. RÉCUPÉRATION DE L'INVENTAIRE (Achats réels)
-  const { data: purchases } = await supabaseAdmin
+  const { data: purchasesData } = await supabaseAdmin
     .from('shop_purchases')
     .select('effect_id')
     .eq('user_id', userId);
 
+  const purchases = (purchasesData || []) as any[];
+
   // 3. RÉCUPÉRATION DU LOADOUT (Équipement)
-  const { data: settings } = await supabaseAdmin
+  const { data: settingsData } = await supabaseAdmin
     .from('user_settings')
     .select('equipped_loadout')
     .eq('user_id', userId)
-    .single();
+    .maybeSingle(); // maybeSingle évite l'erreur si l'utilisateur n'a pas encore de settings
+
+  const settings = settingsData as any;
 
   // ----------------------------------------------------
   // 🔥 SYNCHRONISATION CRITIQUE DU SOLDE NET 🔥
   // ----------------------------------------------------
 
-  // A. CALCUL DES GAINS (Revenu Brut Total)
-  const totalGrossTSS = calculateWallet(activities || []); 
+  // A. CALCUL DES GAINS (Revenu Brut Total basé sur l'effort TSS)
+  const totalGrossTSS = calculateWallet(activities); 
 
-  // B. CALCUL DES DÉPENSES (Passif Total)
+  // B. CALCUL DES DÉPENSES (Somme des prix des items possédés)
   const effectPrices = new Map(SHOP_EFFECTS.map(e => [e.id, e.price]));
   let actualSpentTSS = 0;
-  const ownedEffects = purchases?.map(p => p.effect_id) || [];
+  const ownedEffects = purchases.map(p => p.effect_id) || [];
   
   ownedEffects.forEach(effectId => {
-      // S'assure de n'ajouter que les coûts d'effets existants
       actualSpentTSS += effectPrices.get(effectId) || 0; 
   });
   
   // C. CALCUL DU SOLDE NET FINAL
-  // Le vrai montant: Revenu Brut - Dépenses. Utilise Math.max pour éviter les soldes négatifs.
   const finalWalletBalance = Math.max(0, totalGrossTSS - actualSpentTSS); 
 
-  // D. MISE À JOUR DU SOLDE EN BASE DE DONNÉES
-  // Ceci rend la colonne 'wallet_balance' la source de vérité pour le client.
-  // On met aussi à jour 'spent_tss' pour l'audit, même si on ne l'utilise plus pour l'affichage.
-  await supabaseAdmin
-    .from('users')
+  // D. MISE À JOUR DU SOLDE EN BASE DE DONNÉES (Source de vérité)
+  // ⚡ FIX: Cast builder en any pour l'update
+  await (supabaseAdmin.from('users') as any)
     .update({ 
         wallet_balance: finalWalletBalance,
         spent_tss: actualSpentTSS 
@@ -78,10 +81,10 @@ export default async function CalendarPage() {
 
   const rawLoadout = settings?.equipped_loadout || {};
 
-  // Construction de l'objet ShopData
+  // Construction de l'objet ShopData pour le client
   const shopData: ShopData = {
-    serverBalance: finalWalletBalance, // 🔥 Le solde synchronisé
-    spentTSS: actualSpentTSS,          // Le montant dépensé recalculé
+    serverBalance: finalWalletBalance,
+    spentTSS: actualSpentTSS,
     ownedEffects,
     loadout: {
         FRAME: rawLoadout.FRAME || null, 
@@ -97,7 +100,7 @@ export default async function CalendarPage() {
 
   return (
     <CalendarClient 
-      activities={activities || []} 
+      activities={activities} 
       initialShopData={shopData} 
     />
   );

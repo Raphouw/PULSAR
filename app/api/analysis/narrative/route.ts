@@ -5,12 +5,10 @@ import { generateActivityNarrative } from '../../../../lib/analysis/narrativeEng
 import { getServerSession } from 'next-auth';
 import { authOptions } from '../../../../lib/auth'; 
 
-// Définir la structure de la réponse
 interface NarrativeRequest {
   activityId: number;
 }
 
-// Handler POST pour générer la narration
 export async function POST(request: Request) {
   
   // Sécurité : Vérifier la session utilisateur
@@ -28,17 +26,20 @@ export async function POST(request: Request) {
     }
 
     // 1. Récupérer l'activité
-    const { data: activityData, error: activityError } = await supabaseAdmin
+    const { data: activityRaw, error: activityError } = await supabaseAdmin
       .from('activities')
       .select(`streams_data, user_id, users ( ftp, weight, max_heart_rate )`)
       .eq('id', activityId)
       .limit(1)
       .maybeSingle();
 
-    if (activityError || !activityData) {
+    if (activityError || !activityRaw) {
         console.error("Erreur BDD ou activité introuvable:", activityError);
         return NextResponse.json({ error: 'Activité non trouvée ou erreur BDD.' }, { status: 404 });
     }
+
+    // ⚡ FIX: On cast l'activité en any pour débloquer l'accès aux props
+    const activityData = activityRaw as any;
 
     // 1.1 Sécurité : Vérifier l'appartenance
     if (activityData.user_id?.toString() !== userId) {
@@ -52,8 +53,6 @@ export async function POST(request: Request) {
 
     // 🔥 CORRECTION TYPESCRIPT RADICALE
     // On force le type 'any' ici pour dire à TS : "Laisse-moi gérer la structure, je sais ce que je fais".
-    // Cela évite l'erreur "Conversion of type array to object".
-    // @ts-ignore
     const rawUsersData: any = activityData.users; 
     
     type UserProfileData = { ftp: number | null; weight: number | null; max_heart_rate: number | null };
@@ -65,7 +64,6 @@ export async function POST(request: Request) {
             cleanUserProfile = rawUsersData[0] as UserProfileData;
         }
     } else if (rawUsersData) {
-        // Ici, on est sûr que ce n'est pas un tableau grâce au 'if' précédent
         cleanUserProfile = rawUsersData as UserProfileData;
     }
     

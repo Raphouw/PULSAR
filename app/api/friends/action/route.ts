@@ -10,36 +10,35 @@ export async function POST(req: Request) {
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { action, targetUserId } = await req.json();
-    const myId = session.user.id;
+    
+    // ⚡ FIX: Conversion des IDs en Number pour la BDD
+    const myId = Number(session.user.id);
+    const targetId = Number(targetUserId);
 
-    if (!targetUserId || myId === targetUserId) {
+    if (!targetId || myId === targetId) {
         return NextResponse.json({ error: "Cible invalide" }, { status: 400 });
     }
 
     // --- SUIVRE (FOLLOW) ---
     if (action === 'follow') {
-      // On utilise upsert : Si la ligne existe, on met à jour le status. Sinon on crée.
-      // Cela gère le cas où on a déjà une relation (ex: ancienne ou autre)
-      const { error } = await supabaseAdmin
-        .from("friends")
+      // ⚡ FIX: Cast du builder en any pour l'upsert
+      const { error } = await (supabaseAdmin.from("friends") as any)
         .upsert({ 
             user_id: myId, 
-            friend_id: targetUserId, 
+            friend_id: targetId, 
             status: 'following' 
-        }, { onConflict: 'user_id, friend_id' }); // Utilise l'index unique
+        }, { onConflict: 'user_id, friend_id' });
 
       if (error) throw error;
     }
 
     // --- NE PLUS SUIVRE (UNFOLLOW) ---
     else if (action === 'unfollow') {
-      // On ne supprime QUE si le statut est 'following'. 
-      // On ne veut pas supprimer accidentellement un 'blocked'.
-      const { error } = await supabaseAdmin
-        .from("friends")
+      // ⚡ FIX: Cast du builder en any pour le delete
+      const { error } = await (supabaseAdmin.from("friends") as any)
         .delete()
         .eq("user_id", myId)
-        .eq("friend_id", targetUserId)
+        .eq("friend_id", targetId)
         .eq("status", "following"); 
 
       if (error) throw error;
@@ -48,31 +47,31 @@ export async function POST(req: Request) {
     // --- BLOQUER (BLOCK) ---
     else if (action === 'block') {
       // 1. Je bloque la cible (Upsert force le status à blocked)
-      const { error: blockError } = await supabaseAdmin
-        .from("friends")
+      // ⚡ FIX: Cast du builder en any pour l'upsert
+      const { error: blockError } = await (supabaseAdmin.from("friends") as any)
         .upsert({ 
             user_id: myId, 
-            friend_id: targetUserId, 
+            friend_id: targetId, 
             status: 'blocked' 
         }, { onConflict: 'user_id, friend_id' });
       
       if (blockError) throw blockError;
 
       // 2. Je force la cible à ne plus me suivre (Nettoyage)
-      await supabaseAdmin
-        .from("friends")
+      // ⚡ FIX: Cast du builder en any pour le delete
+      await (supabaseAdmin.from("friends") as any)
         .delete()
-        .eq("user_id", targetUserId) // C'est LUI qui me suit
+        .eq("user_id", targetId) // C'est LUI qui me suit
         .eq("friend_id", myId);
     }
 
     // --- DÉBLOQUER (UNBLOCK) ---
     else if (action === 'unblock') {
-      const { error } = await supabaseAdmin
-        .from("friends")
+      // ⚡ FIX: Cast du builder en any pour le delete
+      const { error } = await (supabaseAdmin.from("friends") as any)
         .delete()
         .eq("user_id", myId)
-        .eq("friend_id", targetUserId)
+        .eq("friend_id", targetId)
         .eq("status", "blocked");
 
       if (error) throw error;

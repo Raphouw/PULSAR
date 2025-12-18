@@ -3,7 +3,7 @@ import { authOptions } from "../../lib/auth";
 import { redirect } from "next/navigation";
 import WorldClient from "./WorldClient";
 import { Activity, mapActivitiesToNodes, calculateStats } from "../../lib/treeUtils";
-import { supabaseAdmin } from "../../lib/supabaseAdminClient.js";
+import { supabaseAdmin } from "../../lib/supabaseAdminClient";
 
 // 🔥 FONCTION DE FETCH DES ACTIVITÉS DE LA BDD
 async function fetchUserActivities(userId: string): Promise<Activity[]> {

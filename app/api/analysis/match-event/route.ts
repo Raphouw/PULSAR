@@ -1,4 +1,4 @@
-//fichier: app\api\analysis\match-event\route.ts
+// fichier: app/api/analysis/match-event/route.ts
 
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
@@ -19,17 +19,21 @@ export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const userId = session.user.id;
+    
+    // ⚡ FIX: Conversion en Number pour la BDD
+    const userId = Number(session.user.id);
 
     const { activityId } = await req.json();
 
-
     // 1. Récupérer l'activité cible
-    const { data: activity } = await supabaseAdmin
+    const { data: activityData } = await supabaseAdmin
       .from('activities')
       .select('*')
       .eq('id', activityId)
       .single();
+
+    // ⚡ FIX: Cast en any pour lire les propriétés
+    const activity = activityData as any;
 
     if (!activity) return NextResponse.json({ error: "Activité introuvable" }, { status: 404 });
 
@@ -48,15 +52,16 @@ export async function POST(req: Request) {
 
 
     // 2. Récupérer TOUS les événements et leurs parcours
-    // 🔥 IMPORTANT : On charge 'polyline' et 'id' pour la comparaison précise
-    const { data: events } = await supabaseAdmin
+    const { data: eventsData } = await supabaseAdmin
       .from('events')
       .select(`
         id, date_start, 
         routes:event_routes(id, name, distance_km, polyline)
       `);
 
-    // 🔥 CORRECTION TYPE : Tableau typé explicitement
+    // ⚡ FIX: Cast en any[] pour boucler
+    const events = (eventsData || []) as any[];
+
     const matches: { eventId: number; routeId: number; type: string }[] = [];
 
     if (events) {
@@ -79,32 +84,38 @@ export async function POST(req: Request) {
                 // --- C. CALCUL DISTANCE GÉOGRAPHIQUE ---
                 const distGeo = getDistanceFromLatLonInKm(actLat, actLon, routeLat, routeLon);
                 
-                // Tolérance : 20km autour du départ réel du parcours
+                // Tolérance : 10km autour du départ réel du parcours
                 if (distGeo < 10) {
-                    // --- D. CHECK DISTANCE TOTALE (+/- 15%) ---
-                    const ratio = activity.distance_km / route.distance_km;
-                    
-                    if (ratio > 0.95 && ratio < 1.05) {
+                    // --- D. CHECK DISTANCE TOTALE (+/- 5%) ---
+                    // On cast les distances en number pour être sûr
+                    const actDist = Number(activity.distance_km);
+                    const routeDist = Number(route.distance_km);
+
+                    if (routeDist > 0) {
+                        const ratio = actDist / routeDist;
                         
-                        const actDate = new Date(activity.start_time).toISOString().split('T')[0];
-                        const evtDate = new Date(event.date_start).toISOString().split('T')[0];
-                        const type = actDate === evtDate ? 'RACE' : 'RECON';
+                        if (ratio > 0.95 && ratio < 1.05) {
+                            
+                            const actDate = new Date(activity.start_time).toISOString().split('T')[0];
+                            const evtDate = new Date(event.date_start).toISOString().split('T')[0];
+                            const type = actDate === evtDate ? 'RACE' : 'RECON';
 
-                        // Insertion en BDD
-                        const { error } = await supabaseAdmin
-                            .from('event_participations')
-                            .upsert({
-                                user_id: userId,
-                                event_id: event.id,
-                                route_id: route.id,
-                                activity_id: activity.id,
-                                type: type,
-                                performance_time_s: activity.duration_s,
-                                created_at: new Date().toISOString()
-                            }, { onConflict: 'activity_id, event_id' });
+                            // Insertion en BDD
+                            // ⚡ FIX: Cast du builder en any pour l'upsert
+                            const { error } = await (supabaseAdmin.from('event_participations') as any)
+                                .upsert({
+                                    user_id: userId,
+                                    event_id: event.id,
+                                    route_id: route.id,
+                                    activity_id: activity.id,
+                                    type: type,
+                                    performance_time_s: activity.duration_s,
+                                    created_at: new Date().toISOString()
+                                }, { onConflict: 'activity_id, event_id' });
 
-                        if (!error) {
-                            matches.push({ eventId: event.id, routeId: route.id, type });
+                            if (!error) {
+                                matches.push({ eventId: event.id, routeId: route.id, type });
+                            }
                         }
                     }
                 }
@@ -115,7 +126,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, matches });
 
   } catch (err: any) {
-    
+    console.error("Erreur match event:", err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

@@ -15,13 +15,15 @@ export default function AdminWorker() {
 
     try {
       // 1. On cherche un job (Pending ou Processing)
-      const { data: jobs } = await supabase
+      const { data: jobsData } = await supabase
         .from('admin_jobs')
         .select('*')
         .or('status.eq.pending,status.eq.processing')
         .order('created_at', { ascending: true })
         .limit(1);
 
+      // ⚡ FIX: On cast le résultat en any[] pour éviter l'erreur "never"
+      const jobs = (jobsData || []) as any[];
       const activeJob = jobs?.[0];
 
       // Si pas de job, on ne fait rien (le setInterval relancera plus tard)
@@ -31,7 +33,10 @@ export default function AdminWorker() {
 
       // Si le job était "pending", on le passe en "processing" pour dire à l'UI que ça démarre
       if (activeJob.status === 'pending') {
-         await supabase.from('admin_jobs').update({ status: 'processing' }).eq('id', activeJob.id);
+         // ⚡ FIX: On cast le builder en any pour débloquer l'update
+         await (supabase.from('admin_jobs') as any)
+            .update({ status: 'processing' })
+            .eq('id', activeJob.id);
       }
 
       const { segmentId, queue } = activeJob.payload;
@@ -67,8 +72,8 @@ export default function AdminWorker() {
       const nextProgress = endIdx;
       const isFinished = nextProgress >= queue.length;
 
-      await supabase
-        .from('admin_jobs')
+      // ⚡ FIX: On cast le builder en any pour débloquer l'update final
+      await (supabase.from('admin_jobs') as any)
         .update({ 
             progress: nextProgress, 
             status: isFinished ? 'completed' : 'processing',

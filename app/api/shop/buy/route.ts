@@ -1,7 +1,7 @@
 // Fichier : app/api/shop/buy/route.ts
 import { NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
-import { authOptions } from "../../../../lib/auth"; // J'utilise l'alias @/ pour la robustesse
+import { authOptions } from "../../../../lib/auth"; 
 import { supabaseAdmin } from "../../../../lib/supabaseAdminClient";
 
 export async function POST(req: Request) {
@@ -14,18 +14,23 @@ export async function POST(req: Request) {
 
   try {
     const { effectId, cost } = await req.json();
+    
+    // ⚡ FIX: Conversion de l'ID en nombre pour la BDD
+    const userId = Number(session.user.id);
 
     // 1. VERIFICATION SOLDE (Côté Serveur)
-    // On ne fait pas confiance au front. On interroge la banque.
-    const { data: userData, error: userError } = await supabaseAdmin
+    const { data: userDataRaw, error: userError } = await supabaseAdmin
       .from('users')
       .select('wallet_balance')
-      .eq('id', session.user.id) // Supabase gère le cast string -> bigint
+      .eq('id', userId)
       .single();
 
-    if (userError || !userData) {
+    if (userError || !userDataRaw) {
       throw new Error("Utilisateur introuvable en base");
     }
+
+    // ⚡ FIX: Cast en any pour lire wallet_balance
+    const userData = userDataRaw as any;
 
     if (userData.wallet_balance < cost) {
       return NextResponse.json({ error: 'Fonds insuffisants' }, { status: 403 });
@@ -35,20 +40,19 @@ export async function POST(req: Request) {
     const { data: existing } = await supabaseAdmin
       .from('shop_purchases')
       .select('id')
-      .eq('user_id', session.user.id)
+      .eq('user_id', userId)
       .eq('effect_id', effectId)
-      .single();
+      .maybeSingle(); // maybeSingle est plus sûr que single ici pour éviter une erreur si vide
 
     if (existing) {
       return NextResponse.json({ error: 'Objet déjà possédé' }, { status: 400 });
     }
 
     // 3. TRANSACTION
-    // L'insertion déclenche le Trigger SQL qui met à jour le solde
-    const { error: insertError } = await supabaseAdmin
-      .from('shop_purchases')
+    // ⚡ FIX: Cast du builder en any pour l'insert
+    const { error: insertError } = await (supabaseAdmin.from('shop_purchases') as any)
       .insert({
-        user_id: session.user.id,
+        user_id: userId,
         effect_id: effectId,
         cost: cost
       });

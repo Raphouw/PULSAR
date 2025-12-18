@@ -16,7 +16,6 @@ interface ReportItem {
 }
 
 // État physiologique complet pour le tracking
-// NOTE : On track ici la FTP "Modélisée" par le moteur
 interface PhysioState {
     modeled_ftp: number;
     w_prime: number;
@@ -34,14 +33,15 @@ export async function GET(req: Request) {
 
   try {
     // ⚠️ Assure-toi que les colonnes 'manual_ftp' et 'modeled_ftp' existent dans 'users'
-    // 'manual_ftp' : Saisie par l'user (prioritaire pour TSS/IF)
-    // 'modeled_ftp' : Calculée par l'engine (pour le suivi de forme)
-    const { data: allUsers } = await supabaseAdmin
+    const { data: allUsersData } = await supabaseAdmin
         .from('users')
         .select('id, name, weight, ftp, modeled_ftp, w_prime, vo2max, TTE, CP3, CP12') 
         .order('id', { ascending: true });
 
-    if (!allUsers) throw new Error("Aucun user trouvé");
+    if (!allUsersData) throw new Error("Aucun user trouvé");
+
+    // ⚡ FIX: Cast en any[] pour boucler sans erreur "never"
+    const allUsers = allUsersData as any[];
 
     const report: ReportItem[] = []; 
     let workDoneInThisRun = false;
@@ -55,13 +55,16 @@ export async function GET(req: Request) {
         console.log(`\n[Sequencer] 👤 Analyse de ${user.name} (ID: ${user.id})...`);
 
         // 1. Récupération du dernier état CONNU en base (History)
-        const { data: lastHistory } = await supabaseAdmin
+        const { data: lastHistoryData } = await supabaseAdmin
             .from('user_fitness_history')
             .select('*') 
             .eq('user_id', user.id)
             .order('date_calculated', { ascending: false })
             .limit(1)
             .maybeSingle();
+
+        // ⚡ FIX: Cast en any
+        const lastHistory = lastHistoryData as any;
 
         let lastDateISO = '2000-01-01T00:00:00.000Z';
         
@@ -85,13 +88,16 @@ export async function GET(req: Request) {
         }
 
         // 2. Récupération Activités Futures
-        const { data: nextActivities } = await supabaseAdmin
+        const { data: nextActivitiesData } = await supabaseAdmin
             .from('activities')
             .select('id, name, start_time')
             .eq('user_id', user.id)
             .gt('start_time', lastDateISO) 
             .order('start_time', { ascending: true }) 
             .limit(BATCH_SIZE); 
+
+        // ⚡ FIX: Cast en any[]
+        const nextActivities = (nextActivitiesData || []) as any[];
 
         if (!nextActivities || nextActivities.length === 0) {
             console.log(`[Sequencer]    ✅ User à jour.`);
@@ -107,11 +113,14 @@ export async function GET(req: Request) {
             // Watchdog (max 250s execution pour Vercel)
             if (Date.now() - startTime > 250 * 1000) break;
 
-            const { data: fullAct } = await supabaseAdmin
+            const { data: fullActData } = await supabaseAdmin
                 .from('activities')
                 .select('streams_data')
                 .eq('id', partialAct.id)
                 .single();
+
+            // ⚡ FIX: Cast en any
+            const fullAct = fullActData as any;
 
             // A. CHECK STREAMS
             if (!fullAct?.streams_data) {
@@ -133,7 +142,6 @@ export async function GET(req: Request) {
             }
 
             // C. ANALYSE & UPDATE
-            // 🔥 CRUCIAL : Pour le calcul TSS/IF, on utilise la Manual FTP si dispo, sinon la Modeled
             const ftpForAnalysis = user.ftp || currentState.modeled_ftp;
 
             const result = await analyzeAndSaveActivity(
@@ -141,7 +149,7 @@ export async function GET(req: Request) {
                 0, // eventId (non utilisé ici)
                 streams,
                 user.weight || 75,
-                ftpForAnalysis // <--- C'est ici qu'on évite le biais
+                ftpForAnalysis 
             );
 
             if (result.success && result.fitnessUpdate?.success) {
@@ -150,7 +158,7 @@ export async function GET(req: Request) {
                 
                 // On met à jour l'objet d'état avec les nouvelles valeurs MODÉLISÉES
                 currentState = {
-                    modeled_ftp: up.newFtp ?? currentState.modeled_ftp, // Le moteur renvoie la nouvelle modeled_ftp
+                    modeled_ftp: up.newFtp ?? currentState.modeled_ftp, 
                     w_prime: up.newWPrime ?? currentState.w_prime,
                     cp3: up.newCp3 ?? currentState.cp3,
                     cp12: up.newCp12 ?? currentState.cp12,
@@ -197,7 +205,8 @@ export async function GET(req: Request) {
 
 // Helper pour insérer l'historique "Skip" en conservant TOUTES les valeurs précédentes
 async function recordHistorySkip(userId: number | string, actId: number, dateISO: string, state: PhysioState) {
-    await supabaseAdmin.from('user_fitness_history').insert({
+    // ⚡ FIX: On cast le builder en any pour débloquer l'insert
+    await (supabaseAdmin.from('user_fitness_history') as any).insert({
         user_id: userId,
         date_calculated: dateISO,
         source_activity_id: actId,

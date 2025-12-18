@@ -1,9 +1,7 @@
-// Fichier : app/events/[id]/page.tsx
 import { supabaseAdmin } from '../../../lib/supabaseAdminClient';
 import EventDetailClient from './EventDetailClient';
 import { notFound } from 'next/navigation';
-// On garde l'import pour le typage interne, mais on va le contourner pour le rendu
-import { CycloEvent, RelatedEdition } from '../../../types/events'; 
+import { RelatedEdition } from '../../../types/events'; 
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -13,28 +11,31 @@ export default async function EventPage({ params }: Props) {
   const { id } = await params;
   const eventId = parseInt(id, 10);
 
-  // 1. Récupérer l'ÉVÉNEMENT PRINCIPAL
-  const { data: eventData, error } = await supabaseAdmin
+  // 1. RÉCUPÉRATION DE L'ÉVÉNEMENT
+  // On cast en 'any' pour éviter que TS ne bloque sur les relations routes/history
+  const { data: eventRaw, error } = await supabaseAdmin
     .from('events')
     .select(`*, routes:event_routes(*), history:event_history(*), series_id, coordinates, final_weather_json, end_time`)
     .eq('id', eventId)
     .single();
 
-  if (error || !eventData) { 
+  if (error || !eventRaw) { 
     console.error("Erreur de récupération Event ID:", eventId, error);
     return notFound(); 
   }
 
-  // 1.1 RÉCUPÉRATION DES ÉDITIONS LIÉES
+  const eventData = eventRaw as any;
+
+  // 1.1 RÉCUPÉRATION DES ÉDITIONS LIÉES (Séries)
   let relatedEditions: RelatedEdition[] = []; 
   if (eventData.series_id) {
-      const { data } = await supabaseAdmin
+      const { data: editionsData } = await supabaseAdmin
           .from('events')
           .select('id, name, date_start, winner_name_m, winner_time_m, winner_name_f, winner_time_f')
           .eq('series_id', eventData.series_id)
           .order('date_start', { ascending: false });
       
-      relatedEditions = (data as RelatedEdition[] || []).map(edition => ({
+      relatedEditions = (editionsData as any[] || []).map(edition => ({
           id: edition.id,
           name: edition.name,
           date_start: edition.date_start,
@@ -45,8 +46,8 @@ export default async function EventPage({ params }: Props) {
       }));
   }
 
-  // 2. RÉCUPÉRATION DE TOUTES LES PARTICIPATIONS
-  const { data: allParticipations, error: partError } = await supabaseAdmin
+  // 2. RÉCUPÉRATION DES PARTICIPATIONS (Classement)
+  const { data: participationsData, error: partError } = await supabaseAdmin
     .from('event_participations')
     .select(`
       id,
@@ -76,8 +77,10 @@ export default async function EventPage({ params }: Props) {
       console.error("Erreur chargement participations:", partError);
   }
 
-  // 🔥 FIX FINAL : Nettoyage des Nulls + Cast 'any' pour le build
-  // On convertit explicitement les 'null' en 'undefined' pour React
+  const allParticipations = (participationsData || []) as any[];
+
+  // 3. NETTOYAGE FINAL DES DONNÉES
+  // On transforme les nulls en undefined pour le composant Client
   const cleanEvent = {
     ...eventData,
     date_end: eventData.date_end ?? undefined, 
@@ -92,10 +95,8 @@ export default async function EventPage({ params }: Props) {
 
   return (
     <EventDetailClient 
-        // 🛡️ LE JOKER : 'as any' permet de bypasser l'erreur de typage stricte "Null vs Undefined"
-        // C'est safe ici car on a nettoyé les nulls juste au dessus.
         event={cleanEvent as any} 
-        allParticipations={allParticipations || []} 
+        allParticipations={allParticipations} 
         relatedEditions={relatedEditions} 
     />
   );

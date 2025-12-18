@@ -20,12 +20,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     const session = await getServerSession(authOptions);
     
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const userId = session.user.id;
+    
+    // ⚡ FIX: Conversion ID User
+    const userId = Number(session.user.id);
 
     console.log(`\n🚀 --- SCAN CIBLÉ (Event #${eventId}) ---`);
 
     // 1. Récupérer l'événement et ses routes AVEC la polyline
-    const { data: event } = await supabaseAdmin
+    const { data: eventData } = await supabaseAdmin
       .from('events')
       .select(`
         id, date_start, 
@@ -34,24 +36,33 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
       .eq('id', eventId)
       .single();
 
+    // ⚡ FIX: Cast Event
+    const event = eventData as any;
+
     if (!event) return NextResponse.json({ error: "Event introuvable" }, { status: 400 });
 
     // CHECK DES ROUTES
     console.log(`📊 Parcours disponibles :`);
-    event.routes.forEach((r: any) => {
+    // ⚡ FIX: Cast Routes pour itération
+    const routes = (event.routes || []) as any[];
+    
+    routes.forEach((r: any) => {
         const hasPoly = r.polyline && r.polyline.length > 650;
         console.log(`   - Route "${r.name}" : ${hasPoly ? "✅ Polyline OK" : "❌ POLYLINE MANQUANTE (NULL)"}`);
     });
 
     // 2. Récupérer les activités
-    const { data: activities } = await supabaseAdmin
+    const { data: activitiesData } = await supabaseAdmin
       .from('activities')
       .select('*')
       .eq('user_id', userId);
 
+    // ⚡ FIX: Cast Activities
+    const activities = (activitiesData || []) as any[];
+
     const matches: { eventId: number; routeId: number; type: string }[] = [];
 
-    if (activities && activities.length > 0) {
+    if (activities.length > 0) {
         for (const activity of activities) {
             // A. DÉCODAGE ACTIVITÉ
             let actLat = 0, actLon = 0;
@@ -66,7 +77,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
             if (actLat === 0) continue;
 
             // B. TEST CONTRE LES PARCOURS
-            for (const route of event.routes) {
+            for (const route of routes) {
                 let routeLat = 0, routeLon = 0;
                 
                 // Décodage Route
@@ -88,7 +99,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                 }
 
                 if (distGeo < 20) { // Tolérance 20km
-                    const ratio = activity.distance_km / route.distance_km;
+                    const actDist = Number(activity.distance_km);
+                    const routeDist = Number(route.distance_km);
+                    const ratio = routeDist > 0 ? actDist / routeDist : 0;
                     
                     // Tolérance Distance 15%
                     if (ratio > 0.85 && ratio < 1.15) {
@@ -98,7 +111,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
                         const evtDate = new Date(event.date_start).toISOString().split('T')[0];
                         const type = actDate === evtDate ? 'RACE' : 'RECON';
 
-                        await supabaseAdmin.from('event_participations').upsert({
+                        // ⚡ FIX: Cast builder Upsert
+                        await (supabaseAdmin.from('event_participations') as any).upsert({
                             user_id: userId,
                             event_id: event.id,
                             route_id: route.id,

@@ -1,7 +1,9 @@
+//Fichier : app/api/activities/delete/route.ts
+
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth";
-import { supabaseAdmin } from "../../../../lib/supabaseAdminClient.js";
+import { supabaseAdmin } from "../../../../lib/supabaseAdminClient";
 
 export async function POST(req: Request) {
   try {

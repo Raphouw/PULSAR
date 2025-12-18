@@ -1,3 +1,4 @@
+// Fichier : app/api/shop/equip/route.ts
 import { NextResponse } from 'next/server';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth";
@@ -13,11 +14,13 @@ export async function POST(req: Request) {
   try {
     const { loadout } = await req.json();
 
-    // Upsert : Crée ou Met à jour les settings
-    const { error } = await supabaseAdmin
-      .from('user_settings')
+    // ⚡ FIX : Conversion de l'ID utilisateur en Number pour la BDD
+    const userId = Number(session.user.id);
+
+    // ⚡ FIX : Cast du builder en 'any' pour débloquer l'upsert sur le type 'never'
+    const { error } = await (supabaseAdmin.from('user_settings') as any)
       .upsert({
-        user_id: session.user.id,
+        user_id: userId,
         equipped_loadout: loadout,
         updated_at: new Date().toISOString()
       }, { 

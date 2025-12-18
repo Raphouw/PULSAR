@@ -21,10 +21,10 @@ export async function OPTIONS() {
 // -------------------------------------------------------------------
 export async function PUT(
     req: Request, 
-    { params }: { params: Promise<{ id: string }> } // ✅ CORRECTION 1: Promise
+    { params }: { params: Promise<{ id: string }> } 
 ) {
     try {
-        const { id } = await params; // ✅ CORRECTION 2: await params
+        const { id } = await params;
         const eventId = parseInt(id, 10);
         
         const session = await getServerSession(authOptions);
@@ -32,7 +32,6 @@ export async function PUT(
         if (!session?.user?.id) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
-        // NOTE: En production, vérifiez également les permissions admin
 
         const body = await req.json();
         const { eventData } = body;
@@ -43,7 +42,7 @@ export async function PUT(
         
         console.log(`\n🔄 --- DÉBUT MISE À JOUR ÉVÉNEMENT #${eventId} ---`);
 
-        // 1. Prépare les données de l'événement principal (en incluant les résultats)
+        // 1. Prépare les données de l'événement principal
         const eventUpdateData: Partial<CycloEvent> & { 
             coordinates?: { lat: number; lon: number } | null,
             start_time?: string | null;
@@ -78,24 +77,18 @@ export async function PUT(
         };
 
         // 2. Mise à jour dans la BDD
-        const { error: updateError } = await supabaseAdmin
-            .from('events')
+        // ⚡ FIX: Cast en any pour l'update
+        const { error: updateError } = await (supabaseAdmin.from('events') as any)
             .update(eventUpdateData)
             .eq('id', eventId);
 
         if (updateError) {
             console.error("Erreur UPDATE Event:", updateError);
-            return NextResponse.json({ error: `Erreur BDD lors de la mise à jour de l'événement: ${updateError.message}` }, { status: 500 });
+            return NextResponse.json({ error: `Erreur BDD lors de la mise à jour: ${updateError.message}` }, { status: 500 });
         }
         
-        // --- LOGIQUE DE MISE À JOUR DES SOUS-TABLES (Routes & Historique) ---
+        // --- LOGIQUE DE MISE À JOUR DES ROUTES ---
         
-        // On supprime les anciennes routes qui ne sont plus dans le formulaire
-        const submittedRouteIds = eventData.routes.filter((r: any) => r.id).map((r: any) => r.id);
-        if (submittedRouteIds.length > 0) {
-            // Logique de nettoyage
-        }
-
         for (const route of eventData.routes) {
             const routeData = {
                 event_id: eventId,
@@ -112,13 +105,17 @@ export async function PUT(
             };
             
             if (route.id) {
-                await supabaseAdmin.from('event_routes').update(routeData).eq('id', route.id);
+                // ⚡ FIX: Cast en any pour l'update route
+                await (supabaseAdmin.from('event_routes') as any)
+                    .update(routeData)
+                    .eq('id', route.id);
             } else {
-                await supabaseAdmin.from('event_routes').insert(routeData);
+                // ⚡ FIX: Cast en any pour l'insert route
+                await (supabaseAdmin.from('event_routes') as any)
+                    .insert(routeData);
             }
         }
         
-        // 5. Succès
         return NextResponse.json({ success: true, eventId }, { status: 200 });
 
     } catch (err: any) {
@@ -128,15 +125,15 @@ export async function PUT(
 }
 
 // -------------------------------------------------------------------
-// 🔥 RÉCUPÉRATION (GET) : Le EventCreatorForm a besoin de récupérer l'événement
+// 🔥 RÉCUPÉRATION (GET)
 // -------------------------------------------------------------------
 
 export async function GET(
     req: Request, 
-    { params }: { params: Promise<{ id: string }> } // ✅ CORRECTION 3: Promise
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
-        const { id } = await params; // ✅ CORRECTION 4: await params
+        const { id } = await params;
         const eventId = parseInt(id, 10);
         
         const session = await getServerSession(authOptions);
@@ -145,7 +142,7 @@ export async function GET(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { data: event, error } = await supabaseAdmin
+        const { data: eventData, error } = await supabaseAdmin
             .from('events')
             .select(`
                 *,
@@ -154,6 +151,9 @@ export async function GET(
             `)
             .eq('id', eventId)
             .single();
+
+        // ⚡ FIX: Cast en any pour lire les propriétés jointes
+        const event = eventData as any;
 
         if (error || !event) {
             return NextResponse.json({ error: "Event introuvable" }, { status: 404 });

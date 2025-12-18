@@ -78,7 +78,7 @@ export default async function ActivityPage({
   const viewerId = session.user.id;
 
   // 1. RÉCUPÉRATION DE L'ACTIVITÉ
-  const { data: activity, error } = await supabaseAdmin
+  const { data: activityRaw, error } = await supabaseAdmin
     .from('activities')
     .select(`
       *,
@@ -98,7 +98,7 @@ export default async function ActivityPage({
     .single();
 
   // 2. GESTION ERREUR / 404
-  if (error || !activity) {
+  if (error || !activityRaw) {
     // ... (Code erreur inchangé) ...
     return (
         <div style={{ minHeight: '100vh', background: '#050505', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#fff' }}>
@@ -112,7 +112,10 @@ export default async function ActivityPage({
     );
   }
 
-  // 3. 🛡️ SÉCURITÉ ACCÈS (DÉPLACÉ AVANT LES CALCULS LOURDS)
+  // ⚡ FIX: On cast l'objet activité pour débloquer l'accès aux propriétés
+  const activity = activityRaw as any;
+
+  // 3. 🛡️ SÉCURITÉ ACCÈS
   const isOwner = String(activity.user_id) === String(viewerId);
   let hasAccess = isOwner;
 
@@ -150,7 +153,7 @@ export default async function ActivityPage({
 
   // 4. 🔥 RÉCUPÉRATION ET INJECTION DES MEILLEURS RANGS HISTORIQUES
   const segmentIds = activity.activity_segments.map((as: any) => as.segment_id);
-  let bestRanksMap = new Map<number, number>();
+  const bestRanksMap = new Map<number, number>();
   
   if (segmentIds.length > 0) {
       const { data: bestEfforts } = await supabaseAdmin
@@ -185,11 +188,11 @@ export default async function ActivityPage({
   const user_weight = userRelation?.weight ?? 75; 
   const user_ftp = userRelation?.ftp ?? 200; 
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { users, ...activityWithoutUsers } = activity;
+  // ⚡ FIX: On déstructure proprement pour éviter l'erreur de spread sur 'never'
+  const { users, ...activityRest } = activity;
 
   const formattedActivity: Activity = {
-    ...activityWithoutUsers,
+    ...activityRest,
     user_weight,
     user_ftp,
     // 🔥 CORRECTION ICI : UTILISER LA NOUVELLE LISTE

@@ -1,3 +1,4 @@
+// Fichier : app/actions/getLegendsList.ts
 'use server';
 
 import { supabaseAdmin } from '@/lib/supabaseAdminClient';
@@ -8,7 +9,7 @@ export async function getLegendsList() {
     noStore(); // On veut des données fraîches à chaque fois
 
     // 1. Récupération des segments performants (Top 10)
-    const { data: segments, error: segError } = await supabaseAdmin
+    const { data: segmentsData, error: segError } = await supabaseAdmin
       .from('activity_segments')
       .select('user_id, rank_global')
       .lte('rank_global', 10)
@@ -16,19 +17,28 @@ export async function getLegendsList() {
 
     if (segError) throw segError;
 
+    // ⚡ FIX: On cast en any[] pour éviter l'erreur 'never'
+    const segments = segmentsData as any[];
+
     // 2. Récupération des utilisateurs
-    const { data: users, error: userError } = await supabaseAdmin
+    const { data: usersData, error: userError } = await supabaseAdmin
       .from('users')
       .select('id, name, avatar_url');
 
     if (userError) throw userError;
+
+    // ⚡ FIX: On cast en any[] pour pouvoir boucler dessus
+    const users = usersData as any[];
 
     // 3. Calcul du Classement (Agrégation JS)
     const leaderboard: Record<string, any> = {};
 
     // Init
     users?.forEach(u => {
-        leaderboard[u.id] = {
+        // On convertit l'ID en string pour l'utiliser comme clé
+        const uid = String(u.id);
+        
+        leaderboard[uid] = {
             user_id: u.id,
             name: u.name || `Athlète #${u.id}`,
             image: u.avatar_url,
@@ -40,7 +50,8 @@ export async function getLegendsList() {
 
     // Comptage
     segments?.forEach(seg => {
-        const uid = seg.user_id;
+        const uid = String(seg.user_id);
+        
         if (leaderboard[uid]) {
             if (seg.rank_global === 1) {
                 leaderboard[uid].count_koms++;

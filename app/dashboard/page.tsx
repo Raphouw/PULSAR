@@ -2,7 +2,7 @@
 import React from 'react';
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../lib/auth";
-import { supabaseAdmin } from "../../lib/supabaseAdminClient.js";
+import { supabaseAdmin } from "../../lib/supabaseAdminClient";
 import { redirect } from "next/navigation";
 import DashboardClient from './dashboardClient';
 import DashboardGuard from './DashboardGuard';
@@ -51,16 +51,13 @@ function computePeriodScore(current: StatBlock, previous: StatBlock): number {
     const prevValue = previous[m] as number;
     const currValue = current[m] as number;
 
-    // Bonus de reprise si on part de 0
     if (prevValue === 0) {
       return currValue > 0 ? 1.5 : 1.0;
     }
     
-    // Calcul de la variation
     const variation = (currValue - prevValue) / prevValue;
     let score = 1.0 + variation;
     
-    // On borne le score entre 0 et 200%
     return Math.min(2.0, Math.max(0, score));
   });
 
@@ -84,7 +81,6 @@ const calculateStats = (activities: any[]): StatBlock => {
   return stats;
 };
 
-// 🔥 CORRECTION ICI : On ajoute duration_s et type pour que le client les reçoive !
 export type RecentActivity = {
   id: number;
   name: string;
@@ -95,9 +91,9 @@ export type RecentActivity = {
   avg_power_w: number | null;
   tss: number | null;
   polyline: { polyline: string } | null;
-  duration_s: number; // AJOUTÉ
-  type: string | null; // AJOUTÉ
-  np_w?: number | null; // Optionnel
+  duration_s: number;
+  type: string | null;
+  np_w?: number | null;
 };
 
 export type DashboardData = {
@@ -157,13 +153,19 @@ function getEmptyDashboardData(): DashboardData {
 
 async function checkStravaConnection(userId: string): Promise<boolean> {
   try {
-    const { data, error } = await supabaseAdmin
+    const uid = Number(userId); 
+    if(isNaN(uid)) return false;
+
+    const { data: userData, error } = await supabaseAdmin
       .from('users')
       .select('strava_access_token, strava_refresh_token')
-      .eq('id', userId)
+      .eq('id', uid)
       .single();
 
-    if (error || !data) return false;
+    if (error || !userData) return false;
+    
+    // ⚡ FIX: Cast pour éviter l'erreur 'never'
+    const data = userData as any;
     return !!(data.strava_access_token && data.strava_refresh_token);
   } catch (error) {
     console.error('Erreur vérification Strava:', error);
@@ -177,22 +179,26 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     throw new Error('Identifiant utilisateur invalide');
   }
 
-  // On regarde 180 jours en arrière pour le Fitness (CTL)
+  const uid = Number(userId);
+  if(isNaN(uid)) throw new Error('ID invalide');
+
   const fetchLimitDate = getISODateXDaysAgo(180); 
 
   try {
-    // 0. 🔥 PROFIL UTILISATEUR (Pour W' et FTP)
-    const { data: userProfile } = await supabaseAdmin
+    // 0. 🔥 PROFIL UTILISATEUR
+    const { data: userProfileData } = await supabaseAdmin
         .from('users')
         .select('w_prime, ftp, updated_at')
-        .eq('id', userId)
+        .eq('id', uid)
         .single();
+    
+    const userProfile = userProfileData as any; // ⚡ FIX CAST
 
     // 1. Récupérer toutes les activités
-    const { data: activities, error: activitiesError } = await supabaseAdmin
+    const { data: activitiesData, error: activitiesError } = await supabaseAdmin
       .from('activities')
       .select('id, name, distance_km, elevation_gain_m, start_time, duration_s, tss, avg_power_w, type, avg_speed_kmh')
-      .eq('user_id', userId)
+      .eq('user_id', uid)
       .gte('start_time', fetchLimitDate)
       .order('start_time', { ascending: false });
 
@@ -201,9 +207,9 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
       return getEmptyDashboardData();
     }
 
-    const allActivities = activities || [];
+    const allActivities: any[] = activitiesData || [];
 
-    // 2. FITNESS & TSS (Calcul des courbes de forme)
+    // 2. FITNESS & TSS
     const tssMap = new Map<string, number>();
     allActivities.forEach(act => {
         if (act.start_time) {
@@ -231,22 +237,24 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     const fitnessData = calculateStressBalance(dailyTSSArray);
     const dailyTSS = dailyTSSArray.slice(-8);
 
-    // 3. Records (90j glissants) pour le modèle de puissance
-    const { data: records } = await supabaseAdmin
+    // 3. Records (90j glissants)
+    const { data: recordsData } = await supabaseAdmin
       .from('records')
       .select('type, duration_s, value')
-      .eq('user_id', userId)
+      .eq('user_id', uid)
       .gte('date_recorded', getISODateXDaysAgo(90));
+    
+    const records: any[] = recordsData || []; 
 
-    // 4. STATS GLOBALES (Total carrière)
+    // 4. STATS GLOBALES
     const { data: allStatsData } = await supabaseAdmin
       .from('activities')
       .select('distance_km, elevation_gain_m, duration_s, avg_power_w, tss') 
-      .eq('user_id', userId);
+      .eq('user_id', uid);
 
-    const allTimeStats = calculateStats(allStatsData || []);
+    const allTimeStats = calculateStats((allStatsData as any[]) || []);
     
-    // 5. FILTRAGE TEMPOREL POUR LES CARTES STATS
+    // 5. FILTRAGE TEMPOREL
     const date_7_ago = new Date(getISODateXDaysAgo(7));
     const date_14_ago = new Date(getISODateXDaysAgo(14));
     const date_30_ago = new Date(getISODateXDaysAgo(30));
@@ -279,20 +287,19 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
       prev90: calculateStats(statsPrev90),
     };
 
-    // 6. MODÈLE BIOLOGIQUE AVEC DÉCROISSANCE
+    // 6. MODÈLE BIOLOGIQUE
     const cpCurveObj: { [key: string]: number } = {};
-    (records || []).forEach(r => {
+    records.forEach(r => {
         if (!cpCurveObj[r.type] || r.value > cpCurveObj[r.type]) {
             cpCurveObj[r.type] = r.value;
         }
     });
 
     const getBestRecord = (sec: number) => {
-        const matches = records?.filter(r => r.duration_s === sec);
+        const matches = records.filter(r => r.duration_s === sec);
         return matches && matches.length > 0 ? Math.max(...matches.map(r => r.value)) : 0;
     };
     
-    // Calcul de la "Vérité Terrain" des 90 derniers jours
     const p3m = getBestRecord(180) || cpCurveObj['CP3'] || 250;
     const p12m = getBestRecord(720) || cpCurveObj['CP12'] || 200;
     const calculated = calculateCP_WPrime(p3m, p12m);
@@ -305,13 +312,13 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 
     // CAS 1 : PROGRESSION
     if (calcWPrime > dbWPrime + 100) {
-        await supabaseAdmin
-            .from('users')
-            .update({ w_prime: calcWPrime, updated_at: new Date() })
-            .eq('id', userId);
+        // ⚡ FIX: On cast le builder en any pour éviter le blocage 'never' sur l'update
+        await (supabaseAdmin.from('users') as any)
+            .update({ w_prime: calcWPrime, updated_at: new Date().toISOString() }) 
+            .eq('id', uid);
         finalWPrime = calcWPrime;
     }
-    // CAS 2 : S'ENTRAÎNE COOL (Érosion)
+    // CAS 2 : ÉROSION
     else if (calcWPrime < dbWPrime) {
         const now = new Date();
         const diffMs = now.getTime() - updatedAt.getTime();
@@ -323,10 +330,10 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
             const decayedWPrime = Math.max(calcWPrime, dbWPrime - decayAmount);
 
             if (decayedWPrime < dbWPrime) {
-                await supabaseAdmin
-                    .from('users')
-                    .update({ w_prime: decayedWPrime, updated_at: new Date() })
-                    .eq('id', userId);
+                // ⚡ FIX: On cast le builder en any pour éviter le blocage 'never' sur l'update
+                await (supabaseAdmin.from('users') as any)
+                    .update({ w_prime: decayedWPrime, updated_at: new Date().toISOString() })
+                    .eq('id', uid);
                 finalWPrime = decayedWPrime;
             }
         }
@@ -337,7 +344,6 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     const CP = calculated.CP; 
     const WPrime = finalWPrime; 
 
-    // Génération courbe de puissance théorique
     const curvePoints: { label: string, sec: number }[] = [ { label: '30s', sec: 30 } ];
     const minutesToAdd = [1, 2, 3, 4, 5, 6, 8, 10, 15, 20, 30, 45, 60, 90, 120, 180];
     
@@ -355,28 +361,27 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
         };
     });
 
-    // 7. Activités Récentes (14j) - C'est ici qu'on inclut type et duration_s
+    // 7. Activités Récentes (14j)
     const twoWeeksAgoISO = getISODateXDaysAgo(14);
     const { data: recentActivitiesData } = await supabaseAdmin
       .from("activities")
-      .select(`id, name, distance_km, elevation_gain_m, start_time, avg_speed_kmh, avg_power_w, tss, polyline, duration_s, type`) // 🔥 AJOUT DE duration_s et type
-      .eq("user_id", userId)
+      .select(`id, name, distance_km, elevation_gain_m, start_time, avg_speed_kmh, avg_power_w, tss, polyline, duration_s, type`)
+      .eq("user_id", uid)
       .gte("start_time", twoWeeksAgoISO)
       .order("start_time", { ascending: false })
       .limit(20);
 
-    // 8. Calcul des Scores
+    // 8. Scores
     const score7j = computePeriodScore(processedStats.last7, processedStats.prev7);
     const scoreMonth = computePeriodScore(processedStats.month, processedStats.prevMonth);
     const score30j = computePeriodScore(processedStats.last30, processedStats.prev30);
     const score90j = computePeriodScore(processedStats.last90, processedStats.prev90);
     const globalScore = (1*score7j + 1*scoreMonth + 4*score30j + 12*score90j) / 18;
 
-
-      const { data: graphdata } = await supabaseAdmin
+    const { data: graphdata } = await supabaseAdmin
       .from("user_fitness_history")
       .select(`id, user_id, date_calculated, ftp_value, w_prime_value, cp3_value, cp12_value, vo2max_value, tte_value, source_activity_id, model_cp3, model_cp12`)
-      .eq("user_id", userId)
+      .eq("user_id", uid)
       .order("date_calculated", { ascending: false });
 
     return {
@@ -385,10 +390,10 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
       consistency: { score7j, scoreMonth, score30j, score90j, global: globalScore },
       cpCurve: cpCurveObj,
       dailyTSS,
-      recentActivities: (recentActivitiesData as RecentActivity[]) || [],
+      recentActivities: (recentActivitiesData as unknown as RecentActivity[]) || [], // ⚡ FORCE CAST FINAL
       powerModel: { metrics: { CP, WPrime }, curve: powerCurveData },
       fitnessData,
-      fitnessHistory: graphdata || []
+      fitnessHistory: (graphdata as any[]) || []
     };
 
   } catch (error) {
@@ -403,10 +408,20 @@ export default async function DashboardPage() {
   if (!session) redirect('/auth/signin');
 
   let userId = session.user?.id;
+  
+  // Récupération ID si connexion email pure
   if (!userId && session.user?.email) {
-    const { data: user } = await supabaseAdmin.from('users').select('id').eq('email', session.user.email).single();
-    if (user) userId = user.id;
+    const { data: user } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('email', session.user.email)
+        .single();
+    
+    // ⚡ FIX CAST
+    const u = user as any;
+    if (u) userId = u.id;
   }
+  
   if (!userId) redirect('/auth/signin');
 
   let hasStrava = false;

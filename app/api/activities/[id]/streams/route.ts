@@ -15,11 +15,15 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     }
 
     // 2. Récupérer l'activité
-    const { data: activity, error } = await supabaseAdmin
+    const { data: activityData, error } = await supabaseAdmin
       .from('activities')
       .select('streams_data')
-      .eq('id', id)
+      // ⚡ FIX : Conversion explicite en Number pour matcher la BDD
+      .eq('id', Number(id))
       .single();
+
+    // ⚡ FIX : On cast en 'any' pour éviter l'erreur "Property streams_data does not exist on type never"
+    const activity = activityData as any;
 
     if (error || !activity) {
       console.error("Erreur SQL ou Activité introuvable:", error);

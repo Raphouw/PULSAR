@@ -12,7 +12,7 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     }
 
-    const userId = session.user.id;
+    const userId = Number(session.user.id);
 
     // Récupération des activités
     const { data: activities, error } = await supabaseAdmin

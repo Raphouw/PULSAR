@@ -1,4 +1,3 @@
-// Fichier : app/api/sync-stream/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../lib/auth";
@@ -13,14 +12,18 @@ export async function POST(req: Request) {
 
     const { activityId, stravaId } = await req.json();
     
+    // ⚡ FIX: Conversion de l'ID en Number pour la BDD
+    const userId = Number(session.user.id);
+
     // 1. Récupération Token
-    const { data: user } = await supabaseAdmin
+    const { data: userData, error: userError } = await supabaseAdmin
         .from("users")
         .select("strava_access_token")
-        .eq("id", session.user.id)
+        .eq("id", userId)
         .single();
 
-    if (!user) throw new Error("User not found");
+    if (userError || !userData) throw new Error("User not found");
+    const user = userData as any;
     const accessToken = user.strava_access_token; 
 
     // 2. Fetch Strava
@@ -51,7 +54,6 @@ export async function POST(req: Request) {
         temp: extract('temp'),
     };
 
-    // --- CORRECTION TYPE --- [cite: 1, 2]
     let avgPower: number | null = null;
     let avgHr: number | null = null;
     let maxHr: number | null = null;
@@ -69,8 +71,11 @@ export async function POST(req: Request) {
 
     // 4. SAUVEGARDE EN BDD
     console.log(`[Sync Stream] 💾 Enregistrement des flux en base pour l'ID Pulsar ${activityId}...`);
-    const { error: updateError } = await supabaseAdmin
-        .from('activities')
+    
+    // 
+    
+    // ⚡ FIX: Cast builder en any
+    const { error: updateError } = await (supabaseAdmin.from('activities') as any)
         .update({ 
             streams_data: cleanStreams,
             avg_power_w: avgPower,
@@ -82,13 +87,15 @@ export async function POST(req: Request) {
     if (updateError) throw updateError;
 
     // 5. ANALYSE ET SCAN AUTOMATIQUE
-    const { data: userProfile } = await supabaseAdmin
+    const { data: profileData } = await supabaseAdmin
         .from('users')
         .select('weight, ftp')
-        .eq('id', session.user.id)
+        .eq('id', userId)
         .single();
     
-    // A. Records de puissance
+    const userProfile = profileData as any;
+
+    // A. Records de puissance & Fitness
     if (typeof analyzeAndSaveActivity === 'function') {
         await analyzeAndSaveActivity(
             activityId, 
@@ -100,8 +107,9 @@ export async function POST(req: Request) {
         console.log(`[Sync Stream] ⚡ Analyse de fitness terminée.`);
     }
 
-    // B. 🔥 AUTO-SCAN DES SEGMENTS (Injection Directe) [cite: 3]
-    // On passe cleanStreams directement pour éviter le lag BDD
+    // B. 🔥 AUTO-SCAN DES SEGMENTS
+    // 
+    
     console.log(`[Sync Stream] 🚀 Déclenchement du scan de segments (AUTO)...`);
     const scanResult = await scanActivityAgainstSegments(activityId, undefined, cleanStreams as any);
     

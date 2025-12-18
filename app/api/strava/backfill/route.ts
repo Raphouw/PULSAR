@@ -1,4 +1,3 @@
-// Fichier : app/api/strava/backfill/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth";
@@ -10,12 +9,14 @@ export const dynamic = 'force-dynamic';
 
 // --- HELPER TOKEN ---
 async function getValidStravaToken(userId: string) {
-  const { data: user } = await supabaseAdmin
+  // ⚡ FIX: On cast le retour pour éviter l'erreur "never"
+  const { data: userData } = await supabaseAdmin
     .from("users")
     .select("strava_access_token, strava_refresh_token, strava_token_expires_at")
-    .eq("id", userId)
+    .eq("id", Number(userId))
     .single();
 
+  const user = userData as any;
   if (!user) throw new Error("User not found");
 
   const now = Date.now();
@@ -38,11 +39,12 @@ async function getValidStravaToken(userId: string) {
   const tokens = await res.json();
   if (!res.ok) throw new Error("Token refresh failed");
 
-  await supabaseAdmin.from("users").update({
+  // ⚡ FIX: Cast builder update
+  await (supabaseAdmin.from("users") as any).update({
     strava_access_token: tokens.access_token,
     strava_refresh_token: tokens.refresh_token,
     strava_token_expires_at: new Date(tokens.expires_at * 1000).toISOString(),
-  }).eq("id", userId);
+  }).eq("id", Number(userId));
 
   return tokens.access_token;
 }
@@ -56,15 +58,17 @@ export async function GET(req: Request) {
     const userId = session.user.id;
 
     // 1. Trouver l'activité suivante à traiter
-    const { data: activity, error: fetchError } = await supabaseAdmin
+    const { data: activityData, error: fetchError } = await supabaseAdmin
       .from('activities')
       .select('id, strava_id, name')
-      .eq('user_id', userId)
+      .eq('user_id', Number(userId))
       .is('streams_data', null) 
       .not('strava_id', 'is', null)
       .order('start_time', { ascending: false }) 
       .limit(1)
-      .single();
+      .maybeSingle();
+
+    const activity = activityData as any;
 
     if (fetchError || !activity) {
       console.log("[Backfill] ✅ Toutes les activités sont à jour.");
@@ -84,7 +88,7 @@ export async function GET(req: Request) {
     if (!streamRes.ok) {
         if (streamRes.status === 404) {
             console.warn(`[Backfill] ⚠️ Activité ${activity.strava_id} introuvable sur Strava (404).`);
-            await supabaseAdmin.from('activities').update({ streams_data: {} }).eq('id', activity.id);
+            await (supabaseAdmin.from('activities') as any).update({ streams_data: {} }).eq('id', activity.id);
             return NextResponse.json({ done: false, message: "Activité 404 ignorée." });
         }
         throw new Error(`Strava API Error: ${streamRes.statusText}`);
@@ -108,9 +112,7 @@ export async function GET(req: Request) {
         temp: extract('temp')
     };
 
-    console.log(`[Backfill] 📊 Données extraites : ${cleanStreams.latlng.length} points GPS.`);
-
-    // 3. Calculs des moyennes pour l'update
+    // 3. Calculs des moyennes
     let avgPower: number | null = null;
     let avgHr: number | null = null;
     let maxHr: number | null = null;
@@ -124,8 +126,8 @@ export async function GET(req: Request) {
     }
 
     // 4. Mise à jour BDD (Streams + Stats)
-    const { error: updateError } = await supabaseAdmin
-        .from('activities')
+    // ⚡ FIX: Cast builder update
+    const { error: updateError } = await (supabaseAdmin.from('activities') as any)
         .update({ 
             streams_data: cleanStreams,
             avg_power_w: avgPower,
@@ -134,15 +136,12 @@ export async function GET(req: Request) {
         })
         .eq('id', activity.id);
 
-    if (updateError) {
-        console.error(`[Backfill] ❌ Erreur Update BDD:`, updateError.message);
-        throw updateError;
-    }
-    console.log(`[Backfill] 💾 Streams enregistrés en base.`);
+    if (updateError) throw updateError;
 
-    // 5. Analyse Fitness & Records (Ancien moteur)
+    // 5. Analyse Fitness & Records
     if (typeof analyzeAndSaveActivity === 'function') {
-        const { data: userProfile } = await supabaseAdmin.from('users').select('weight, ftp').eq('id', userId).single();
+        const { data: userData } = await supabaseAdmin.from('users').select('weight, ftp').eq('id', Number(userId)).single();
+        const userProfile = userData as any;
         await analyzeAndSaveActivity(
             activity.id, 
             activity.strava_id as any, 
@@ -150,30 +149,18 @@ export async function GET(req: Request) {
             userProfile?.weight || 75, 
             userProfile?.ftp || 250
         );
-        console.log(`[Backfill] ⚡ Analyse fitness terminée.`);
     }
 
-    // 6. 🔥 AUTO-SCAN DES SEGMENTS (Nouveau moteur PULSAR)
-    console.log(`[Backfill] 🚀 Lancement du scanner de segments (Injection Directe)...`);
-    
-    // On passe cleanStreams directement pour éviter le lag d'indexation de la BDD
+    // 6. AUTO-SCAN DES SEGMENTS
     const scanResult = await scanActivityAgainstSegments(activity.id, undefined, cleanStreams as any);
     
-    if (scanResult.success) {
-        console.log(`[Backfill] ✅ Scan réussi : ${scanResult.matchesFound} efforts détectés.`);
-    } else {
-        console.error(`[Backfill] ❌ Échec du scan auto :`, (scanResult as any).msg || (scanResult as any).error);
-    }
-
-    // 7. Calcul du reste à faire pour l'UI
+    // 7. Calcul du reste à faire
     const { count } = await supabaseAdmin
         .from('activities')
         .select('id', { count: 'exact', head: true })
-        .eq('user_id', userId)
+        .eq('user_id', Number(userId))
         .is('streams_data', null)
         .not('strava_id', 'is', null);
-
-    console.log(`[Backfill] --- Fin du traitement. Restant : ${count || 0} ---`);
 
     return NextResponse.json({ 
         done: false, 

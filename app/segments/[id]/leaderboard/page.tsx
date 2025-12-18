@@ -1,4 +1,3 @@
-// Fichier : app/segments/[id]/leaderboard/page.tsx
 import React from 'react';
 import { supabaseAdmin } from "../../../../lib/supabaseAdminClient";
 import { getSegmentLeaderboard } from "../../../../lib/leaderboardEngine";
@@ -12,20 +11,29 @@ type Props = {
 };
 
 export default async function SegmentLeaderboardPage({ params }: Props) {
-    // 1. Déballer la Promise params (Crucial pour corriger l'erreur)
+    // 1. Déballer la Promise params proprement
     const resolvedParams = await params;
-    const segmentId = parseInt(resolvedParams.id);
+    const segmentId = parseInt(resolvedParams.id, 10);
 
     // 2. Récupération des métadonnées du segment
-    const { data: segment } = await supabaseAdmin
+    const { data: segmentRaw, error } = await supabaseAdmin
         .from('segments')
         .select('name, distance_m, average_grade, pulsar_index, pulsar_category, elevation_gain_m')
         .eq('id', segmentId)
         .single();
 
-    if (!segment) return <div className="p-20 text-center font-black">SEGMENT_NOT_FOUND</div>;
+    // ⚡ FIX: Cast en any pour accéder aux propriétés sans erreur TypeScript
+    const segment = segmentRaw as any;
 
-    // 3. Récupérer le classement initial (Tous temps)
+    if (error || !segment) {
+        return (
+            <div className="min-h-screen bg-black flex items-center justify-center">
+                <div className="text-red-500 font-black tracking-widest uppercase">SEGMENT_NOT_FOUND</div>
+            </div>
+        );
+    }
+
+    // 3. Récupérer le classement initial (Tous temps) via le moteur de classement
     const initialData = await getSegmentLeaderboard({ segmentId, sortBy: 'duration_s' });
 
     return (

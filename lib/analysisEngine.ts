@@ -1,4 +1,3 @@
-// Fichier : lib/analysisEngine.ts
 import { supabaseAdmin } from './supabaseAdminClient';
 import { 
   findBestInterval, 
@@ -15,7 +14,13 @@ export type AnalysisResult = {
   fitnessUpdate?: any;
 };
 
-export async function analyzeAndSaveActivity(activityId: number, stravaId: number, streams: any, userWeight: number = 75, userFtp: number = 250): Promise<AnalysisResult> {
+export async function analyzeAndSaveActivity(
+  activityId: number, 
+  stravaId: number, 
+  streams: any, 
+  userWeight: number = 75, 
+  userFtp: number = 250
+): Promise<AnalysisResult> {
   const brokenRecords: { duration: number; value: number; old: number; type: string }[] = [];
 
   const watts = streams.watts || []; 
@@ -28,7 +33,9 @@ export async function analyzeAndSaveActivity(activityId: number, stravaId: numbe
     return { success: false, brokenRecords: [] };
   }
 
-  // --- STATS DE BASE ---
+  // --- 1. CALCULS PHYSIOLOGIQUES ---
+  // 
+  
   const durationSeconds = time[time.length - 1] - time[0];
   const np = watts.length > 0 ? NPformulaCoggan(watts) : 0;
   
@@ -37,11 +44,14 @@ export async function analyzeAndSaveActivity(activityId: number, stravaId: numbe
   
   if (userFtp > 0 && np > 0) {
     intensity_factor = np / userFtp;
+    // Formule Coggan : TSS = [(sec * NP * IF) / (FTP * 3600)] * 100
     tss = (durationSeconds * np * intensity_factor) / (userFtp * 3600) * 100;
   }
 
   const totalWatts = watts.reduce((a: number, b: number) => a + (b || 0), 0);
   const avgPower = watts.length > 0 ? totalWatts / watts.length : 0;
+  
+  // Calcul du travail mécanique (kJ)
   const workKj = calculateWork(avgPower, durationSeconds);
   let calories: number | null = workKj ? Math.round(workKj) : null;
 
@@ -52,26 +62,33 @@ export async function analyzeAndSaveActivity(activityId: number, stravaId: numbe
   };
   if (calories !== null) updateData.calories_kcal = calories;
 
-  await supabaseAdmin.from('activities').update(updateData).eq('id', activityId);
+  // Mise à jour de l'activité avec les nouvelles métriques
+  await (supabaseAdmin.from('activities') as any).update(updateData).eq('id', activityId);
 
-  // --- RECORDS ---
+  // --- 2. DÉTECTION DES RECORDS ---
+  // 
+  
   let userIdStr: string | null = null;
   let activityDateISO: string | null = null;
 
   if (watts.length > 0) {
-      const { data: activityData } = await supabaseAdmin.from('activities').select('user_id, start_time').eq('id', activityId).single();
+      const { data: activityDataRaw } = await supabaseAdmin.from('activities').select('user_id, start_time').eq('id', activityId).single();
+      const activityData = activityDataRaw as any;
+      
       const userId = activityData?.user_id;
       userIdStr = userId ? String(userId) : null;
       activityDateISO = activityData?.start_time || new Date().toISOString();
 
+      // On récupère les records existants pour comparer
       const { data: allExistingRecords } = await supabaseAdmin.from('records').select('duration_s, value').eq('user_id', userId);
       const currentBests = new Map<number, number>();
-      allExistingRecords?.forEach(r => {
+      (allExistingRecords as any[])?.forEach(r => {
           const existing = currentBests.get(r.duration_s) || 0;
           if (r.value > existing) currentBests.set(r.duration_s, r.value);
       });
 
-      await supabaseAdmin.from('records').delete().eq('activity_id', activityId);
+      // Nettoyage avant recalcul (pour éviter les doublons d'ID d'activité)
+      await (supabaseAdmin.from('records') as any).delete().eq('activity_id', activityId);
 
       const recordsToInsert: any[] = [];
 
@@ -82,9 +99,9 @@ export async function analyzeAndSaveActivity(activityId: number, stravaId: numbe
         if (bestInterval) {
             let typeLabel = `P${duration}s`;
             if (duration === 180) typeLabel = 'CP3';
-            else if (duration === 300) typeLabel = 'CP5'; // Important pour VO2
+            else if (duration === 300) typeLabel = 'CP5'; // Utilisé pour l'estimation de VO2 Max
             else if (duration === 720) typeLabel = 'CP12';
-            else if (duration === 1200) typeLabel = 'CP20';
+            else if (duration === 1200) typeLabel = 'CP20'; // Utilisé pour l'estimation de la FTP (95%)
             else if (duration === 3600) typeLabel = 'CP60';
 
             const newVal = bestInterval.watts;
@@ -106,17 +123,17 @@ export async function analyzeAndSaveActivity(activityId: number, stravaId: numbe
       }
 
       if (recordsToInsert.length > 0) {
-        await supabaseAdmin.from('records').insert(recordsToInsert);
+        await (supabaseAdmin.from('records') as any).insert(recordsToInsert);
       }
   }
 
-  // --- 4. 🔥 MISE À JOUR FITNESS (Avec la date !) ---
+  // --- 3. 🔥 MISE À JOUR DU PROFIL DE FORME ---
   let fitnessUpdate: any = null;
   
   if (userIdStr && activityDateISO) {
-      console.log(`[Analysis] ⚡ Recalcul profil fitness pour User ${userIdStr} à la date ${activityDateISO}...`);
+      console.log(`[Analysis] ⚡ Recalcul profil fitness pour User ${userIdStr} au ${activityDateISO}...`);
       
-      // On passe la date exacte de l'activité pour "voyager dans le temps"
+      // On déclenche la mise à jour des CTL/ATL/TSB
       fitnessUpdate = await updateUserFitnessProfile(userIdStr, activityDateISO, activityId);
   }
 

@@ -1,4 +1,3 @@
-// Fichier : app/api/strava/streams/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth";
@@ -11,18 +10,20 @@ import { ActivityStreams } from "../../../../types/next-auth";
 // 1. GESTION DU TOKEN STRAVA
 // ---
 async function getValidStravaToken(userId: string) {
-  const { data: user, error } = await supabaseAdmin
+  // ⚡ FIX: Conversion de l'ID en Number pour la requête
+  const { data: userData, error } = await supabaseAdmin
     .from("users")
     .select("strava_access_token, strava_refresh_token, strava_token_expires_at")
-    .eq("id", userId)
+    .eq("id", Number(userId))
     .single();
     
+  // ⚡ FIX: Cast en any pour accéder aux propriétés
+  const user = userData as any;
+
   if (error || !user) throw new Error("Utilisateur non trouvé pour le token Strava.");
 
   const tokenExpiresAt = new Date(user.strava_token_expires_at).getTime();
   const now = new Date().getTime();
-  
-  // Buffer de sécurité de 5 minutes
   const BUFFER = 5 * 60 * 1000;
 
   if (now < (tokenExpiresAt - BUFFER)) {
@@ -43,31 +44,29 @@ async function getValidStravaToken(userId: string) {
   });
 
   const refreshedTokens = await res.json();
-  if (!res.ok) {
-    console.error("[Strava Streams] Échec du rafraîchissement:", refreshedTokens);
-    throw new Error("Impossible de rafraîchir le token Strava.");
-  }
+  if (!res.ok) throw new Error("Impossible de rafraîchir le token Strava.");
 
   const newExpiresAtISO = new Date(refreshedTokens.expires_at * 1000).toISOString();
   
-  await supabaseAdmin
-    .from("users")
+  // ⚡ FIX: Cast builder update
+  await (supabaseAdmin.from("users") as any)
     .update({
       strava_access_token: refreshedTokens.access_token,
       strava_refresh_token: refreshedTokens.refresh_token,
       strava_token_expires_at: newExpiresAtISO, 
     })
-    .eq("id", userId);
+    .eq("id", Number(userId));
     
   return refreshedTokens.access_token;
 }
 
 // ---
-// 2. CALCUL DES RECORDS D'ACTIVITÉ (POWER CURVE)
+// 2. CALCUL DES RECORDS (POWER CURVE)
 // ---
+
 const calculateActivityRecords = (
   streams: ActivityStreams,
-  userId: string,
+  userId: number,
   activityId: number,
   activityDate: string
 ) => {
@@ -107,35 +106,25 @@ const calculateActivityRecords = (
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
-    }
-    const userId = session.user.id;
-
-    const { strava_id } = await req.json();
-    if (!strava_id) {
-      return NextResponse.json({ error: "strava_id manquant" }, { status: 400 });
-    }
-
-    const accessToken = await getValidStravaToken(userId);
-
-    console.log(`[Strava Streams] Récupération des données pour l'activité ${strava_id}...`);
+    if (!session?.user?.id) return NextResponse.json({ error: "Non autorisé" }, { status: 401 });
     
+    const userId = Number(session.user.id);
+    const { strava_id } = await req.json();
+
+    if (!strava_id) return NextResponse.json({ error: "strava_id manquant" }, { status: 400 });
+
+    const accessToken = await getValidStravaToken(session.user.id);
+
     const keys = "watts,heartrate,cadence,altitude,latlng,distance,time,temp";
     const stravaRes = await fetch(
       `https://www.strava.com/api/v3/activities/${strava_id}/streams?keys=${keys}&key_by_type=true`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     );
 
-    if (!stravaRes.ok) {
-      const errorText = await stravaRes.text();
-      console.error(`[Strava Streams] Erreur API Strava: ${errorText}`);
-      throw new Error(`Échec de la récupération des streams Strava (ID: ${strava_id})`);
-    }
+    if (!stravaRes.ok) throw new Error("Échec Strava Streams API");
 
     const stravaStreams = await stravaRes.json();
 
-    // Helper pour extraire les données indépendamment du format de réponse de Strava
     const getStreamData = (type: string) => {
         if (stravaStreams[type]?.data) return stravaStreams[type].data;
         if (Array.isArray(stravaStreams)) {
@@ -156,48 +145,38 @@ export async function POST(req: Request) {
       temp: getStreamData('temp'), 
     };
 
-    // 4. MISE À JOUR DE L'ACTIVITÉ AVEC LES STREAMS
-    const { data: updatedActivity, error: updateError } = await supabaseAdmin
-      .from("activities")
+    // 4. MISE À JOUR DE L'ACTIVITÉ
+    // ⚡ FIX: Cast builder update + select
+    const { data: updatedData, error: updateError } = await (supabaseAdmin.from("activities") as any)
       .update({ streams_data: formattedStreams })
       .eq("strava_id", strava_id)
       .eq("user_id", userId) 
       .select("id, start_time") 
       .single();
     
-    if (updateError) throw updateError;
-    if (!updatedActivity) throw new Error("Activité non trouvée dans la base locale.");
-
-    const internalActivityId = updatedActivity.id;
-    const activityDate = updatedActivity.start_time;
+    const updatedActivity = updatedData as any;
+    if (updateError || !updatedActivity) throw new Error("Activité introuvable.");
 
     // 5. CALCUL ET SAUVEGARDE DES RECORDS
     const records = calculateActivityRecords(
       formattedStreams,
       userId,
-      internalActivityId,
-      activityDate
+      updatedActivity.id,
+      updatedActivity.start_time
     );
 
     if (records.length > 0) {
-      // Nettoyage des anciens records pour cette activité avant ré-insertion
-      await supabaseAdmin.from("records").delete().eq("activity_id", internalActivityId);
-      const { error: recordsError } = await supabaseAdmin.from("records").insert(records); 
-      if (recordsError) console.error("[Strava Streams] Erreur records:", recordsError);
+      await (supabaseAdmin.from("records") as any).delete().eq("activity_id", updatedActivity.id);
+      await (supabaseAdmin.from("records") as any).insert(records); 
     }
     
-    // 6. 🔥 AUTO-SCAN DES SEGMENTS PULSAR
-    // Maintenant que streams_data est présent, on lance l'analyse de segments
-    console.log(`[Strava Streams] Analyse automatique des segments pour l'ID ${internalActivityId}`);
-    // On ne met pas de await ici pour libérer la réponse HTTP plus vite
-    scanActivityAgainstSegments(internalActivityId).catch(e => 
-      console.error(`[Strava Streams] Erreur lors du scan de segments:`, e)
-    );
+    // 6. AUTO-SCAN SEGMENTS
+    scanActivityAgainstSegments(updatedActivity.id).catch(e => console.error(e));
     
     return NextResponse.json({ success: true, streams: formattedStreams });
 
   } catch (err: any) {
-    console.error("[Strava Streams] Erreur critique:", err);
+    console.error(err);
     return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

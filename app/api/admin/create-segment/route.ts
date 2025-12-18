@@ -18,8 +18,8 @@ export async function POST(request: Request) {
     }
 
     // 1. INSERTION DU SEGMENT
-    const { data: segment, error: segmentError } = await supabaseAdmin
-      .from("segments")
+    // ⚡ FIX: On cast le builder en any pour éviter l'erreur "never"
+    const { data: segmentData, error: segmentError } = await (supabaseAdmin.from("segments") as any)
       .insert({
         name,
         distance_m,
@@ -44,26 +44,30 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: segmentError.message }, { status: 500 });
     }
 
+    // ⚡ FIX: On cast le résultat
+    const segment = segmentData as any;
+
     // 2. RECHERCHE DES ACTIVITÉS PLAUSIBLES (FILTRE GÉOGRAPHIQUE)
-    const { data: plausibleActivities, error: rpcError } = await supabaseAdmin
+    const { data: plausibleActivitiesData, error: rpcError } = await supabaseAdmin
       .rpc('get_plausible_activities', {
         s_lat: start_lat,
         s_lon: start_lon,
         e_lat: end_lat,
         e_lon: end_lon,
         dist_threshold: 0.005 // Tolérance de ~500m
-      });
+      } as any); // ⚡ FIX: On force les arguments
 
     if (rpcError) {
       console.error("⚠️ [RPC ERROR] Échec du filtrage géographique:", rpcError);
     }
 
-    const activityIds = plausibleActivities?.map((a: any) => a.id) || [];
+    // ⚡ FIX: On cast le tableau
+    const plausibleActivities = (plausibleActivitiesData || []) as any[];
+    const activityIds = plausibleActivities.map((a: any) => a.id);
 
     // 3. CRÉATION DU JOB POUR LE COMMAND CENTER
-    // Cette tâche sera récupérée par le Worker du panel admin
-    const { data: job, error: jobError } = await supabaseAdmin
-      .from('admin_jobs')
+    // ⚡ FIX: On cast le builder en any pour l'insertion du job
+    const { data: jobData, error: jobError } = await (supabaseAdmin.from('admin_jobs') as any)
       .insert({
         type: 'segment_scan',
         status: 'pending',
@@ -82,11 +86,12 @@ export async function POST(request: Request) {
 
     if (jobError) {
       console.error("⚠️ [JOB ERROR] Échec création de la tâche de fond:", jobError);
-      // On ne bloque pas le retour car le segment est déjà créé
     }
 
+    // ⚡ FIX: On cast le résultat
+    const job = jobData as any;
+
     // 4. RÉPONSE AU FRONT
-    // On renvoie l'ID du segment pour la redirection et l'ID du job pour info
     return NextResponse.json({ 
       success: true, 
       segmentId: segment.id,

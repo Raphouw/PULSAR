@@ -1,3 +1,4 @@
+// Fichier : app/admin/page.tsx
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
@@ -15,7 +16,6 @@ export default function CommandCenter() {
   const { data: session, status: authStatus } = useSession();
   const [jobs, setJobs] = useState<any[]>([]);
   
-  // On déduit si ça bosse juste en regardant si un job est "processing" dans la liste
   const isProcessing = jobs.some(j => j.status === 'processing');
 
   const ADMIN_ID = "1"; 
@@ -27,7 +27,7 @@ export default function CommandCenter() {
       .order('created_at', { ascending: false });
     
     if (error) console.error("Erreur fetch jobs:", error);
-    if (data) setJobs(data);
+    if (data) setJobs(data as any[]);
   }, []);
 
   useEffect(() => {
@@ -35,41 +35,36 @@ export default function CommandCenter() {
     if (authStatus === "unauthenticated") redirect("/auth/signin");
     if (session?.user && String((session.user as any).id) !== ADMIN_ID) redirect("/dashboard");
 
-    // 1. Fetch initial
     fetchJobs();
     
-    // 2. Abonnement Realtime (Le plan A : Rapide)
     const channel = supabase
       .channel('admin_jobs_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'admin_jobs' }, (payload) => {
-        console.log("⚡ Realtime update reçu:", payload); // Pour débugger
+        console.log("⚡ Realtime update reçu:", payload);
         fetchJobs();
       })
       .subscribe();
 
-    // 3. Polling de secours (Le plan B : Robuste)
-    // Toutes les 2 secondes, on rafraichit doucement pour être sûr que l'UI ne fige pas
     const interval = setInterval(() => {
         fetchJobs();
     }, 2000);
 
     return () => { 
         supabase.removeChannel(channel); 
-        clearInterval(interval); // Nettoyage
+        clearInterval(interval); 
     };
   }, [session, authStatus, fetchJobs]);
 
-  // ❌ J'AI SUPPRIMÉ TOUT LE BLOC "useEffect -> runWorker" ICI. 
-  // C'est AdminWorker.tsx qui fait le sale boulot en background.
-
-  // --- ACTION : RESCAN GLOBAL (Juste l'insertion en BDD) ---
   const handleGlobalRescan = async () => {
     if (!confirm("Voulez-vous lancer un scan de TOUTES les activités sur TOUS les segments ?")) return;
     
-    const { data: activities } = await supabase.from('activities').select('id');
-    if (!activities) return;
+    const { data: activitiesData } = await supabase.from('activities').select('id');
+    const activities = (activitiesData || []) as any[];
+    
+    if (activities.length === 0) return;
 
-    await supabase.from('admin_jobs').insert({
+    // ⚡ FIX: On cast le builder 'from(...)' en any pour débloquer l'insert
+    await (supabase.from('admin_jobs') as any).insert({
       type: 'global_sync',
       status: 'pending',
       total: activities.length,
@@ -80,17 +75,24 @@ export default function CommandCenter() {
         queue: activities.map(a => a.id)
       }
     });
+
     fetchJobs();
   };
 
   const updateJobStatus = async (id: string, newStatus: string) => {
-    await supabase.from('admin_jobs').update({ status: newStatus }).eq('id', id);
+    // ⚡ FIX: On cast le builder 'from(...)' en any pour débloquer l'update
+    await (supabase.from('admin_jobs') as any)
+        .update({ status: newStatus })
+        .eq('id', id);
     fetchJobs();
   };
 
   const deleteJob = async (id: string) => {
     if (confirm("Supprimer cette tâche ?")) {
-      await supabase.from('admin_jobs').delete().eq('id', id);
+      // ⚡ FIX: On cast le builder 'from(...)' en any pour débloquer le delete
+      await (supabase.from('admin_jobs') as any)
+        .delete()
+        .eq('id', id);
       fetchJobs();
     }
   };
@@ -147,13 +149,11 @@ export default function CommandCenter() {
               <div key={job.id} className="p-8 flex items-center justify-between hover:bg-white/[0.01] transition-all group">
                 <div className="flex items-center gap-8 flex-1">
                   <div className={`p-4 rounded-2xl border ${
-                    // 🔥 On force le vert si le status est completed OU si on a atteint 100%
                     job.status === 'completed' || job.progress >= job.total ? 'bg-emerald-500/5 text-emerald-500 border-emerald-500/20' :
                     job.status === 'failed' ? 'bg-red-500/5 text-red-500 border-red-500/20' :
                     job.status === 'processing' ? 'bg-[#d04fd7]/5 text-[#d04fd7] border-[#d04fd7]/20' : 
                     'bg-gray-500/5 text-gray-500 border-white/5'
                   }`}>
-                    {/* 🔥 Pareil pour l'icône : Check si fini OU 100% */}
                     {job.status === 'completed' || job.progress >= job.total ? <CheckCircle size={22} /> : 
                     job.status === 'processing' ? <Loader2 size={22} className="animate-spin" /> : <Clock size={22} />}
                   </div>

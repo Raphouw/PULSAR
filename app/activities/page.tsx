@@ -2,7 +2,7 @@
 
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../lib/auth";
-import { supabaseAdmin } from "./../../lib/supabaseAdminClient.js";
+import { supabaseAdmin } from "./../../lib/supabaseAdminClient";
 import { redirect } from "next/navigation";
 import ActivityClient from "./activityClient";
 import { ActivityCardData } from '../../types/next-auth.d';

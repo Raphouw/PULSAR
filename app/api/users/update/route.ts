@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth";
-import { supabaseAdmin } from "../../../../lib/supabaseAdminClient.js";
+import { supabaseAdmin } from "../../../../lib/supabaseAdminClient";
 
 export async function POST(req: Request) {
   try {
@@ -13,22 +13,26 @@ export async function POST(req: Request) {
     const body = await req.json();
     const { weight, height, ftp, max_heart_rate, resting_heart_rate } = body;
 
-    // Validation simple
+    // 1. Validation de présence
     if (!weight || !ftp || !height) {
-      return NextResponse.json({ error: "Poids et FTP sont requis" }, { status: 400 });
+      return NextResponse.json({ error: "Poids, taille et FTP sont requis" }, { status: 400 });
     }
 
-    const { error } = await supabaseAdmin
-      .from("users")
+    // 2. Conversion sécurisée des IDs
+    const userId = Number(session.user.id);
+
+    // ⚡ FIX: Cast du builder en 'any' pour débloquer l'accès aux colonnes (type 'never')
+    // On nettoie les entrées avec parseFloat/parseInt pour garantir l'intégrité SQL
+    const { error } = await (supabaseAdmin.from("users") as any)
       .update({
         weight: parseFloat(weight),
         height: parseFloat(height),
         ftp: parseInt(ftp),
-        max_heart_rate: parseInt(max_heart_rate) || null,
-        resting_heart_rate: parseInt(resting_heart_rate) || null,
+        max_heart_rate: max_heart_rate ? parseInt(max_heart_rate) : null,
+        resting_heart_rate: resting_heart_rate ? parseInt(resting_heart_rate) : null,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", session.user.id);
+      .eq("id", userId);
 
     if (error) throw error;
 

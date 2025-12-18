@@ -1,4 +1,3 @@
-// Fichier : app/api/strava/check-latest/route.ts
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth";
@@ -41,8 +40,10 @@ export async function GET(req: Request) {
     // 2. Import initial (création des lignes dans la table activities)
     const importResult = await importActivities(userId, newActivities);
 
-    // 3. Récupération profil pour l'analyse de puissance
-    const { data: userProfile } = await supabaseAdmin.from('users').select('weight, ftp').eq('id', userId).single();
+    // 3. Récupération profil
+    // ⚡ FIX: Cast du profil utilisateur
+    const { data: userData } = await supabaseAdmin.from('users').select('weight, ftp').eq('id', Number(userId)).single();
+    const userProfile = userData as any;
     
     let analyzedCount = 0;
     let totalBrokenRecords: any[] = [];
@@ -51,9 +52,11 @@ export async function GET(req: Request) {
     // 4. Boucle de traitement des données détaillées (Streams)
     const analysisPromises = newActivities.map(async (stravaActivity: any) => {
         try {
-            const { data: dbActivity } = await supabaseAdmin
+            // ⚡ FIX: Cast de la recherche d'activité
+            const { data: dbActivityData } = await supabaseAdmin
                 .from('activities').select('id').eq('strava_id', stravaActivity.id).single();
 
+            const dbActivity = dbActivityData as any;
             if (!dbActivity) return;
 
             const rawStreams = await getStravaStreams(stravaActivity.id, session.access_token!);
@@ -71,22 +74,23 @@ export async function GET(req: Request) {
                     cadence: extract('cadence'), temp: extract('temp'),
                 };
 
-                // Calcul puissance moyenne si capteur présent
+                // Calcul puissance moyenne
                 let avgPower: number | null = null;
                 if (cleanStreams.watts.length > 0) {
                     avgPower = Math.round(cleanStreams.watts.reduce((a, b) => a + b, 0) / cleanStreams.watts.length);
                 }
 
-                // MISE À JOUR BDD : Trigger SQL 'on_activity_coordinates_sync' calculera les bornes ici
-                await supabaseAdmin.from('activities')
+                // MISE À JOUR BDD
+                // ⚡ FIX: Cast builder update
+                await (supabaseAdmin.from('activities') as any)
                     .update({ streams_data: cleanStreams, avg_power_w: avgPower })
                     .eq('id', dbActivity.id);
 
-                // Analyse de fitness (Power Curve, TSS, IF...)
+                // Analyse de fitness
                 const result = await analyzeAndSaveActivity(
                     dbActivity.id, 
                     stravaActivity.id, 
-                    cleanStreams, 
+                    cleanStreams as any, 
                     userProfile?.weight || 75, 
                     userProfile?.ftp || 250
                 );
@@ -94,8 +98,6 @@ export async function GET(req: Request) {
                 if (result.success) {
                     analyzedCount++;
                     if (result.brokenRecords?.length > 0) totalBrokenRecords.push(...result.brokenRecords);
-                    
-                    // On ajoute cet ID à la liste pour le futur Job de scan de segments
                     newJobActivities.push(dbActivity.id);
                 }
             }
@@ -106,16 +108,16 @@ export async function GET(req: Request) {
 
     await Promise.all(analysisPromises);
 
-    // 5. 🔥 CRÉATION DU JOB DE SCAN (Pour le Command Center)
-    // Au lieu de bloquer l'utilisateur, on délègue le scan des segments au worker admin
+    // 5. 🔥 CRÉATION DU JOB DE SCAN
     if (newJobActivities.length > 0) {
-        await supabaseAdmin.from('admin_jobs').insert({
+        // ⚡ FIX: Cast builder insert
+        await (supabaseAdmin.from('admin_jobs') as any).insert({
             type: 'segment_scan',
             status: 'pending',
             total: newJobActivities.length,
             progress: 0,
             payload: { 
-                segmentId: null, // null = Scanner contre TOUS les segments
+                segmentId: null, 
                 segmentName: `Nouvel import : ${newJobActivities.length} sortie(s)`,
                 queue: newJobActivities 
             },

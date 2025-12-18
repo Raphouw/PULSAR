@@ -401,15 +401,15 @@ export default function TrainingplanClient({ userId }: { userId: string }) {
   // Initialisation des plans
   useEffect(() => {
       const fetchPlans = async () => {
-          const { data } = await supabase.from('training_plans').select('*').eq('user_id', userId);
-          if(data) {
-              const parsed = data.map(p => ({
+          const { data: plansData } = await supabase.from('training_plans').select('*').eq('user_id', userId);
+          if(plansData) {
+              const parsed = (plansData as any[]).map(p => ({
                   ...p,
                   weeks: typeof p.structure_json === 'string' ? JSON.parse(p.structure_json) : p.structure_json,
                   tags: p.tags || ["Perso"],
                   weekly_load_progression: p.weekly_load_progression || [0,0,0,0],
                   zone_distribution: p.zone_distribution || { Z1:0,Z2:0,Z3:0,Z4:0,Z5:0,Z6:0 },
-                  compatibility_score: 100 // Les plans perso sont toujours 100% compatibles
+                  compatibility_score: 100 
               }));
               setUserPlans(parsed as TrainingPlan[]);
           }
@@ -423,8 +423,7 @@ export default function TrainingplanClient({ userId }: { userId: string }) {
 
           const totalTss = newPlan.weeks.reduce((acc, w) => acc + w.workouts.reduce((wa, wo) => wa + wo.tss, 0), 0);
           
-          const { error } = await supabase
-              .from('training_plans')
+          const { error } = await (supabase.from('training_plans') as any)
               .insert({
                   user_id: userId,
                   name: newPlan.name,
@@ -432,7 +431,7 @@ export default function TrainingplanClient({ userId }: { userId: string }) {
                   category: newPlan.category,
                   duration_weeks: newPlan.duration_weeks,
                   total_tss: totalTss,
-                  structure_json: newPlan.weeks,
+                  structure_json: JSON.stringify(newPlan.weeks), // On force le stringify pour la sûreté
                   is_active: false
               })
               .select();

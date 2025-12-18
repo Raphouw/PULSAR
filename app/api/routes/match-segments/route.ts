@@ -11,13 +11,16 @@ export async function POST(req: Request) {
     if (!routeId) return NextResponse.json({ error: "Route ID manquant" }, { status: 400 });
 
     // 1. Récupérer la Route et son GPX/Polyline
-    const { data: routeData, error: routeError } = await supabaseAdmin
+    const { data: routeDataRaw, error: routeError } = await supabaseAdmin
       .from('routes')
       .select('id, gpx_data') 
       .eq('id', routeId)
       .single();
 
-    if (routeError || !routeData) return NextResponse.json({ error: "Route introuvable" }, { status: 404 });
+    if (routeError || !routeDataRaw) return NextResponse.json({ error: "Route introuvable" }, { status: 404 });
+
+    // ⚡ FIX: On cast la route en any pour accéder à gpx_data
+    const routeData = routeDataRaw as any;
 
     // 2. Extraire les coordonnées [lat, lon][]
     let coordinates: [number, number][] = [];
@@ -37,14 +40,14 @@ export async function POST(req: Request) {
     }
 
     // 3. Récupérer TOUS les segments
-    const { data: segments } = await supabaseAdmin
+    const { data: segmentsData } = await supabaseAdmin
       .from('segments')
       .select('id, name, distance_m, average_grade, category, start_lat, start_lon, end_lat, end_lon');
 
-    if (!segments) return NextResponse.json({ matches: [] });
+    // ⚡ FIX: On cast les segments en any[] pour boucler dessus
+    const segments = (segmentsData || []) as any[];
 
     // 4. Scanner
-    // 🔥 CORRECTION TYPAGE : On déclare explicitement un tableau d'objets quelconques
     const matchedSegments: any[] = [];
 
     for (const seg of segments) {

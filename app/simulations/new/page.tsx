@@ -177,12 +177,14 @@ export default function AdvancedSimulationPage() {
       if (!session?.user?.email) return
       
       try {
-        // Charger le profil utilisateur
-        const { data: user } = await supabase
+        // ⚡ FIX: Cast 'any' pour éviter les erreurs 'never'
+        const { data: userData } = await supabase
           .from("users")
           .select("id, weight, ftp, w_prime")
           .eq("email", session.user.email)
           .single()
+
+        const user = userData as any;
 
         if (user) {
           const profile = {
@@ -195,7 +197,6 @@ export default function AdvancedSimulationPage() {
           setUserFtp(profile.ftp)
           setUserWPrime(profile.wPrime)
 
-          // Charger les routes de l'utilisateur
           const { data: routes } = await supabase
             .from("routes")
             .select("id, name, distance_km, elevation_gain_m, gpx_data")
@@ -204,31 +205,21 @@ export default function AdvancedSimulationPage() {
 
           if (routes) {
             setDbRoutes(routes)
-            // Charger la première route par défaut
-            if (routes.length > 0) {
-              handleSelectRoute(routes[0])
-            }
+            if (routes.length > 0) handleSelectRoute(routes[0])
           }
         }
       } catch (err) {
         console.error("Erreur chargement initial:", err)
       }
     }
-
     initData()
   }, [session])
 
-  // Météo
   useEffect(() => {
     if (points && points.length > 0) {
-      fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${points[0][0]}&longitude=${points[0][1]}&hourly=temperature_2m,windspeed_10m,winddirection_10m&timezone=auto`,
-      )
+      fetch(`https://api.open-meteo.com/v1/forecast?latitude=${points[0][0]}&longitude=${points[0][1]}&hourly=temperature_2m,windspeed_10m,winddirection_10m&timezone=auto`)
         .then((r) => r.json())
-        .then((data) => {
-          if (data.hourly) setWeatherData(data.hourly)
-        })
-        .catch((e) => console.error("Erreur météo:", e))
+        .then((data) => { if (data.hourly) setWeatherData(data.hourly) })
     }
   }, [points])
 
@@ -306,13 +297,22 @@ export default function AdvancedSimulationPage() {
   const handleSaveSimulation = async () => {
     if (!result || !session?.user?.email) return
 
-    try {
-      // Récupérer l'ID utilisateur
-      const { data: user } = await supabase
+   try {
+      // 1. Récupérer l'ID utilisateur avec un cast explicite
+      const { data: userData, error: fetchError } = await supabase
         .from("users")
         .select("id")
         .eq("email", session.user.email)
         .single()
+
+      if (fetchError || !userData) {
+        throw new Error("Utilisateur non trouvé")
+      }
+
+      // ⚡ FIX: On force le type 'any' sur l'objet user pour accéder à .id
+      const user = userData as any;
+
+      
 
       if (user) {
         const simulationData = {
@@ -344,7 +344,7 @@ export default function AdvancedSimulationPage() {
           created_at: new Date().toISOString()
         }
 
-        const { error } = await supabase
+        const { error } = await (supabase.from("simulations") as any).insert([simulationData])
           .from("simulations")
           .insert([simulationData])
 

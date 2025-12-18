@@ -17,27 +17,30 @@ export default async function MapPage() {
     redirect('/auth/signin');
   }
 
-  let userId = session.user?.id;
+  let userId: string | number | undefined = session.user?.id;
   
-  // Fallback de sécurité
+  // Fallback de sécurité : Si l'ID n'est pas dans la session, on le cherche par email
   if (!userId && session.user?.email) {
-    const { data: user } = await supabaseAdmin
+    const { data: userData } = await supabaseAdmin
         .from('users')
         .select('id')
         .eq('email', session.user.email)
         .single();
-    if (user) userId = user.id;
+    if (userData) userId = (userData as any).id;
   }
 
   if (!userId) {
     redirect('/auth/signin?error=SessionExpired');
   }
 
-  // Récupération Optimisée (Uniquement les champs nécessaires)
-  const { data: activities, error } = await supabaseAdmin
+  // Conversion en Number pour la requête SQL
+  const dbUserId = Number(userId);
+
+  // Récupération Optimisée (Uniquement les polylines pour la Heatmap/Trace)
+  const { data: activitiesData, error } = await supabaseAdmin
     .from('activities')
     .select('id, name, type, start_time, polyline')
-    .eq('user_id', userId)
+    .eq('user_id', dbUserId)
     .not('polyline', 'is', null) 
     .order('start_time', { ascending: false });
 
@@ -51,14 +54,17 @@ export default async function MapPage() {
     );
   }
 
-  // Normalisation stricte pour éviter les erreurs de sérialisation
-  const cleanActivities = activities?.map(a => {
+  // ⚡ FIX : Cast en any[] pour la normalisation
+  const activities = (activitiesData || []) as any[];
+
+  // Normalisation pour le composant Leaflet/MapBox Client
+  // On décode le format JSONB "polyline" de Supabase vers une string simple
+  const cleanActivities = activities.map(a => {
     let polyStr: string | null = null;
 
     if (typeof a.polyline === 'string') {
         polyStr = a.polyline;
     } else if (typeof a.polyline === 'object' && a.polyline !== null) {
-        // @ts-ignore
         polyStr = a.polyline.polyline || null;
     }
 
@@ -69,11 +75,11 @@ export default async function MapPage() {
       start_time: a.start_time || new Date().toISOString(),
       polyline: polyStr
     };
-  }).filter(a => a.polyline !== null && a.polyline.length > 10) || []; 
+  }).filter(a => a.polyline !== null && a.polyline.length > 10); 
 
   return (
     <div className="w-full h-screen bg-[#050505] overflow-hidden">
-      <GlobalMapClient activities={cleanActivities} />
+      <GlobalMapClient activities={cleanActivities as any} />
     </div>
   );
 }

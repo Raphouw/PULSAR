@@ -11,11 +11,13 @@ export async function GET(req: Request) {
 
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get('page') || '0');
-    const limit = 5; // 5 activités par chargement (c'est lourd des cartes !)
-    const myId = session.user.id;
+    const limit = 5; 
+    
+    // ⚡ FIX: Conversion ID en number
+    const myId = Number(session.user.id);
 
     // 1. Récupérer les IDs des amis que je suis
-    const { data: following, error: friendsError } = await supabaseAdmin
+    const { data: followingData, error: friendsError } = await supabaseAdmin
       .from('friends')
       .select('friend_id')
       .eq('user_id', myId)
@@ -23,6 +25,8 @@ export async function GET(req: Request) {
 
     if (friendsError) throw friendsError;
 
+    // ⚡ FIX: Cast en any[] pour lire friend_id
+    const following = (followingData || []) as any[];
     const friendIds = following.map(f => f.friend_id);
 
     if (friendIds.length === 0) {
@@ -30,21 +34,8 @@ export async function GET(req: Request) {
     }
 
     // 2. Récupérer les activités de ces amis (avec pagination)
-    // On joint la table 'users' pour avoir le nom/avatar de l'auteur
-    const { data: activities, error: actError } = await supabaseAdmin
+    const { data: activitiesData, error: actError } = await supabaseAdmin
       .from('activities')
-      .select(`
-        *,
-        user:users (id, name, avatar_url),
-        likes:likes(count), 
-        has_liked:likes!inner(user_id) 
-      `)
-      // ASTUCE SUPABASE : On utilise un trick pour récupérer si l'user courant a liké
-      // Malheureusement, les filtres post-query complexes sont durs en API simple.
-      // Pour simplifier ici, on va charger les likes et filtrer en JS (solution rapide)
-      // OU mieux : On charge juste count et on fera un fetch client, MAIS pour la perf :
-      
-      // VERSION SIMPLE ET EFFICACE (On récupère tout et on nettoie) :
       .select(`
           *,
           user:users (id, name, avatar_url),
@@ -56,6 +47,9 @@ export async function GET(req: Request) {
 
     if (actError) throw actError;
 
+    // ⚡ FIX: Cast en any[] pour mapper et spread
+    const activities = (activitiesData || []) as any[];
+
     // 3. Nettoyage des données pour le front
     const formattedActivities = activities.map(act => {
         const likes = act.likes || [];
@@ -63,7 +57,8 @@ export async function GET(req: Request) {
             ...act,
             likes_count: likes.length,
             // Est-ce que MON id est dans la liste des likeurs ?
-            is_liked: likes.some((l: any) => l.user_id === myId)
+            // On convertit les IDs en string/number pour être sûr de la comparaison
+            is_liked: likes.some((l: any) => Number(l.user_id) === myId)
         };
     });
 

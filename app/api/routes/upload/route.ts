@@ -2,7 +2,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth";
-import { supabaseAdmin } from "../../../../lib/supabaseAdminClient.js";
+import { supabaseAdmin } from "../../../../lib/supabaseAdminClient"; //.js retiré pour propreté
 import { DOMParser } from "@xmldom/xmldom";
 import toGeoJSON from "@mapbox/togeojson";
 import polyline from '@mapbox/polyline'; 
@@ -97,7 +97,6 @@ export async function POST(req: Request) {
     let totalEleMinus = 0;
     
     // Etape B : Algorithme à hystérésis (Seuil)
-    // On ignore les variations inférieures à 1.5m pour éviter de compter les nids de poule
     const ELEVATION_THRESHOLD = 1.5; 
     let currentRefEle = smoothedElevations[0];
 
@@ -125,25 +124,29 @@ export async function POST(req: Request) {
     const elevationLoss = Math.round(totalEleMinus);
     
     // Vérification doublons
-    const { data: potentialDupes } = await supabaseAdmin
+    const { data: potentialDupesData } = await supabaseAdmin
         .from("routes")
         .select("id, distance_km, elevation_gain_m")
-        .eq("user_id", session.user.id)
+        // ⚡ FIX: Conversion Number pour ID si nécessaire, sinon string
+        .eq("user_id", session.user.id) 
         .gte("distance_km", distanceKm - 0.1)
         .lte("distance_km", distanceKm + 0.1);
 
-    if (potentialDupes && potentialDupes.length > 0) {
+    // ⚡ FIX: Cast en any[] pour lire les propriétés
+    const potentialDupes = (potentialDupesData || []) as any[];
+
+    if (potentialDupes.length > 0) {
         for (const dupe of potentialDupes) {
              const eleDiff = Math.abs((dupe.elevation_gain_m || 0) - elevationGain);
-             if (eleDiff < 50) { // Tolérance augmentée car notre algo de calcul est peut-être différent de l'ancien
+             if (eleDiff < 50) { 
                 return NextResponse.json({ error: "Doublon détecté", isDuplicate: true }, { status: 409 });
              }
         }
     }
 
     // Insertion
-    const { data: route, error } = await supabaseAdmin
-      .from("routes")
+    // ⚡ FIX: Cast du builder en any pour l'insert
+    const { data: routeData, error } = await (supabaseAdmin.from("routes") as any)
       .insert({
         user_id: session.user.id,
         name: file.name.replace(".gpx", ""),
@@ -154,13 +157,16 @@ export async function POST(req: Request) {
             type: "Feature", 
             geometry: geometry,
             map_polyline: encodedPolyline,
-            elevation_loss_m: elevationLoss // 🔥 Ajout du D- ici
+            elevation_loss_m: elevationLoss 
         }
       })
       .select()
       .single();
 
     if (error) throw error;
+
+    // ⚡ FIX: Cast du résultat
+    const route = routeData as any;
 
     return NextResponse.json({ route });
 
