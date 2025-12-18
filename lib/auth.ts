@@ -59,10 +59,10 @@ const credentialsProvider = CredentialsProvider({
   async authorize(credentials) {
     if (!credentials?.email || !credentials.password) return null;
 
-    // 🔥 MODIF : On sélectionne onboarding_completed
+    // 🔥 MODIF : On sélectionne weight et ftp
     const { data: user, error } = await supabase
       .from("users")
-      .select("id, name, email, password_hash, strava_id, onboarding_completed")
+      .select("id, name, email, password_hash, strava_id, onboarding_completed, weight, ftp")
       .eq("email", credentials.email)
       .single();
 
@@ -76,7 +76,9 @@ const credentialsProvider = CredentialsProvider({
       name: user.name,
       email: user.email,
       strava_id: user.strava_id,
-      onboarding_completed: user.onboarding_completed ?? false, // 🔥 MODIF
+      onboarding_completed: user.onboarding_completed ?? false,
+      weight: user.weight, // 🔥 AJOUT
+      ftp: user.ftp,       // 🔥 AJOUT
     };
   },
 });
@@ -105,9 +107,12 @@ export const authOptions: NextAuthOptions = {
     // -----------------------------------------------------------------
     async jwt({ token, user, account, profile, trigger, session }) {
 
-      // 🔥 MODIF : Gestion de la mise à jour manuelle (post-onboarding)
-      if (trigger === "update" && session?.onboarding_completed !== undefined) {
-        token.onboarding_completed = session.onboarding_completed;
+      // 🔥 MODIF : Gestion de la mise à jour manuelle (post-onboarding ou settings)
+      if (trigger === "update") {
+        if (session?.onboarding_completed !== undefined) token.onboarding_completed = session.onboarding_completed;
+        // 🔥 AJOUT : Si on met à jour le poids depuis le profil, ça update la session direct
+        if (session?.weight !== undefined) token.weight = session.weight;
+        if (session?.ftp !== undefined) token.ftp = session.ftp;
       }
 
       // CAS 1: CONNEXION CREDENTIALS (PREMIÈRE FOIS)
@@ -116,8 +121,9 @@ export const authOptions: NextAuthOptions = {
         token.strava_id = user.strava_id;
         token.email = user.email;
         token.name = user.name;
-        // 🔥 MODIF
         token.onboarding_completed = user.onboarding_completed;
+        token.weight = user.weight; // 🔥 AJOUT
+        token.ftp = user.ftp;       // 🔥 AJOUT
         return token;
       }
 
@@ -134,15 +140,19 @@ export const authOptions: NextAuthOptions = {
         };
 
         const userEmail = profile.email || `${account.providerAccountId}@strava.com`;
+        
+        // Variables locales pour stocker les infos
         let userId: string | undefined;
-        let isOnboardingCompleted = false; // Par défaut pour Strava
+        let isOnboardingCompleted = false;
+        let userWeight: number | null = 75; // Valeur par défaut
+        let userFtp: number | null = 200;   // Valeur par défaut
 
         try {
           // A. On cherche d'abord par STRAVA ID
-          // 🔥 MODIF : Ajout de onboarding_completed dans le select
+          // 🔥 MODIF : Ajout de weight et ftp dans le select
           let { data: existingUser, error: searchError } = await supabase
             .from("users")
-            .select("id, email, strava_id, onboarding_completed")
+            .select("id, email, strava_id, onboarding_completed, weight, ftp")
             .eq("strava_id", account.providerAccountId)
             .single();
 
@@ -152,10 +162,10 @@ export const authOptions: NextAuthOptions = {
 
           // B. Si pas trouvé par ID, on essaie par EMAIL
           if (!existingUser && profile.email) {
-            // 🔥 MODIF : Ajout de onboarding_completed dans le select
+            // 🔥 MODIF : Ajout de weight et ftp dans le select
             const { data: emailUser, error: emailError } = await supabase
               .from("users")
-              .select("id, email, strava_id, onboarding_completed")
+              .select("id, email, strava_id, onboarding_completed, weight, ftp")
               .eq("email", profile.email)
               .single();
 
@@ -168,7 +178,10 @@ export const authOptions: NextAuthOptions = {
           if (existingUser) {
             // --- MISE À JOUR UTILISATEUR EXISTANT ---
             userId = existingUser.id.toString();
-            isOnboardingCompleted = existingUser.onboarding_completed ?? false; // 🔥 MODIF
+            isOnboardingCompleted = existingUser.onboarding_completed ?? false;
+            // 🔥 AJOUT : On récupère les valeurs
+            userWeight = existingUser.weight;
+            userFtp = existingUser.ftp;
 
             const { error: updateError } = await supabase.from("users").update(stravaData).eq("id", userId);
             if (updateError) console.error(">>> [JWT] Erreur Update:", updateError);
@@ -182,13 +195,14 @@ export const authOptions: NextAuthOptions = {
               ...stravaData,
               name: userName,
               email: userEmail,
-              onboarding_completed: false // <-- IMPORTANT
+              onboarding_completed: false
             };
 
+            // 🔥 MODIF : On demande à récupérer weight et ftp générés par défaut par la BDD
             const { data: newUser, error: insertError } = await supabase
               .from("users")
               .insert(insertPayload)
-              .select("id")
+              .select("id, weight, ftp")
               .single();
 
             if (insertError) {
@@ -197,7 +211,10 @@ export const authOptions: NextAuthOptions = {
 
             if (newUser) {
               userId = newUser.id.toString();
-              isOnboardingCompleted = false; // Nouveau user = onboarding à faire
+              isOnboardingCompleted = false;
+              // 🔥 AJOUT : On prend les valeurs par défaut de la BDD
+              userWeight = newUser.weight;
+              userFtp = newUser.ftp;
             }
           }
 
@@ -208,7 +225,9 @@ export const authOptions: NextAuthOptions = {
             token.justConnectedStrava = true;
             token.name = (profile as any).username ?? 'Athlète Strava';
             token.email = userEmail;
-            token.onboarding_completed = isOnboardingCompleted; // 🔥 MODIF
+            token.onboarding_completed = isOnboardingCompleted;
+            token.weight = userWeight; // 🔥 AJOUT
+            token.ftp = userFtp;       // 🔥 AJOUT
           }
 
         } catch (err) {
@@ -224,17 +243,19 @@ export const authOptions: NextAuthOptions = {
 
       // CAS 3: REHYDRATATION DU TOKEN (Si user id manquant)
       if (!token.userId && token.email) {
-        // 🔥 MODIF : Ajout de onboarding_completed
+        // 🔥 MODIF : Ajout de weight, ftp
         const { data: user } = await supabase
           .from("users")
-          .select("id, strava_id, name, onboarding_completed")
+          .select("id, strava_id, name, onboarding_completed, weight, ftp")
           .eq("email", token.email)
           .single();
         if (user) {
           token.userId = user.id.toString();
           token.strava_id = user.strava_id;
           token.name = user.name;
-          token.onboarding_completed = user.onboarding_completed ?? false; // 🔥 MODIF
+          token.onboarding_completed = user.onboarding_completed ?? false;
+          token.weight = user.weight; // 🔥 AJOUT
+          token.ftp = user.ftp;       // 🔥 AJOUT
         }
       }
 
@@ -255,9 +276,11 @@ export const authOptions: NextAuthOptions = {
       session.user.name = token.name;
       session.user.email = token.email;
 
-      // 🔥 MODIF : On passe l'info à la session (utilisé par le middleware et le front)
-      // Note: Il faut tricher avec "as any" si tu n'as pas encore fait le fichier de types
-      (session.user as any).onboarding_completed = token.onboarding_completed;
+      // 🔥 INFOS CRITIQUES POUR LES STATS
+      // On triche avec "as any" si le fichier de types d.ts n'est pas encore pris en compte par l'IDE
+      session.user.onboarding_completed = token.onboarding_completed;
+      session.user.weight = token.weight; // 🔥 AJOUT
+      session.user.ftp = token.ftp;       // 🔥 AJOUT
 
       session.access_token = token.access_token;
       session.refresh_token = token.refresh_token;

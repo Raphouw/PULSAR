@@ -4,7 +4,7 @@ import { JWT } from "next-auth/jwt";
 import { ChartDataset, ChartType } from 'chart.js';
 
 // ---------------------------------------------------------
-// 1. EXTENSION DES TYPES NEXT-AUTH (C'est ici qu'on modifie)
+// 1. EXTENSION DES TYPES NEXT-AUTH
 // ---------------------------------------------------------
 declare module "next-auth" {
   interface User {
@@ -12,8 +12,10 @@ declare module "next-auth" {
     strava_id?: string | number | null;
     name?: string | null;
     email?: string | null;
-    // 🔥 AJOUT : Pour gérer l'inscription obligatoire
-    onboarding_completed: boolean; 
+    onboarding_completed: boolean;
+    // 👇 AJOUTS ICI
+    weight?: number | null;
+    ftp?: number | null;
   }
   
   interface Session {
@@ -23,14 +25,16 @@ declare module "next-auth" {
       name?: string | null;
       email?: string | null;
       image?: string | null;
-      // 🔥 AJOUT : Accessible dans useSession() côté client
-      onboarding_completed: boolean; 
+      onboarding_completed: boolean;
+      // 👇 AJOUTS ICI (Accessible via useSession)
+      weight?: number | null;
+      ftp?: number | null;
     };
     // Tokens Strava
     access_token?: string;
     refresh_token?: string;
     expires_at?: number;
-    // Flags pour l'import et erreurs
+    // Flags
     justConnectedStrava?: boolean;
     error?: string;
     stravaLinkError?: string;
@@ -50,17 +54,18 @@ declare module "next-auth/jwt" {
     email?: string | null;
     picture?: string | null;
     stravaLinkError?: string;
-    // 🔥 AJOUT : Stocké dans le cookie crypté
-    onboarding_completed: boolean; 
+    onboarding_completed: boolean;
+    // 👇 AJOUTS ICI (Pour persister dans le cookie)
+    weight?: number | null;
+    ftp?: number | null;
   }
 }
 
 // ---------------------------------------------------------
-// 2. EXTENSION CHART.JS
+// 2. EXTENSION CHART.JS (INCHANGÉ)
 // ---------------------------------------------------------
 declare module 'chart.js' {
   interface ChartDataset<TType extends ChartType, TData> {
-    // On déclare que 'customData' peut exister
     customData?: any; 
   }
 }
@@ -68,7 +73,6 @@ declare module 'chart.js' {
 // ---------------------------------------------------------
 // 3. TES TYPES MÉTIERS (INCHANGÉS)
 // ---------------------------------------------------------
-
 
 export type ActivityStreams = {
   time: (number | null)[];
@@ -85,56 +89,43 @@ export interface EventRoute {
     id: number;
     event_id: number;
     name: string;
-    type: string; // Ex: Course, Randonnée, RandoSportive
+    type: string; 
     distance_km: number;
     elevation_gain_m: number;
     price_eur: number;
     participants_limit: number | null;
     aid_stations_count: number;
-    start_time: string | null; // Format TIME (HH:MM:SS)
+    start_time: string | null; 
     gpx_url: string | null;
 }
 
-/**
- * Représente une ligne de la table public.event_history.
- */
 export interface EventHistory {
     id: number;
     event_id: number;
     year: number;
     participants_count: number | null;
     winner_name: string | null;
-    winner_time: string | null; // Format INTERVAL (string)
+    winner_time: string | null;
     weather_condition: string | null;
 }
 
-/**
- * Représente une ligne de la table public.events, enrichie avec ses routes et son historique.
- */
 export interface CycloEvent {
-    // Champs de la table events (hypothétique)
     id: number;
     name: string;
     description: string;
-    date_start: string; // ISO Date String
-    date_end: string;   // ISO Date String
+    date_start: string; 
+    date_end: string;   
     location: string;
     country: string;
     registration_url: string | null;
     website_url: string | null;
     image_url: string | null;
     jersey_url: string | null;
-    
-    // Ratings PULSAR
     rating_global: number;
     rating_quality_price: number;
-    
-    // Relations
-    routes: EventRoute[]; // Jointure sur event_routes
-    history: EventHistory[]; // Jointure sur event_history
+    routes: EventRoute[]; 
+    history: EventHistory[]; 
 }
-
-
 
 export type Activity = {
   id: number;
@@ -155,14 +146,10 @@ export type ActivityCardData = {
   avg_power_w: number | null;
   tss: number | null;
   polyline: { polyline: string } | null;
-  
-  // 🔥 CORRECTION ICI : on ajoute "| null"
   np_w: number | null;
   duration_s: number; 
-  type?: string | null; // <--- C'est ça qui bloquait !
+  type?: string | null;
 };
-
-// --- Nouveaux Types pour le module ÉVÉNEMENT ---
 
 export type EventCourse = {
   id: number;
@@ -185,9 +172,9 @@ export type Event = {
   budget_estimation: number | null;
   num_feed_stations: number | null;
   max_participants: number | null;
-  historical_data: any; // jsonb
+  historical_data: any; 
   rating: number | null;
   price_quality_ratio: number | null;
   main_image_url: string | null;
-  courses: EventCourse[]; // Relation pour le front-end
+  courses: EventCourse[]; 
 };

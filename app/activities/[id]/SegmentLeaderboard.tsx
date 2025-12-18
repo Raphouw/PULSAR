@@ -1,3 +1,4 @@
+// components/SegmentLeaderboard.tsx
 'use client';
 
 import React, { useEffect, useState } from 'react';
@@ -10,19 +11,17 @@ type LeaderboardData = {
     personal: any[];
 };
 
-// On s'assure que l'objet match qu'on reçoit possède bien le rang
 type CurrentEffort = {
     id: number;
     duration_s: number;
     avg_power_w: number;
     avg_heartrate?: number;
-    rank_personal?: number; // Important pour le #13
-    rank_global?: number;
-    created_at?: string; // Optionnel si on veut la date
-    // ... autres champs
+    rank_personal?: number;
+    rank_global?: number; // On utilise ce champ pour l'affichage global
+    created_at?: string;
 };
 
-// ... (Garder les fonctions formatDuration, formatGap, formatDate, LeaderboardSkeleton inchangées) ...
+// ... (Fonctions utilitaires inchangées : formatDuration, formatGap, formatDate, LeaderboardSkeleton) ...
 const formatDuration = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
@@ -59,7 +58,7 @@ const LeaderboardSkeleton = () => (
     </div>
 );
 
-// --- ROW COMPONENT (Inchangé sauf petits ajustements visuels) ---
+// --- ROW COMPONENT ---
 const LeaderboardRow = ({ 
     rank, 
     user, 
@@ -68,13 +67,13 @@ const LeaderboardRow = ({
     power, 
     hr, 
     isMe, 
-    isCurrentContext, // Nouveau: pour mettre en surbrillance l'effort actuel du modal
+    isCurrentContext, 
     gapToLeader, 
     type 
 }: any) => {
     
     let rankBadge = <span className="font-mono text-gray-500 text-xs w-6 text-center">#{rank}</span>;
-    // Si c'est l'effort qu'on analyse actuellement, on lui met un fond spécifique
+    
     let rowBg = isCurrentContext 
         ? "bg-[#d04fd7]/10 border-[#d04fd7]/30 shadow-[0_0_15px_rgba(208,79,215,0.1)]" 
         : (isMe && type === 'GLOBAL') ? "bg-white/5 border-white/10" : "bg-transparent border-transparent hover:bg-white/[0.04]";
@@ -161,7 +160,7 @@ const LeaderboardRow = ({
     );
 };
 
-// --- MAIN COMPONENT UPDATED ---
+// --- MAIN COMPONENT ---
 export default function SegmentLeaderboard({ segmentId, currentUserId, currentEffort }: { segmentId: number, currentUserId: string, currentEffort?: CurrentEffort }) {
     const [data, setData] = useState<LeaderboardData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -193,8 +192,12 @@ export default function SegmentLeaderboard({ segmentId, currentUserId, currentEf
     const myBestEffort = data?.personal?.[0];
     const isRankOutsideTop10 = myBestEffort && myBestEffort.rank_global > 10;
 
-    // 2. PERSONNEL : Si l'effort ACTUEL (celui du modal) est hors du Top 5 personnel
-    // On vérifie si currentEffort existe et si son rang personnel est supérieur à 5
+    // 2. GLOBAL : Si l'effort ACTUEL (qu'on vient de faire) est hors du Top 10
+    // On s'assure aussi de ne pas l'afficher en double si c'est le même que le PR (qui serait déjà affiché par isRankOutsideTop10)
+    const isCurrentGlobalEffortOutsideTop10 = currentEffort && currentEffort.rank_global && currentEffort.rank_global > 10;
+    const shouldShowCurrentGlobalSeparately = isCurrentGlobalEffortOutsideTop10 && (!isRankOutsideTop10 || currentEffort?.id !== myBestEffort?.id);
+
+    // 3. PERSONNEL : Si l'effort ACTUEL est hors du Top 5 personnel
     const isCurrentEffortOutsideTop5 = currentEffort && currentEffort.rank_personal && currentEffort.rank_personal > 5;
 
     return (
@@ -249,7 +252,7 @@ export default function SegmentLeaderboard({ segmentId, currentUserId, currentEf
                                         />
                                     ))}
 
-                                    {/* GLOBAL CONTEXTUEL : MON MEILLEUR TEMPS SI HORS TOP 10 */}
+                                    {/* GLOBAL : MON MEILLEUR TEMPS (PR) SI HORS TOP 10 */}
                                     {isRankOutsideTop10 && (
                                         <>
                                             <div className="flex justify-center py-1 opacity-30">
@@ -265,6 +268,27 @@ export default function SegmentLeaderboard({ segmentId, currentUserId, currentEf
                                                 isMe={true}
                                                 isCurrentContext={currentEffort?.id === myBestEffort.id}
                                                 gapToLeader={myBestEffort.duration_s - komTime}
+                                                type="GLOBAL" 
+                                            />
+                                        </>
+                                    )}
+
+                                    {/* 🔥 AJOUT GLOBAL : L'EFFORT ACTUEL SI HORS TOP 10 ET SI PAS DEJA AFFICHE EN TANT QUE PR */}
+                                    {shouldShowCurrentGlobalSeparately && (
+                                        <>
+                                            <div className="flex justify-center py-1 opacity-30">
+                                                <MoreVertical size={16} className="text-gray-500" />
+                                            </div>
+                                            <LeaderboardRow 
+                                                rank={currentEffort!.rank_global}
+                                                user={{ name: 'Moi', avatar_url: null }} 
+                                                activity={{ start_time: currentEffort!.created_at || new Date().toISOString() }}
+                                                duration={currentEffort!.duration_s}
+                                                power={currentEffort!.avg_power_w}
+                                                hr={currentEffort!.avg_heartrate}
+                                                isMe={true}
+                                                isCurrentContext={true}
+                                                gapToLeader={currentEffort!.duration_s - komTime}
                                                 type="GLOBAL" 
                                             />
                                         </>
@@ -314,7 +338,7 @@ export default function SegmentLeaderboard({ segmentId, currentUserId, currentEf
                                         />
                                     ))}
 
-                                    {/* 🔥 AJOUT PERSONNEL : L'EFFORT ACTUEL (EX: #13) SI HORS TOP 5 */}
+                                    {/* PERSONNEL : L'EFFORT ACTUEL SI HORS TOP 5 */}
                                     {isCurrentEffortOutsideTop5 && currentEffort && (
                                         <>
                                             <div className="flex justify-center py-1 opacity-30">
@@ -323,7 +347,6 @@ export default function SegmentLeaderboard({ segmentId, currentUserId, currentEf
                                             <LeaderboardRow 
                                                 rank={currentEffort.rank_personal}
                                                 user={{ name: 'Moi', avatar_url: null }}
-                                                // On simule l'objet activity pour la date (si dispo)
                                                 activity={{ start_time: currentEffort.created_at || new Date().toISOString() }}
                                                 duration={currentEffort.duration_s}
                                                 power={currentEffort.avg_power_w}

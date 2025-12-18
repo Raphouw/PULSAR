@@ -9,7 +9,9 @@ import {
   ChevronRight, Zap, 
   Pin, PinOff, 
   Menu, X, 
-  PanelLeftClose, PanelLeftOpen, Settings2 
+  PanelLeftClose, PanelLeftOpen, Settings2, 
+  Trophy,
+  TrophyIcon
 } from 'lucide-react';
 
 const HEADER_HEIGHT = 72;
@@ -136,7 +138,7 @@ const Icons = {
     </svg>
   ),
   Admin: <Settings2 size={18} strokeWidth={1.5} className="icon-group" />,
-  Legend : <Settings2 size={18} strokeWidth={1.5} className="icon-group" />,
+  Trophy : <TrophyIcon size={18} strokeWidth={1.5} className="icon-group" />,
 
 };
 
@@ -169,7 +171,7 @@ const groups = [
       { href: '/events', label: 'Événements', icon: Icons.Events },
       { href: '/profildata', label: 'Mon Profil', icon: Icons.Profile },
       { href: '/algo', label: 'Algorithmes', icon: Icons.Algo },
-      { href: '/legend', label: 'LEGEND', icon: Icons.Legend },
+      { href: '/legend', label: 'PALMARÈS', icon: Icons.Trophy },
     ]
   },
 ];
