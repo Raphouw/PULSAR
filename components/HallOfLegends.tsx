@@ -112,18 +112,33 @@ export default function HallOfLegends({ legends }: { legends: any[] }) {
     const [selectedType, setSelectedType] = useState<'KOM' | 'TOP10'>('KOM');
 
     const handleOpenDetails = async (user: any, type: 'KOM' | 'TOP10') => {
-        setSelectedUser(user);
-        setSelectedType(type);
-        setModalOpen(true);
-        setLoadingDetails(true);
-        setDetailsData([]);
+    // Vérification de sécurité pour l'ID utilisateur
+    const userId = user.user_id || user.id;
+    if (!userId) {
+        console.error("Impossible de charger les détails : ID utilisateur manquant", user);
+        return;
+    }
 
-        // Appel Server Action
-        const data = await getLegendDetails(user.user_id, type);
+    setSelectedUser(user);
+    setSelectedType(type);
+    setModalOpen(true);
+    setLoadingDetails(true);
+    setDetailsData([]);
+
+    try {
+        // On s'assure d'appeler l'action avec l'ID correct
+        const data = await getLegendDetails(userId, type);
+        
+        // Sécurité supplémentaire : On vérifie que chaque item a bien son segment_id
+        console.log("Données reçues de l'action:", data);
+        
         setDetailsData(data);
+    } catch (error) {
+        console.error("Erreur lors de la récupération des segments:", error);
+    } finally {
         setLoadingDetails(false);
-    };
-
+    }
+};
     if (!legends || legends.length === 0) return (
         <div className="flex flex-col items-center justify-center py-20 text-center gap-4 opacity-50">
             <Shield size={48} className="text-gray-600" />

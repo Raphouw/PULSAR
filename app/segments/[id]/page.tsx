@@ -114,19 +114,9 @@ export default async function SegmentDetailPage({ params }: Props) {
   if (!segmentData) notFound();
 
   return (
-    <div className="min-h-screen bg-[#050505] text-[#F1F1F1]">
-        {/* BANDEAU D'ACTION RAPIDE POUR LE LEADERBOARD */}
-        <div className="max-w-[1600px] mx-auto pt-6 px-6 flex justify-end">
-            <Link 
-                href={`/segments/${id}/leaderboard`}
-                className="flex items-center gap-2 px-4 py-2 bg-[#FFD166]/10 text-[#FFD166] border border-[#FFD166]/20 rounded-lg hover:bg-[#FFD166]/20 transition-all text-sm font-medium"
-            >
-                <Trophy className="w-4 h-4" />
-                Voir le Classement Complet
-            </Link>
-        </div>
-
-        <SegmentDisplay segment={segmentData} currentUserId={session.user.id} />
-    </div>
-  );
+  <div className="min-h-screen bg-[#050505] text-[#F1F1F1]">
+      {/* On peut garder un petit fil d'ariane discret ou rien du tout ici */}
+      <SegmentDisplay segment={segmentData} currentUserId={session.user.id} />
+  </div>
+);
 }
