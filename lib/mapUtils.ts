@@ -1,7 +1,11 @@
 // lib/mapUtils.ts
 
-// Constantes pour les calculs de tuiles (Zoom 14 = Squadrats)
+// Constantes pour les calculs de tuiles (Zoom 14 = Squadrats / Explorer Score)
 const ZOOM = 14;
+
+// --------------------------------------------------------------------------
+// 1. CONVERSION COORDONNÉES <-> TUILES (Slippy Map System)
+// --------------------------------------------------------------------------
 
 export const lon2tile = (lon: number, zoom: number): number => {
   return Math.floor(((lon + 180) / 360) * Math.pow(2, zoom));
@@ -40,15 +44,30 @@ export const getTileBounds = (x: number, y: number, z: number): [[number, number
 
   // Leaflet attend [Lat, Lon]
   return [
-    [lat1, lon1], // Nord-Ouest (approximatif, dépend de l'implémentation Leaflet)
+    [lat1, lon1], // Nord-Ouest
     [lat2, lon2]  // Sud-Est
   ];
 };
 
+export const getTileCenter = (x: number, y: number, z: number): [number, number] => {
+  const bounds = getTileBounds(x, y, z); // [[lat1, lon1], [lat2, lon2]]
+  
+  // Lat1 est Nord-Ouest, Lat2 est Sud-Est
+  const latCenter = (bounds[0][0] + bounds[1][0]) / 2;
+  const lonCenter = (bounds[0][1] + bounds[1][1]) / 2;
+  
+  return [latCenter, lonCenter];
+};
+
+// --------------------------------------------------------------------------
+// 2. UTILITAIRES DE DISTANCE & GÉOMÉTRIE
+// --------------------------------------------------------------------------
+
 /**
  * Calcul de distance simple (Haversine allégé pour la perf)
+ * ⚡ EXPORTED : Utilisé désormais par le scanner de cols
  */
-function getDistanceFromLatLonInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
+export function getDistanceFromLatLonInMeters(lat1: number, lon1: number, lat2: number, lon2: number) {
   const R = 6371e3; // Rayon de la terre en mètres
   const dLat = ((lat2 - lat1) * Math.PI) / 180;
   const dLon = ((lon2 - lon1) * Math.PI) / 180;
@@ -63,11 +82,13 @@ function getDistanceFromLatLonInMeters(lat1: number, lon1: number, lat2: number,
 }
 
 /**
- * 🔥 FIX : Interpolation pour ne rater aucune tuile
+ * 🔥 FIX : Interpolation pour ne rater aucune tuile sur l'Arbre-Monde
+ * Décode une polyline et remplit les trous si la vitesse était trop élevée (points espacés)
  */
 export const getTilesFromPolyline = (polylineStr: string): string[] => {
   if (!polylineStr) return [];
   
+  // On utilise require pour éviter les problèmes de typage si @types/mapbox__polyline manque
   const polyline = require('@mapbox/polyline');
   const points = polyline.decode(polylineStr); // [[lat, lon], [lat, lon]...]
   const tiles = new Set<string>();
@@ -85,7 +106,7 @@ export const getTilesFromPolyline = (polylineStr: string): string[] => {
     const dist = getDistanceFromLatLonInMeters(lat1, lon1, lat2, lon2);
 
     // Si la distance est grande (> 50m), on interpole
-    // Cela évite de sauter par dessus une tuile
+    // Cela évite de sauter par dessus une tuile lors d'une activité rapide ou perte de signal
     if (dist > 50) {
       const steps = Math.ceil(dist / 30); // Un point tous les 30 mètres virtuellement
       for (let j = 1; j < steps; j++) {
@@ -101,13 +122,4 @@ export const getTilesFromPolyline = (polylineStr: string): string[] => {
   }
 
   return Array.from(tiles);
-};
-export const getTileCenter = (x: number, y: number, z: number): [number, number] => {
-  const bounds = getTileBounds(x, y, z); // [[lat1, lon1], [lat2, lon2]]
-  
-  // Lat1 est Nord-Ouest, Lat2 est Sud-Est
-  const latCenter = (bounds[0][0] + bounds[1][0]) / 2;
-  const lonCenter = (bounds[0][1] + bounds[1][1]) / 2;
-  
-  return [latCenter, lonCenter];
 };

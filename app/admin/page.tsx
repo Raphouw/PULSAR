@@ -1,202 +1,291 @@
-// Fichier : app/admin/page.tsx
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useSession } from "next-auth/react";
 import { redirect } from "next/navigation";
 import { 
-  Zap, CheckCircle, Loader2, Database, ShieldAlert, 
-  Settings2, Clock, List, Pause, Play, Trash2, Terminal, RefreshCcw
+  Loader2, Database, ShieldAlert, Settings2, Clock, List, 
+  Trash2, Terminal, RefreshCcw, CheckCircle, ShieldCheck, 
+  XCircle, Map as MapIcon, Eye, Scissors, Calculator, Mountain
 } from "lucide-react";
 import { supabase } from "../../lib/supabaseClient"; 
+import { getDistanceFromLatLonInMeters } from "../../lib/mapUtils"; 
 
-const FONT_FAMILY = '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif';
+// --- HELPERS DE CALCUL ---
+const calculatePolylineStats = (points: [number, number][]) => {
+    if (!points || points.length < 2) return { dist: 0 };
+    let dist = 0;
+    for (let i = 0; i < points.length - 1; i++) {
+        dist += getDistanceFromLatLonInMeters(points[i][0], points[i][1], points[i+1][0], points[i+1][1]);
+    }
+    return { dist };
+};
 
+// --- COMPOSANT TAB: MONITOR ---
+const SystemMonitorTab = ({ jobs, fetchJobs, isProcessing, handleGlobalRescan, handleClimbScan, deleteJob }: any) => {
+    return (
+        <div className="bg-[#0a0a0a] border border-white/10 rounded-2xl overflow-hidden shadow-xl p-6">
+             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                <h3 className="font-bold text-gray-300 flex items-center gap-2"><List className="text-[#d04fd7]"/> File d'attente</h3>
+                
+                {/* ZONE DES BOUTONS D'ACTION */}
+                <div className="flex gap-3">
+                    {/* BOUTON 1 : Rescan Segments Existants (Ton ancien bouton) */}
+                    <button 
+                        onClick={handleGlobalRescan} 
+                        className="bg-white/5 hover:bg-white/10 px-4 py-2 rounded-lg text-xs font-bold uppercase border border-white/10 flex items-center gap-2 text-gray-300 hover:text-white transition-all"
+                        title="Synchroniser les segments existants sur toutes les activités"
+                    >
+                        <RefreshCcw size={14} className="text-[#00f3ff]"/> Sync Segments
+                    </button>
+
+                    {/* BOUTON 2 : Chasseur de Cols (Nouveau) */}
+                    <button 
+                        onClick={handleClimbScan} 
+                        className="bg-[#d04fd7]/10 hover:bg-[#d04fd7]/20 px-4 py-2 rounded-lg text-xs font-bold uppercase border border-[#d04fd7]/30 flex items-center gap-2 text-[#d04fd7] transition-all"
+                        title="Détecter de nouveaux cols sur tout l'historique"
+                    >
+                        <Mountain size={14} /> Scan Cols Historique
+                    </button>
+                </div>
+             </div>
+
+             <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                {jobs.length === 0 ? (
+                    <div className="p-10 text-center opacity-30 text-xs uppercase font-bold">Aucune tâche en cours</div>
+                ) : jobs.map((job: any) => (
+                    <div key={job.id} className="flex justify-between items-center p-3 bg-white/5 rounded-lg border border-white/5 hover:bg-white/10 transition-colors">
+                        <div className="flex items-center gap-3">
+                            {job.status === 'processing' ? <Loader2 size={16} className="animate-spin text-[#d04fd7]"/> : 
+                             job.status === 'completed' ? <CheckCircle size={16} className="text-emerald-500"/> : 
+                             <Clock size={16} className="text-gray-500"/>}
+                            
+                            <div className="flex flex-col">
+                                <span className="text-xs font-bold text-gray-200">{job.payload?.segmentName || "Tâche Système"}</span>
+                                <span className="text-[10px] text-gray-500 uppercase">{job.type}</span>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                             {/* Petite barre de progression */}
+                             <div className="w-24 h-1.5 bg-black rounded-full overflow-hidden hidden md:block">
+                                <div className="h-full bg-[#d04fd7]" style={{ width: `${Math.min((job.progress / Math.max(job.total, 1)) * 100, 100)}%` }}></div>
+                             </div>
+                             <span className="text-[10px] font-mono text-gray-400 w-16 text-right">{job.progress}/{job.total}</span>
+                             <button onClick={() => deleteJob(job.id)} className="p-1.5 hover:bg-red-500/20 rounded text-gray-500 hover:text-red-500"><Trash2 size={14}/></button>
+                        </div>
+                    </div>
+                ))}
+             </div>
+        </div>
+    );
+};
+
+// --- COMPOSANT TAB: VALIDATION (Inchangé sauf imports) ---
+const ValidationTab = () => {
+    const [candidates, setCandidates] = useState<any[]>([]);
+    const [selected, setSelected] = useState<any | null>(null);
+    const [newName, setNewName] = useState("");
+    const [cutStart, setCutStart] = useState(0); 
+    const [cutEnd, setCutEnd] = useState(0);
+
+    useEffect(() => {
+        const fetchCandidates = async () => {
+            const { data } = await supabase.from('segments').select('*').eq('is_official', false).not('tags', 'is', null).order('created_at', { ascending: false });
+            if(data) setCandidates(data.filter((s:any) => s.tags?.status === 'pending_review'));
+        };
+        fetchCandidates();
+    }, []);
+
+    useEffect(() => { setCutStart(0); setCutEnd(0); }, [selected?.id]);
+
+    const croppedPolyline = useMemo(() => {
+        if (!selected || !selected.polyline) return [];
+        const points = selected.polyline as [number, number][];
+        const total = points.length;
+        const startIndex = Math.floor(total * (cutStart / 100));
+        const endIndex = total - Math.floor(total * (cutEnd / 100));
+        if (startIndex >= endIndex) return [points[0], points[points.length-1]];
+        return points.slice(startIndex, endIndex);
+    }, [selected, cutStart, cutEnd]);
+
+    const liveStats = useMemo(() => {
+        if (!selected) return { dist: 0, grade: 0, elev: 0 };
+        const { dist } = calculatePolylineStats(croppedPolyline);
+        const ratio = dist / (selected.distance_m || 1); 
+        const newElev = Math.round((selected.elevation_gain_m || 0) * ratio);
+        const newGrade = dist > 0 ? (newElev / dist) * 100 : 0;
+        return { dist, elev: newElev, grade: newGrade };
+    }, [croppedPolyline, selected]);
+
+    const handleDecision = async (approved: boolean) => {
+        if(!selected) return;
+        if (approved) {
+             const finalPoints = croppedPolyline;
+             const startPt = finalPoints[0];
+             const endPt = finalPoints[finalPoints.length - 1];
+             await (supabase.from('segments') as any).update({
+                name: newName, is_official: true, polyline: finalPoints,
+                start_lat: startPt[0], start_lon: startPt[1], end_lat: endPt[0], end_lon: endPt[1],
+                distance_m: liveStats.dist, elevation_gain_m: liveStats.elev, average_grade: parseFloat(liveStats.grade.toFixed(1)),
+                tags: { ...selected.tags, status: 'approved', validator: 'ADMIN', edit: 'cropped' }
+            }).eq('id', selected.id);
+        } else {
+            await supabase.from('segments').delete().eq('id', selected.id);
+        }
+        setCandidates(candidates.filter(c => c.id !== selected.id));
+        setSelected(null);
+        setNewName("");
+    };
+
+    return (
+        <div className="flex flex-col lg:flex-row gap-6 h-[700px]">
+            <div className="w-full lg:w-1/4 bg-[#0a0a0a] border border-white/10 rounded-2xl overflow-hidden flex flex-col">
+                <div className="p-4 border-b border-white/5"><h3 className="font-bold text-xs text-gray-400 uppercase">Candidats ({candidates.length})</h3></div>
+                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                    {candidates.map(seg => (
+                        <div key={seg.id} onClick={() => { setSelected(seg); setNewName(seg.name.replace("[AUTO] ", "")); }}
+                            className={`p-3 rounded-lg border cursor-pointer transition-all ${selected?.id === seg.id ? 'bg-[#d04fd7]/10 border-[#d04fd7] text-white' : 'bg-transparent border-transparent hover:bg-white/5 text-gray-500'}`}>
+                            <div className="font-bold text-xs truncate">{seg.name}</div>
+                            <div className="text-[10px] opacity-60">{(seg.distance_m/1000).toFixed(1)}km • {seg.average_grade}%</div>
+                        </div>
+                    ))}
+                    {candidates.length === 0 && <div className="h-full flex items-center justify-center text-gray-600 text-[10px] uppercase">Rien à signaler</div>}
+                </div>
+            </div>
+            <div className="flex-1 bg-[#0a0a0a] border border-white/10 rounded-2xl flex flex-col relative overflow-hidden">
+                {selected ? (
+                    <>
+                        <div className="flex-1 bg-[#050505] relative flex items-center justify-center group border-b border-white/10">
+                             <div className="text-center opacity-50 group-hover:opacity-100 transition-opacity">
+                                <MapIcon size={48} className="mx-auto text-[#d04fd7] mb-2"/>
+                                <p className="text-xs font-mono">MAP PREVIEW</p>
+                                <p className="text-[10px] text-gray-500 mt-2">Points: {croppedPolyline.length}</p>
+                             </div>
+                        </div>
+                        <div className="p-6 bg-[#111] space-y-6">
+                            <div className="grid grid-cols-2 gap-8">
+                                <div className="space-y-4">
+                                    <div className="flex justify-between text-[10px] font-bold uppercase text-gray-500"><span>Cut Start ({cutStart}%)</span> <Scissors size={12}/></div>
+                                    <input type="range" min="0" max="45" step="1" value={cutStart} onChange={(e) => setCutStart(parseInt(e.target.value))} className="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-[#d04fd7]"/>
+                                    <div className="flex justify-between text-[10px] font-bold uppercase text-gray-500"><span>Cut End ({cutEnd}%)</span> <Scissors size={12}/></div>
+                                    <input type="range" min="0" max="45" step="1" value={cutEnd} onChange={(e) => setCutEnd(parseInt(e.target.value))} className="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-[#d04fd7]"/>
+                                </div>
+                                <div className="bg-black/40 rounded-xl p-4 border border-white/5 flex flex-col justify-center space-y-2">
+                                    <div className="flex items-center gap-2 text-[#00f3ff] text-xs font-bold uppercase mb-1"><Calculator size={14}/> Stats Projetées</div>
+                                    <div className="flex justify-between text-sm font-mono text-gray-300"><span>Dist:</span> <span className="text-white">{(liveStats.dist/1000).toFixed(2)} km</span></div>
+                                    <div className="flex justify-between text-sm font-mono text-gray-300"><span>D+:</span> <span className="text-white">{liveStats.elev} m</span></div>
+                                    <div className="flex justify-between text-sm font-mono text-gray-300"><span>Pente:</span> <span className="text-[#d04fd7]">{liveStats.grade.toFixed(1)} %</span></div>
+                                </div>
+                            </div>
+                            <div className="space-y-3 pt-4 border-t border-white/5">
+                                <input value={newName} onChange={e => setNewName(e.target.value)} className="w-full bg-[#050505] border border-white/10 rounded-lg p-3 text-sm font-bold text-white focus:border-[#d04fd7] outline-none" placeholder="Nom officiel du segment..." />
+                                <div className="flex gap-4">
+                                    <button onClick={() => handleDecision(false)} className="flex-1 py-3 rounded-lg bg-red-900/20 text-red-500 font-bold uppercase text-xs hover:bg-red-900/40">Rejeter</button>
+                                    <button onClick={() => handleDecision(true)} className="flex-1 py-3 rounded-lg bg-[#d04fd7] text-black font-bold uppercase text-xs hover:bg-white transition-all">Valider</button>
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-gray-700">
+                        <Eye size={48} className="mb-4 opacity-20"/>
+                        <span className="uppercase tracking-widest text-xs">Sélectionner un candidat</span>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};
+
+// --- PAGE PRINCIPALE ---
 export default function CommandCenter() {
-  const { data: session, status: authStatus } = useSession();
+  const { data: session, status } = useSession();
+  const [activeTab, setActiveTab] = useState<'monitor' | 'validation'>('monitor');
   const [jobs, setJobs] = useState<any[]>([]);
-  
-  const isProcessing = jobs.some(j => j.status === 'processing');
-
   const ADMIN_ID = "1"; 
 
   const fetchJobs = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('admin_jobs')
-      .select('*')
-      .order('created_at', { ascending: false });
-    
-    if (error) console.error("Erreur fetch jobs:", error);
+    const { data } = await supabase.from('admin_jobs').select('*').order('created_at', { ascending: false });
     if (data) setJobs(data as any[]);
   }, []);
 
   useEffect(() => {
-    if (authStatus === "loading") return;
-    if (authStatus === "unauthenticated") redirect("/auth/signin");
-    if (session?.user && String((session.user as any).id) !== ADMIN_ID) redirect("/dashboard");
-
+    if (status === "loading") return;
+    if (status === "unauthenticated" || String((session?.user as any)?.id) !== ADMIN_ID) redirect("/dashboard");
     fetchJobs();
-    
-    const channel = supabase
-      .channel('admin_jobs_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'admin_jobs' }, (payload) => {
-        console.log("⚡ Realtime update reçu:", payload);
-        fetchJobs();
-      })
-      .subscribe();
+    const i = setInterval(fetchJobs, 3000);
+    return () => clearInterval(i);
+  }, [session, status, fetchJobs]);
 
-    const interval = setInterval(() => {
-        fetchJobs();
-    }, 2000);
-
-    return () => { 
-        supabase.removeChannel(channel); 
-        clearInterval(interval); 
-    };
-  }, [session, authStatus, fetchJobs]);
-
+  // ACTION 1: RESCAN GLOBAL (Segments existants) - Type: 'global_sync'
   const handleGlobalRescan = async () => {
-    if (!confirm("Voulez-vous lancer un scan de TOUTES les activités sur TOUS les segments ?")) return;
+    if (!confirm("SYNC SEGMENTS : Scanner toutes les activités sur les segments OFFICIELS existants ?")) return;
     
-    const { data: activitiesData } = await supabase.from('activities').select('id');
-    const activities = (activitiesData || []) as any[];
-    
-    if (activities.length === 0) return;
+    const { data: acts } = await supabase.from('activities').select('id');
+    if (!acts) return;
 
-    // ⚡ FIX: On cast le builder 'from(...)' en any pour débloquer l'insert
+    // 🔥 FIX: Cast en any pour insert
     await (supabase.from('admin_jobs') as any).insert({
-      type: 'global_sync',
+      type: 'global_sync', // IMPORTANT: C'est l'ancien type
       status: 'pending',
-      total: activities.length,
+      total: acts.length,
       progress: 0,
       payload: { 
         segmentId: null, 
-        segmentName: "Synchronisation Globale",
-        queue: activities.map(a => a.id)
+        segmentName: "Synchronisation Globale Segments",
+        queue: acts.map((a:any) => a.id)
       }
     });
-
     fetchJobs();
   };
 
-  const updateJobStatus = async (id: string, newStatus: string) => {
-    // ⚡ FIX: On cast le builder 'from(...)' en any pour débloquer l'update
-    await (supabase.from('admin_jobs') as any)
-        .update({ status: newStatus })
-        .eq('id', id);
+  // ACTION 2: SCAN COLS (Détection Auto) - Type: 'global_detect'
+  const handleClimbScan = async () => {
+    if(!confirm("CHASSEUR DE COLS : Détecter de NOUVEAUX cols sur tout l'historique ?")) return;
+    
+    const { data: acts } = await supabase.from('activities').select('id');
+    if(!acts) return;
+    
+    await (supabase.from('admin_jobs') as any).insert({
+      type: 'global_detect', // IMPORTANT: C'est le nouveau type pour le worker
+      status: 'pending',
+      total: acts.length,
+      progress: 0,
+      payload: { 
+        segmentName: "Détection Historique Cols", 
+        queue: acts.map((a:any) => a.id) 
+      }
+    });
     fetchJobs();
   };
+  
+  const deleteJob = async (id: string) => { await (supabase.from('admin_jobs') as any).delete().eq('id', id); fetchJobs(); };
 
-  const deleteJob = async (id: string) => {
-    if (confirm("Supprimer cette tâche ?")) {
-      // ⚡ FIX: On cast le builder 'from(...)' en any pour débloquer le delete
-      await (supabase.from('admin_jobs') as any)
-        .delete()
-        .eq('id', id);
-      fetchJobs();
-    }
-  };
-
-  if (authStatus === "loading") return <div className="h-screen bg-black flex items-center justify-center"><Loader2 className="animate-spin text-[#d04fd7]" /></div>;
+  if (status === "loading") return <div className="h-screen bg-[#050505] flex items-center justify-center"><Loader2 className="animate-spin text-[#d04fd7]"/></div>;
 
   return (
-    <div style={{ fontFamily: FONT_FAMILY }} className="p-8 bg-[#050505] min-h-screen text-gray-200">
-      <div className="max-w-6xl mx-auto space-y-10">
-        
-        {/* HEADER */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-white/5 pb-8">
-          <div className="flex items-center gap-5">
-            <div className="p-4 bg-[#d04fd7] rounded-2xl shadow-[0_0_30px_rgba(208,79,215,0.2)]">
-              <Settings2 className="text-black" size={28} />
-            </div>
-            <div>
-              <h1 className="text-3xl font-black italic uppercase leading-none tracking-tighter">Command Center</h1>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.3em] mt-2 flex items-center gap-2">
-                <Terminal size={12} className="text-[#d04fd7]" /> Operator: ID {ADMIN_ID}
-              </p>
-            </div>
-          </div>
-          
-          <button 
-            onClick={handleGlobalRescan}
-            className="flex items-center gap-3 bg-white/5 hover:bg-white/10 px-6 py-3 rounded-2xl border border-white/10 transition-all text-xs font-black uppercase tracking-widest"
-          >
-            <RefreshCcw size={16} className="text-[#00f3ff]" /> Rescan Global
-          </button>
-        </div>
-
-        {/* LOGS & JOBS LIST */}
-        <div className="bg-[#0a0a0a] border border-white/10 rounded-[2.5rem] overflow-hidden shadow-2xl">
-          <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/[0.01]">
-            <div className="flex items-center gap-3 text-sm font-black uppercase tracking-[0.2em]">
-              <List size={20} className="text-[#d04fd7]" /> Registre des missions
-            </div>
-            <div className="flex items-center gap-3 bg-black/40 px-4 py-2 rounded-full border border-white/5">
-              <div className={`w-2 h-2 rounded-full ${isProcessing ? 'bg-amber-500 animate-pulse shadow-[0_0_10px_#f59e0b]' : 'bg-emerald-500 shadow-[0_0_10px_#10b981]'}`} />
-              <span className="text-[10px] font-black uppercase tracking-tighter">
-                Moteur : {isProcessing ? 'Actif (Background)' : 'En attente'}
-              </span>
-            </div>
-          </div>
-
-          <div className="divide-y divide-white/5">
-            {jobs.length === 0 ? (
-              <div className="p-32 text-center opacity-30 flex flex-col items-center">
-                  <Database size={48} className="mb-4" />
-                  <p className="font-black uppercase tracking-widest text-xs">Aucune mission enregistrée</p>
-              </div>
-            ) : jobs.map((job) => (
-              <div key={job.id} className="p-8 flex items-center justify-between hover:bg-white/[0.01] transition-all group">
-                <div className="flex items-center gap-8 flex-1">
-                  <div className={`p-4 rounded-2xl border ${
-                    job.status === 'completed' || job.progress >= job.total ? 'bg-emerald-500/5 text-emerald-500 border-emerald-500/20' :
-                    job.status === 'failed' ? 'bg-red-500/5 text-red-500 border-red-500/20' :
-                    job.status === 'processing' ? 'bg-[#d04fd7]/5 text-[#d04fd7] border-[#d04fd7]/20' : 
-                    'bg-gray-500/5 text-gray-500 border-white/5'
-                  }`}>
-                    {job.status === 'completed' || job.progress >= job.total ? <CheckCircle size={22} /> : 
-                    job.status === 'processing' ? <Loader2 size={22} className="animate-spin" /> : <Clock size={22} />}
-                  </div>
-                  
-                  <div className="flex-1 space-y-3">
-                    <div className="flex items-center gap-4">
-                      <span className="text-base font-black italic uppercase text-white">{job.payload.segmentName}</span>
-                      <span className="text-[9px] font-black bg-white/5 px-2 py-1 rounded text-gray-500 uppercase">{job.type}</span>
-                    </div>
-                    {/* BARRE DE PROGRESSION */}
-                    <div className="flex items-center gap-6">
-                      <div className="flex-1 h-2 bg-white/5 rounded-full max-w-md overflow-hidden border border-white/5">
-                        <div 
-                          className={`h-full transition-all duration-300 ${job.status === 'completed' ? 'bg-emerald-500' : 'bg-[#d04fd7]'}`}
-                          style={{ width: `${(job.progress / job.total) * 100}%` }}
-                        />
-                      </div>
-                      <span className="text-[10px] font-bold text-gray-500">{job.progress} / {job.total}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  {/* Boutons de contrôle */}
-                  {job.status === 'processing' && (
-                      <button onClick={() => updateJobStatus(job.id, 'paused')} className="p-3 hover:bg-white/5 rounded-xl text-gray-400" title="Pause"><Pause size={18} /></button>
-                  )}
-                  {job.status === 'paused' || job.status === 'pending' ? (
-                      <button onClick={() => updateJobStatus(job.id, 'processing')} className="p-3 hover:bg-emerald-500/10 rounded-xl text-emerald-500" title="Reprendre"><Play size={18} fill="currentColor" /></button>
-                  ) : null}
-                  <button onClick={() => deleteJob(job.id)} className="p-3 hover:bg-red-500/10 rounded-xl text-red-500" title="Supprimer"><Trash2 size={18} /></button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-[#d04fd7]/5 border border-[#d04fd7]/10 rounded-3xl p-6 flex gap-5 items-center">
-            <ShieldAlert size={24} className="text-[#d04fd7]" />
-            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400">
-                Le worker background traite les tâches. Le Realtime met à jour cette interface en direct.
+    <div className="min-h-screen bg-[#050505] text-gray-200 font-sans p-6">
+      <div className="max-w-6xl mx-auto space-y-6">
+        <div className="flex justify-between items-center pb-4 border-b border-white/5">
+            <h1 className="text-2xl font-bold uppercase italic flex items-center gap-3">
+                <Terminal className="text-[#d04fd7]"/> Command Center
+            </h1>
+            <div className="bg-[#111] p-1 rounded-lg border border-white/10 flex gap-1">
+                <button onClick={() => setActiveTab('monitor')} className={`px-4 py-2 rounded text-xs font-bold uppercase ${activeTab==='monitor' ? 'bg-white/10 text-white' : 'text-gray-500'}`}>Système</button>
+                <button onClick={() => setActiveTab('validation')} className={`px-4 py-2 rounded text-xs font-bold uppercase ${activeTab==='validation' ? 'bg-[#d04fd7] text-black' : 'text-gray-500'}`}>Validations</button>
             </div>
         </div>
+        {activeTab === 'monitor' ? (
+            <SystemMonitorTab 
+                jobs={jobs} 
+                fetchJobs={fetchJobs} 
+                handleGlobalRescan={handleGlobalRescan} 
+                handleClimbScan={handleClimbScan}
+                deleteJob={deleteJob}
+            />
+        ) : (
+            <ValidationTab />
+        )}
       </div>
     </div>
   );

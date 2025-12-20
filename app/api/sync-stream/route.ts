@@ -1,9 +1,12 @@
+///fichier : app\api\sync-stream\route.ts
+
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../lib/auth";
 import { supabaseAdmin } from "../../../lib/supabaseAdminClient";
 import { analyzeAndSaveActivity } from "../../../lib/analysisEngine"; 
 import { scanActivityAgainstSegments } from "../../../lib/segmentScanner";
+import { triggerAutoDetection } from "../../../lib/activityProcessing"; // <--- IMPORT
 
 export async function POST(req: Request) {
   try {
@@ -112,6 +115,7 @@ export async function POST(req: Request) {
     
     console.log(`[Sync Stream] 🚀 Déclenchement du scan de segments (AUTO)...`);
     const scanResult = await scanActivityAgainstSegments(activityId, undefined, cleanStreams as any);
+    await triggerAutoDetection(activityId);
     
     if (scanResult.success) {
         console.log(`[Sync Stream] ✅ Scan terminé : ${scanResult.matchesFound} efforts détectés.`);

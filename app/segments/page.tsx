@@ -28,6 +28,7 @@ async function fetchSegments(): Promise<Segment[]> {
         .from("segments")
         // 🔥 AJOUT DE 'tags' dans la requête de sélection
         .select("id, name, distance_m, elevation_gain_m, average_grade, max_grade, category, start_lat, start_lon, end_lat, end_lon, polyline, tags")
+        .eq('is_official', true)
         .order('created_at', { ascending: false });
 
     if (error) {

@@ -1,9 +1,12 @@
+//fichier : app\api\strava\check-latest\route.ts
+
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth";
 import { fetchNewStravaActivities, importActivities } from "../import/route";
 import { supabaseAdmin } from "../../../../lib/supabaseAdminClient";
-import { analyzeAndSaveActivity } from '../../../../lib/analysisEngine'; 
+import { analyzeAndSaveActivity } from '../../../../lib/analysisEngine';
+import { triggerAutoDetection } from "../../../../lib/activityProcessing"; // <--- IMPORT 
 
 export const dynamic = 'force-dynamic';
 
@@ -99,6 +102,7 @@ export async function GET(req: Request) {
                     analyzedCount++;
                     if (result.brokenRecords?.length > 0) totalBrokenRecords.push(...result.brokenRecords);
                     newJobActivities.push(dbActivity.id);
+                    triggerAutoDetection(dbActivity.id);
                 }
             }
         } catch (err) {

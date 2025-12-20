@@ -1,9 +1,12 @@
+//fichier : app\api\strava\backfill\route.ts
+
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth";
 import { supabaseAdmin } from "../../../../lib/supabaseAdminClient";
 import { analyzeAndSaveActivity } from "../../../../lib/analysisEngine";
 import { scanActivityAgainstSegments } from "../../../../lib/segmentScanner"; 
+import { triggerAutoDetection } from "../../../../lib/activityProcessing"; // <--- IMPORT
 
 export const dynamic = 'force-dynamic';
 
@@ -153,7 +156,7 @@ export async function GET(req: Request) {
 
     // 6. AUTO-SCAN DES SEGMENTS
     const scanResult = await scanActivityAgainstSegments(activity.id, undefined, cleanStreams as any);
-    
+    await triggerAutoDetection(activity.id);
     // 7. Calcul du reste à faire
     const { count } = await supabaseAdmin
         .from('activities')
