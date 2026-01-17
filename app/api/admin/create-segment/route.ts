@@ -1,106 +1,82 @@
-// Fichier : app/api/admin/create-segment/route.ts
+//fichier : app\api\admin\create-segment\route.ts
+
 import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "../../../../lib/auth";
 import { supabaseAdmin } from "../../../../lib/supabaseAdminClient";
 
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-
-    const { 
-      name, distance_m, elevation_gain_m, average_grade, 
-      max_grade, start_lat, start_lon, end_lat, end_lon, 
-      polyline, category, tags 
-    } = body;
-
-    // Validation de sécurité
-    if (!name || !polyline) {
-      return NextResponse.json({ error: "Données de segment incomplètes" }, { status: 400 });
-    }
-
-    // 1. INSERTION DU SEGMENT
-    // ⚡ FIX: On cast le builder en any pour éviter l'erreur "never"
-    const { data: segmentData, error: segmentError } = await (supabaseAdmin.from("segments") as any)
-      .insert({
-        name,
-        distance_m,
-        elevation_gain_m,
-        average_grade,
-        max_grade,
-        start_lat,
-        start_lon,
-        end_lat,
-        end_lon,
-        polyline,
-        category,
-        tags,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .select()
-      .single();
-
-    if (segmentError) {
-      console.error("❌ [DB ERROR] Échec création segment:", segmentError);
-      return NextResponse.json({ error: segmentError.message }, { status: 500 });
-    }
-
-    // ⚡ FIX: On cast le résultat
-    const segment = segmentData as any;
-
-    // 2. RECHERCHE DES ACTIVITÉS PLAUSIBLES (FILTRE GÉOGRAPHIQUE)
-    const { data: plausibleActivitiesData, error: rpcError } = await supabaseAdmin
-      .rpc('get_plausible_activities', {
-        s_lat: start_lat,
-        s_lon: start_lon,
-        e_lat: end_lat,
-        e_lon: end_lon,
-        dist_threshold: 0.005 // Tolérance de ~500m
-      } as any); // ⚡ FIX: On force les arguments
-
-    if (rpcError) {
-      console.error("⚠️ [RPC ERROR] Échec du filtrage géographique:", rpcError);
-    }
-
-    // ⚡ FIX: On cast le tableau
-    const plausibleActivities = (plausibleActivitiesData || []) as any[];
-    const activityIds = plausibleActivities.map((a: any) => a.id);
-
-    // 3. CRÉATION DU JOB POUR LE COMMAND CENTER
-    // ⚡ FIX: On cast le builder en any pour l'insertion du job
-    const { data: jobData, error: jobError } = await (supabaseAdmin.from('admin_jobs') as any)
-      .insert({
-        type: 'segment_scan',
-        status: 'pending',
-        total: activityIds.length,
-        progress: 0,
-        payload: { 
-          segmentId: segment.id, 
-          segmentName: name,
-          queue: activityIds 
-        },
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
-      .select()
-      .single();
-
-    if (jobError) {
-      console.error("⚠️ [JOB ERROR] Échec création de la tâche de fond:", jobError);
-    }
-
-    // ⚡ FIX: On cast le résultat
-    const job = jobData as any;
-
-    // 4. RÉPONSE AU FRONT
-    return NextResponse.json({ 
-      success: true, 
-      segmentId: segment.id,
-      jobId: job?.id,
-      activitiesCount: activityIds.length 
+// Helper (copie-le ici aussi ou importe-le)
+const getPolylineBounds = (polyline: number[][]) => {
+    let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+    polyline.forEach(([lat, lon]) => {
+        if (lat < minLat) minLat = lat;
+        if (lat > maxLat) maxLat = lat;
+        if (lon < minLon) minLon = lon;
+        if (lon > maxLon) maxLon = lon;
     });
+    return { minLat, maxLat, minLon, maxLon };
+};
 
-  } catch (e) {
-    console.error("💥 [SERVER ERROR]:", e);
-    return NextResponse.json({ error: "Erreur interne du serveur" }, { status: 500 });
+export async function POST(req: Request) {
+  const session = await getServerSession(authOptions);
+  const ADMIN_ID = "1"; 
+
+  if (!session || String((session.user as any).id) !== ADMIN_ID) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
+    const body = await req.json();
+    const { name, polyline, start_lat, start_lon, end_lat, end_lon, distance_m, elevation_gain_m, average_grade, category, tags } = body;
+
+    // 1. Insertion Segment
+    const { data: newSeg, error: insertError } = await (supabaseAdmin.from('segments') as any)
+        .insert({
+            name, polyline, start_lat, start_lon, end_lat, end_lon,
+            distance_m, elevation_gain_m, average_grade,
+            category, is_official: true, tags, pulsar_category: 'OFFICIAL'
+        })
+        .select()
+        .single();
+
+    if (insertError) throw insertError;
+    const segment = newSeg as any;
+
+    // 2. 🔥 FILTRAGE PAR BOUNDING BOX 🔥
+    const segBounds = getPolylineBounds(polyline);
+    const MARGIN = 0.02; // ~2km de marge
+
+    const { data: geoActivities } = await supabaseAdmin
+        .from('activities')
+        .select('id')
+        .lte('min_lat', segBounds.maxLat + MARGIN)
+        .gte('max_lat', segBounds.minLat - MARGIN)
+        .lte('min_lon', segBounds.maxLon + MARGIN)
+        .gte('max_lon', segBounds.minLon - MARGIN)
+        .limit(50000);
+
+    const queue = (geoActivities || []).map((a: any) => a.id);
+    console.log(`🌍 [CREATOR] Activités dans la zone : ${queue.length}`);
+
+    if (queue.length > 0) {
+        await (supabaseAdmin.from('admin_jobs') as any).insert({
+            type: 'global_sync', 
+            status: 'pending',
+            total: queue.length,
+            progress: 0,
+            payload: { 
+                segmentId: segment.id,
+                segmentName: `Import Manuel : ${segment.name}`,
+                queue: queue 
+            },
+            created_at: new Date().toISOString()
+        });
+    }
+
+    return NextResponse.json({ success: true, segmentId: segment.id, activitiesCount: queue.length });
+
+  } catch (err: any) {
+    console.error("❌ [CREATOR ERROR]", err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }

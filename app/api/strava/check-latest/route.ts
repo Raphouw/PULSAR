@@ -127,7 +127,21 @@ export async function GET(req: Request) {
             },
             created_at: new Date().toISOString()
         });
-        console.log(`[Check Latest] 🛰️ ${newJobActivities.length} activités envoyées au registre des missions.`);
+
+
+       await (supabaseAdmin.from('admin_jobs') as any).insert({
+            type: 'global_detect', // Le type clé pour la détection
+            status: 'pending',
+            total: newJobActivities.length,
+            progress: 0,
+            payload: { 
+                segmentName: `Détection Inédits : ${newJobActivities.length} sortie(s)`,
+                queue: newJobActivities 
+            },
+            created_at: new Date().toISOString()
+        });
+        
+        console.log(`[Check Latest] 🛰️ ${newJobActivities.length} activités envoyées en DÉTECTION et CLASSEMENT.`);
     }
 
     return NextResponse.json({ 

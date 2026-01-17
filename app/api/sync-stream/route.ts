@@ -113,20 +113,49 @@ export async function POST(req: Request) {
     // B. 🔥 AUTO-SCAN DES SEGMENTS
     // 
     
-    console.log(`[Sync Stream] 🚀 Déclenchement du scan de segments (AUTO)...`);
-    const scanResult = await scanActivityAgainstSegments(activityId, undefined, cleanStreams as any);
-    await triggerAutoDetection(activityId);
+    console.log(`[Sync Stream] 🚀 Création des Jobs Worker...`);
     
-    if (scanResult.success) {
-        console.log(`[Sync Stream] ✅ Scan terminé : ${scanResult.matchesFound} efforts détectés.`);
-    } else {
-        console.error(`[Sync Stream] ❌ Échec scan auto :`, (scanResult as any).msg || (scanResult as any).error);
+    // 1. Scan immédiat (Optionnel, tu peux le laisser ou le déléguer au worker)
+    // scanActivityAgainstSegments(...) <--- Tu peux le commenter si tu veux que le worker fasse tout
+    
+    // 2. Création Job Détection
+    try {
+        await (supabaseAdmin.from('admin_jobs') as any).insert({
+            type: 'global_detect',
+            status: 'pending',
+            total: 1,
+            progress: 0,
+            payload: { 
+                segmentName: `Détection (Forcée) : ID ${activityId}`,
+                queue: [Number(activityId)] 
+            },
+            created_at: new Date().toISOString()
+        });
+        
+        // 3. Création Job Classement (Sync)
+         await (supabaseAdmin.from('admin_jobs') as any).insert({
+            type: 'global_sync',
+            status: 'pending',
+            total: 1,
+            progress: 0,
+            payload: { 
+                segmentId: null,
+                segmentName: `Classement (Forcé) : ID ${activityId}`,
+                queue: [Number(activityId)] 
+            },
+            created_at: new Date().toISOString()
+        });
+        
+        console.log(`[Sync Stream] ✅ Jobs créés.`);
+
+    } catch (e) {
+        console.error("Erreur création job sync:", e);
     }
 
     return NextResponse.json({ 
         success: true, 
         streams: cleanStreams,
-        matchesFound: scanResult.success ? scanResult.matchesFound : 0 
+        message: "Synchronisation lancée en arrière-plan"
     });
 
   } catch (error: any) {

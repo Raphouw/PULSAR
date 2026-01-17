@@ -1,3 +1,5 @@
+//fichier : app\api\admin\scan-single\route.ts
+
 import { NextResponse } from "next/server";
 import { scanActivityAgainstSegments } from "../../../../lib/segmentScanner";
 

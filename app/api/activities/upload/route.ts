@@ -1,3 +1,5 @@
+//fichier : app\api\activities\upload\route.ts
+
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "../../../../lib/auth";
@@ -280,6 +282,23 @@ export async function POST(req: Request) {
     console.log(`[Upload] Lancement scan segments auto pour ID ${activityData.id}`);
     scanActivityAgainstSegments(activityData.id, undefined, streamsDataBDD as any)
       .catch(err => console.error("Erreur scan segments upload:", err));
+
+      try {
+        await supabaseAdmin.from('admin_jobs').insert({
+            type: 'global_detect', // Le Worker écoute ce type
+            status: 'pending',
+            total: 1,
+            progress: 0,
+            payload: { 
+                segmentName: `Détection Auto : ${insertPayload.name}`,
+                queue: [activityData.id] 
+            },
+            created_at: new Date().toISOString()
+        } as any);
+        console.log(`[Upload] 🏔️ Job de détection de cols créé pour ${activityData.id}`);
+    } catch (e) {
+        console.error("Erreur création job détection:", e);
+    }
 
     // --- 7. RECORDS (Power Curve) ---
     if (countWatts > 0) {
