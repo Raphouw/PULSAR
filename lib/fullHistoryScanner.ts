@@ -1,52 +1,93 @@
 import { supabaseAdmin } from '@/lib/supabaseAdminClient';
 
-// --- FONCTIONS UTILITAIRES ROBUSTES ---
+// --- FONCTIONS MATHÉMATIQUES AVANCÉES (TIME-BASED) ---
 
-function getSimpleMaxAverage(data: number[], duration: number): number {
-  if (!data || !Array.isArray(data) || data.length < duration) return 0;
-  let maxAvg = 0;
-  let currentSum = 0;
-  for (let i = 0; i < duration; i++) {
-    currentSum += (typeof data[i] === 'number' ? data[i] : 0);
-  }
-  maxAvg = currentSum / duration;
-  for (let i = duration; i < data.length; i++) {
-    currentSum += (typeof data[i] === 'number' ? data[i] : 0) - (typeof data[i - duration] === 'number' ? data[i - duration] : 0);
-    const avg = currentSum / duration;
-    if (avg > maxAvg) maxAvg = avg;
-  }
-  return maxAvg;
-}
+// Calcule la moyenne max (pour la puissance et cardio) en utilisant les vraies secondes
+function getTrueTimeMaxAverage(valData: number[], timeData: number[], targetDuration: number): number {
+    if (!valData || !timeData || valData.length !== timeData.length) return 0;
+    
+    let maxAvg = 0;
+    let i = 0; // Pointeur de début
+    let currentSum = 0;
+    let currentCount = 0;
 
-// ⚡ NOUVEAU : Calcule la plus forte évolution sur une durée (ex: gain d'altitude en 5min)
-function getMaxDeltaRate(data: number[], duration: number, multiplier: number): number {
-  if (!data || !Array.isArray(data) || data.length < duration) return 0;
-  let maxDelta = 0;
-  for (let i = duration; i < data.length; i++) {
-    const valIn = typeof data[i] === 'number' ? data[i] : 0;
-    const valOut = typeof data[i - duration] === 'number' ? data[i - duration] : 0;
-    const delta = valIn - valOut;
-    if (delta > maxDelta) maxDelta = delta;
-  }
-  return maxDelta * multiplier;
-}
+    for (let j = 0; j < timeData.length; j++) {
+        currentSum += (typeof valData[j] === 'number' ? valData[j] : 0);
+        currentCount++;
 
-// ⚡ NOUVEAU : Cherche le chrono le plus court pour une distance exacte (ex: 10 000m)
-function getMinTimeForDistance(data: number[], targetDist: number): number {
-  if (!data || !Array.isArray(data) || data.length === 0) return 0;
-  let minTime = Infinity;
-  let j = 0;
-  for (let i = 0; i < data.length; i++) {
-    while (j < data.length && (data[j] - data[i]) < targetDist) {
-      j++;
+        // On rétrécit la fenêtre si le temps écoulé dépasse la durée cible
+        while (timeData[j] - timeData[i] > targetDuration && i <= j) {
+            currentSum -= (typeof valData[i] === 'number' ? valData[i] : 0);
+            currentCount--;
+            i++;
+        }
+
+        const timeDiff = timeData[j] - timeData[i];
+        
+        // On ne valide que si la fenêtre est pleine (au moins 90% du temps demandé)
+        if (timeDiff >= targetDuration * 0.9 && currentCount > 0) {
+            const avg = currentSum / currentCount;
+            if (avg > maxAvg) maxAvg = avg;
+        }
     }
-    if (j < data.length && (data[j] - data[i]) >= targetDist) {
-      const time = j - i;
-      if (time < minTime) minTime = time;
-    }
-  }
-  return minTime === Infinity ? 0 : minTime;
+    return maxAvg;
 }
+
+// Cherche la plus grande différence de valeur sur une durée cible (ex: VAM, Km en X heures)
+function getMaxDeltaForDuration(valData: number[], timeData: number[], targetDuration: number, isDistance: boolean = false): number {
+    if (!valData || !timeData || valData.length !== timeData.length) return 0;
+    let maxDelta = 0;
+    let i = 0;
+
+    for (let j = 0; j < timeData.length; j++) {
+        while (timeData[j] - timeData[i] > targetDuration && i < j) {
+            i++;
+        }
+
+        const timeDiff = timeData[j] - timeData[i];
+        
+        // On accepte si la fenêtre est très proche de la durée cible (à 5 secondes près)
+        if (timeDiff >= targetDuration - 5 && timeDiff <= targetDuration + 5) {
+            const delta = valData[j] - valData[i];
+
+            // ⚡ FILTRE ANTI-GLITCH : Vitesse max 100 km/h (27.7 m/s)
+            if (isDistance) {
+                const speedMs = delta / timeDiff;
+                if (speedMs > 28) continue; // C'est un saut GPS, on ignore
+            }
+
+            if (delta > maxDelta) maxDelta = delta;
+        }
+    }
+    return maxDelta;
+}
+
+// Cherche le temps MINIMUM pour parcourir une distance cible (ex: 10km le plus rapide)
+function getMinTimeForDistance(distData: number[], timeData: number[], targetDist: number): number {
+    if (!distData || !timeData || distData.length !== timeData.length) return 0;
+    let minTime = Infinity;
+    let j = 0;
+
+    for (let i = 0; i < distData.length; i++) {
+        while (j < distData.length && (distData[j] - distData[i]) < targetDist) {
+            j++;
+        }
+        
+        if (j < distData.length && (distData[j] - distData[i]) >= targetDist) {
+            const timeDiff = timeData[j] - timeData[i];
+            const realDist = distData[j] - distData[i];
+            
+            // ⚡ FILTRE ANTI-GLITCH : Vitesse max 100 km/h (27.7 m/s)
+            const speedMs = realDist / (timeDiff || 1);
+            
+            if (speedMs <= 28 && timeDiff < minTime && timeDiff > 0) {
+                minTime = timeDiff;
+            }
+        }
+    }
+    return minTime === Infinity ? 0 : minTime;
+}
+
 
 // --- CONFIGURATION EXHAUSTIVE ---
 const METRICS_CONFIG = [
@@ -59,11 +100,6 @@ const METRICS_CONFIG = [
   { id: 'P5m', category: 'power', source: 'watts', type: 'avg', duration: 300, limit: 800 },
   { id: 'P20m', category: 'power', source: 'watts', type: 'avg', duration: 1200, limit: 600 },
   { id: 'P60m', category: 'power', source: 'watts', type: 'avg', duration: 3600, limit: 500 },
-  { id: 'P2h', category: 'power', source: 'watts', type: 'avg', duration: 7200, limit: 450 },
-  { id: 'P3h', category: 'power', source: 'watts', type: 'avg', duration: 10800, limit: 400 },
-  { id: 'P4h', category: 'power', source: 'watts', type: 'avg', duration: 14400, limit: 350 },
-  { id: 'P5h', category: 'power', source: 'watts', type: 'avg', duration: 18000, limit: 300 },
-  { id: 'P8h', category: 'power', source: 'watts', type: 'avg', duration: 28800, limit: 250 },
 
   // CARDIO
   { id: 'HR_Max', category: 'heartrate', source: 'heartrate', type: 'avg', duration: 1, limit: 250 },
@@ -72,7 +108,7 @@ const METRICS_CONFIG = [
   { id: 'HR_20m', category: 'heartrate', source: 'heartrate', type: 'avg', duration: 1200, limit: 220 },
   { id: 'HR_60m', category: 'heartrate', source: 'heartrate', type: 'avg', duration: 3600, limit: 210 },
 
-  // VAM (Dénivelé sur temps * (3600/duration)) -> Résultat en Vm/h
+  // VAM (Calculée sur le dénivelé. Le résultat est retourné brut puis mis à l'heure)
   { id: 'VAM_Max', category: 'vam', source: 'altitude', type: 'delta_rate', duration: 60, multiplier: 60, limit: 4000 },
   { id: 'VAM_1m', category: 'vam', source: 'altitude', type: 'delta_rate', duration: 60, multiplier: 60, limit: 4000 },
   { id: 'VAM_5m', category: 'vam', source: 'altitude', type: 'delta_rate', duration: 300, multiplier: 12, limit: 3000 },
@@ -81,7 +117,7 @@ const METRICS_CONFIG = [
   { id: 'VAM_30m', category: 'vam', source: 'altitude', type: 'delta_rate', duration: 1800, multiplier: 2, limit: 2000 },
   { id: 'VAM_1h', category: 'vam', source: 'altitude', type: 'delta_rate', duration: 3600, multiplier: 1, limit: 1800 },
 
-  // KM / TEMPS (Distance sur durée fixe / 1000 -> Km)
+  // KM / TEMPS (Distance parcourue sur un temps donné, ramené en km)
   { id: 'dist_5m', category: 'dist_time', source: 'distance', type: 'delta_rate', duration: 300, multiplier: 0.001, limit: 10 },
   { id: 'dist_15m', category: 'dist_time', source: 'distance', type: 'delta_rate', duration: 900, multiplier: 0.001, limit: 25 },
   { id: 'dist_30m', category: 'dist_time', source: 'distance', type: 'delta_rate', duration: 1800, multiplier: 0.001, limit: 40 },
@@ -92,7 +128,7 @@ const METRICS_CONFIG = [
   { id: 'dist_5h', category: 'dist_time', source: 'distance', type: 'delta_rate', duration: 18000, multiplier: 0.001, limit: 260 },
   { id: 'dist_10h', category: 'dist_time', source: 'distance', type: 'delta_rate', duration: 36000, multiplier: 0.001, limit: 500 },
 
-  // TEMPS / KM (Temps min pour distance cible en mètres) -> Résultat en secondes
+  // TEMPS / KM (Temps minimum pour franchir X mètres) -> Renvoie des secondes
   { id: 'time_1k', category: 'time_dist', source: 'distance', type: 'min_time', target: 1000, limit: 3600 },
   { id: 'time_3k', category: 'time_dist', source: 'distance', type: 'min_time', target: 3000, limit: 3600*2 },
   { id: 'time_5k', category: 'time_dist', source: 'distance', type: 'min_time', target: 5000, limit: 3600*3 },
@@ -113,6 +149,12 @@ export function analyzeActivityForHallOfFame(activity: any) {
   const foundGlobalMetrics = new Set<string>();
 
   try {
+      // ⚡ Ne scanner que les vraies sorties de vélo (ignore les marches/randonnées/voiture)
+      const allowedTypes = ['Ride', 'VirtualRide', 'EBikeRide', 'GravelRide'];
+      if (activity.type && !allowedTypes.includes(activity.type)) {
+          return records; 
+      }
+
       let streams = activity.streams_data;
       if (typeof streams === 'string') {
           try { streams = JSON.parse(streams); } catch (e) { streams = null; }
@@ -122,34 +164,40 @@ export function analyzeActivityForHallOfFame(activity: any) {
       const activityId = activity.id;
       const dateRecorded = activity.start_time || new Date().toISOString(); 
 
-      // On insère P_Avg et HR_Avg prioritairement par la DB
+      // Insertions BDD Basiques
       if (activity.avg_heartrate > 0) { records.push(createRow(userId, activityId, dateRecorded, 'heartrate', 'HR_Avg', 0, activity.avg_heartrate)); foundGlobalMetrics.add('HR_Avg'); }
       if (activity.avg_power_w > 0) { records.push(createRow(userId, activityId, dateRecorded, 'power', 'P_Avg', 0, activity.avg_power_w)); foundGlobalMetrics.add('P_Avg'); }
 
-      // ⚡ ANALYSE INTELLIGENTE DES STREAMS
-      if (streams) {
+      // ANALYSE TIME-BASED DES STREAMS
+      if (streams && streams.time && Array.isArray(streams.time)) {
+          const timeStream = streams.time;
+
           METRICS_CONFIG.forEach(config => {
               if (foundGlobalMetrics.has(config.id)) return;
 
               try {
-                  const streamData = streams[config.source]; 
-                  if (streamData && Array.isArray(streamData) && streamData.length > 0) {
+                  const valStream = streams[config.source]; 
+                  if (valStream && Array.isArray(valStream) && valStream.length > 0) {
                       let value = 0;
 
                       if (config.type === 'avg') {
-                          value = getSimpleMaxAverage(streamData, config.duration || 1);
-                      } else if (config.type === 'delta_rate') {
-                          value = getMaxDeltaRate(streamData, config.duration || 1, config.multiplier || 1);
-                      } else if (config.type === 'min_time') {
-                          value = getMinTimeForDistance(streamData, config.target || 1000);
+                          value = getTrueTimeMaxAverage(valStream, timeStream, config.duration || 1);
+                      } 
+                      else if (config.type === 'delta_rate') {
+                          const isDist = config.source === 'distance';
+                          const rawDelta = getMaxDeltaForDuration(valStream, timeStream, config.duration || 1, isDist);
+                          value = rawDelta * (config.multiplier || 1);
+                      } 
+                      else if (config.type === 'min_time') {
+                          value = getMinTimeForDistance(valStream, timeStream, config.target || 1000);
                       }
 
-                      // On valide le record s'il fait sens
+                      // Validation finale et cohérence de la donnée
                       if (value > 0 && value < config.limit) {
                           records.push(createRow(userId, activityId, dateRecorded, config.category, config.id, config.duration || 0, value));
                       }
                   }
-              } catch (e) { /* ignore */ }
+              } catch (e) { /* ignore single error */ }
           });
       }
 
