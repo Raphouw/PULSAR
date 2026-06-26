@@ -7,7 +7,8 @@ import { Shield } from 'lucide-react';
 import { getHallData } from '@/app/actions/getHallData';
 import { getLegendsList } from '@/app/actions/getLegendsList';
 import HallOfRecords from '../../components/HallOfRecords';
-import HallOfLegends from '../../components/HallOfLegends'; // 👈 IMPORT DU FICHIER QUE TU VIENS DE CRÉER
+import HallOfLegends from '../../components/HallOfLegends';
+import PowerRecordsTab from '../../components/PowerRecordsTab'; // ⚡ AJOUT DE L'IMPORT
 
 export const dynamic = 'force-dynamic';
 
@@ -19,7 +20,7 @@ export default async function LegendPage() {
     // Chargement parallèle des données
     const [records, legends] = await Promise.all([
         userId ? getHallData(userId) : Promise.resolve([]),
-        getLegendsList() // Appel de la Server Action pour le classement
+        getLegendsList()
     ]);
 
     return (
@@ -40,10 +41,20 @@ export default async function LegendPage() {
                     legendsComponent={<HallOfLegends legends={legends} />} 
                     recordsComponent={
                         userId ? (
-                        <HallOfRecords rawRecords={records} userWeight={userWeight} />                        
-                    ) : (
+                            <HallOfRecords rawRecords={records} userWeight={userWeight} />                        
+                        ) : (
                             <div className="text-center py-20 text-gray-500 bg-white/5 rounded-2xl border border-white/10">
                                 <p>Connecte-toi pour voir tes records personnels.</p>
+                            </div>
+                        )
+                    }
+                    // ⚡ AJOUT DU 3ème COMPOSANT ICI
+                    powerComponent={
+                        userId ? (
+                            <PowerRecordsTab rawRecords={records} userWeight={userWeight} />
+                        ) : (
+                            <div className="text-center py-20 text-gray-500 bg-white/5 rounded-2xl border border-white/10">
+                                <p>Connecte-toi pour voir tes records de puissance.</p>
                             </div>
                         )
                     }

@@ -4,26 +4,25 @@ import React, { useState, useMemo } from 'react';
 import { Zap, Heart, Mountain, Trophy, Activity, Gauge, Map, Flame, Timer, Crown, BarChart3, TrendingUp } from 'lucide-react';
 import RecordHistoryModal from './RecordHistoryModal';
 
-// --- CONFIGURATION MASSIVE D'AFFICHAGE ---
-// Tu devras t'assurer que les clés ('power_1s', etc.) correspondent au 'type' retourné par ta DB
 export const UI_CONFIG: Record<string, any> = {
     // PUISSANCE
-    'power_1s': { label: 'P-Max (1s)', icon: Zap, unit: 'W', color: '#d04fd7', tab: 'power' },
-    'power_15s': { label: 'Sprint (15s)', icon: Zap, unit: 'W', color: '#d04fd7', tab: 'power' },
-    'power_30s': { label: 'Sprint (30s)', icon: Zap, unit: 'W', color: '#d04fd7', tab: 'power' },
-    'power_1m': { label: 'Anaérobie (1m)', icon: Zap, unit: 'W', color: '#d04fd7', tab: 'power' },
-    'power_5m': { label: 'PMA (5m)', icon: Activity, unit: 'W', color: '#d04fd7', tab: 'power' },
-    'power_20m': { label: 'Seuil (20m)', icon: Activity, unit: 'W', color: '#d04fd7', tab: 'power' },
-    'power_1h': { label: 'Endurance (1h)', icon: Trophy, unit: 'W', color: '#d04fd7', tab: 'power' },
-    'power_avg_max': { label: 'P-Moy Max', icon: Zap, unit: 'W', color: '#d04fd7', tab: 'power' },
+    'p1s': { label: 'P-Max (1s)', icon: Zap, unit: 'W', color: '#d04fd7', tab: 'power' },
+    'p5s': { label: 'Sprint (5s)', icon: Zap, unit: 'W', color: '#d04fd7', tab: 'power' },
+    'p15s': { label: 'Sprint (15s)', icon: Zap, unit: 'W', color: '#d04fd7', tab: 'power' },
+    'p30s': { label: 'Sprint (30s)', icon: Zap, unit: 'W', color: '#d04fd7', tab: 'power' },
+    'p1m': { label: 'Anaérobie (1m)', icon: Zap, unit: 'W', color: '#d04fd7', tab: 'power' },
+    'p5m': { label: 'PMA (5m)', icon: Activity, unit: 'W', color: '#d04fd7', tab: 'power' },
+    'p20m': { label: 'Seuil (20m)', icon: Activity, unit: 'W', color: '#d04fd7', tab: 'power' },
+    'p60m': { label: 'Endurance (1h)', icon: Trophy, unit: 'W', color: '#d04fd7', tab: 'power' },
+    'p_avg': { label: 'P-Moy Max', icon: Zap, unit: 'W', color: '#d04fd7', tab: 'power' },
 
     // CARDIO
     'hr_max': { label: 'FC Max', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
     'hr_1m': { label: 'FC Max (1m)', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
     'hr_5m': { label: 'FC Max (5m)', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
     'hr_20m': { label: 'FC Max (20m)', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
-    'hr_1h': { label: 'FC Max (1h)', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
-    'hr_avg_max': { label: 'FC Moy Max', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
+    'hr_60m': { label: 'FC Max (1h)', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
+    'hr_avg': { label: 'FC Moy Max', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
 
     // PHYSIQUE
     'physical_distance': { label: 'Distance Max', icon: Map, unit: 'km', color: '#3b82f6', tab: 'physics' },
@@ -32,13 +31,6 @@ export const UI_CONFIG: Record<string, any> = {
     'physical_speed_avg': { label: 'Vitesse Moy Max', icon: Gauge, unit: 'km/h', color: '#3b82f6', tab: 'physics' },
     'physical_duration': { label: 'Durée Max', icon: Timer, unit: '', color: '#3b82f6', tab: 'physics', format: 'time' },
     'physical_calories': { label: 'Calories Max', icon: Flame, unit: 'kcal', color: '#f59e0b', tab: 'physics' },
-    'phys_vol_month': { label: 'Volume/Mois Max', icon: Map, unit: 'km', color: '#3b82f6', tab: 'physics' },
-    'phys_bpm_w_min': { label: 'BPM/W Min', icon: Heart, unit: '', color: '#10b981', tab: 'physics', inverse: true },
-    'phys_bpm_w_max': { label: 'BPM/W Max', icon: Heart, unit: '', color: '#ef4444', tab: 'physics' },
-    'phys_if_max': { label: 'IF Max', icon: TrendingUp, unit: '', color: '#8b5cf6', tab: 'physics' },
-    'phys_ratio_d_max': { label: 'Ratio D+/km', icon: Mountain, unit: 'm/km', color: '#3b82f6', tab: 'physics' },
-    'phys_tss_max': { label: 'TSS Max', icon: Activity, unit: '', color: '#eab308', tab: 'physics' },
-    'phys_streak': { label: 'Streak Max', icon: Flame, unit: 'j', color: '#f97316', tab: 'physics' },
 
     // VAM
     'vam_max': { label: 'VAM Max', icon: Mountain, unit: 'Vm/h', color: '#10b981', tab: 'vam' },
@@ -49,7 +41,7 @@ export const UI_CONFIG: Record<string, any> = {
     'vam_30m': { label: 'VAM 30m', icon: Mountain, unit: 'Vm/h', color: '#10b981', tab: 'vam' },
     'vam_1h': { label: 'VAM 1h', icon: Mountain, unit: 'Vm/h', color: '#10b981', tab: 'vam' },
 
-    // TEMPS / KM (Le plus bas est le meilleur -> inverse: true)
+    // TEMPS / KM (inverse: true)
     'time_1k': { label: '1 km', icon: Timer, unit: '', color: '#00f3ff', tab: 'time_dist', inverse: true, format: 'time' },
     'time_3k': { label: '3 km', icon: Timer, unit: '', color: '#00f3ff', tab: 'time_dist', inverse: true, format: 'time' },
     'time_5k': { label: '5 km', icon: Timer, unit: '', color: '#00f3ff', tab: 'time_dist', inverse: true, format: 'time' },
@@ -58,11 +50,7 @@ export const UI_CONFIG: Record<string, any> = {
     'time_30k': { label: '30 km', icon: Timer, unit: '', color: '#00f3ff', tab: 'time_dist', inverse: true, format: 'time' },
     'time_40k': { label: '40 km', icon: Timer, unit: '', color: '#00f3ff', tab: 'time_dist', inverse: true, format: 'time' },
     'time_50k': { label: '50 km', icon: Timer, unit: '', color: '#00f3ff', tab: 'time_dist', inverse: true, format: 'time' },
-    'time_75k': { label: '75 km', icon: Timer, unit: '', color: '#00f3ff', tab: 'time_dist', inverse: true, format: 'time' },
     'time_100k': { label: '100 km', icon: Timer, unit: '', color: '#00f3ff', tab: 'time_dist', inverse: true, format: 'time' },
-    'time_150k': { label: '150 km', icon: Timer, unit: '', color: '#00f3ff', tab: 'time_dist', inverse: true, format: 'time' },
-    'time_160k': { label: '100 miles', icon: Timer, unit: '', color: '#00f3ff', tab: 'time_dist', inverse: true, format: 'time' },
-    'time_200k': { label: '200 km', icon: Timer, unit: '', color: '#00f3ff', tab: 'time_dist', inverse: true, format: 'time' },
 
     // KM / TEMPS
     'dist_5m': { label: '5 min', icon: Map, unit: 'km', color: '#f43f5e', tab: 'dist_time' },
@@ -73,12 +61,10 @@ export const UI_CONFIG: Record<string, any> = {
     'dist_3h': { label: '3 heures', icon: Map, unit: 'km', color: '#f43f5e', tab: 'dist_time' },
     'dist_4h': { label: '4 heures', icon: Map, unit: 'km', color: '#f43f5e', tab: 'dist_time' },
     'dist_5h': { label: '5 heures', icon: Map, unit: 'km', color: '#f43f5e', tab: 'dist_time' },
-    'dist_10h': { label: '10 heures', icon: Map, unit: 'km', color: '#f43f5e', tab: 'dist_time' },
 };
 
 const ORDERED_KEYS = Object.keys(UI_CONFIG);
 
-// Helper de formatage HH:MM:SS
 export const formatDuration = (totalSeconds: number) => {
     const h = Math.floor(totalSeconds / 3600);
     const m = Math.floor((totalSeconds % 3600) / 60);
@@ -92,23 +78,27 @@ export default function HallOfRecords({ rawRecords, userWeight = 68 }: { rawReco
   const [activeTab, setActiveTab] = useState('power');
   const [selectedMetric, setSelectedMetric] = useState<string | null>(null);
 
+  // ⚡ Normalisation des clés pour éviter tout bug d'affichage (P1s vs p1s)
+  const safeRecords = useMemo(() => {
+      if (!rawRecords) return [];
+      return rawRecords.map(r => ({
+          ...r,
+          safeKey: (r.type || r.metric_id || '').toLowerCase()
+      }));
+  }, [rawRecords]);
+
   const years = useMemo(() => {
     const y = new Set<string>();
-    if (!rawRecords) return [];
-    rawRecords.forEach(r => {
-        if(r.date_recorded) {
-            y.add(new Date(r.date_recorded).getFullYear().toString());
-        }
+    safeRecords.forEach(r => {
+        if(r.date_recorded) y.add(new Date(r.date_recorded).getFullYear().toString());
     });
     return Array.from(y).sort((a, b) => b.localeCompare(a));
-  }, [rawRecords]);
+  }, [safeRecords]);
 
   const allTimeBests = useMemo(() => {
       const bests: Record<string, number> = {};
-      if (!rawRecords) return bests;
-      
-      rawRecords.forEach(r => {
-          const type = r.type || r.metric_id;
+      safeRecords.forEach(r => {
+          const type = r.safeKey;
           const val = Number(r.value);
           const isInverse = UI_CONFIG[type]?.inverse;
 
@@ -123,16 +113,15 @@ export default function HallOfRecords({ rawRecords, userWeight = 68 }: { rawReco
           }
       });
       return bests;
-  }, [rawRecords]);
+  }, [safeRecords]);
 
   const filteredRecords = useMemo(() => {
-      if (!rawRecords) return [];
-      if (selectedYear === 'all') return rawRecords;
-      return rawRecords.filter(r => new Date(r.date_recorded).getFullYear().toString() === selectedYear);
-  }, [rawRecords, selectedYear]);
+      if (selectedYear === 'all') return safeRecords;
+      return safeRecords.filter(r => new Date(r.date_recorded).getFullYear().toString() === selectedYear);
+  }, [safeRecords, selectedYear]);
 
   const getBestForMetric = (metricId: string, isInverse: boolean) => {
-      const matches = filteredRecords.filter(r => (r.type === metricId || r.metric_id === metricId));
+      const matches = filteredRecords.filter(r => r.safeKey === metricId);
       if (matches.length === 0) return null;
       return matches.reduce((prev, curr) => {
           if (isInverse) return (Number(curr.value) < Number(prev.value) ? curr : prev);
@@ -153,7 +142,8 @@ export default function HallOfRecords({ rawRecords, userWeight = 68 }: { rawReco
     <div className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
         
         <div className="flex flex-col xl:flex-row justify-between items-center gap-4 mb-8 bg-[#0a0a0c] border border-white/5 p-4 rounded-2xl">
-             <div className="flex bg-white/5 p-1 rounded-xl gap-2 overflow-x-auto max-w-full w-full xl:w-auto scrollbar-hide">
+             {/* ⚡ CLASSES POUR CACHER LA SCROLLBAR SUR LE DEFILEMENT HORIZONTAL */}
+             <div className="flex bg-white/5 p-1 rounded-xl gap-2 overflow-x-auto max-w-full w-full xl:w-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                  {TABS.map(tab => (
                      <button 
                         key={tab.id}
@@ -166,11 +156,11 @@ export default function HallOfRecords({ rawRecords, userWeight = 68 }: { rawReco
                  ))}
              </div>
              
-             <div className="flex gap-2 overflow-x-auto pb-1 max-w-full scrollbar-hide w-full xl:w-auto">
+             <div className="flex gap-2 overflow-x-auto pb-1 max-w-full w-full xl:w-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                  <button onClick={() => setSelectedYear('all')} className={`px-3 py-1 rounded-lg text-[10px] font-bold border transition-all whitespace-nowrap ${selectedYear==='all' ? 'bg-white text-black border-white' : 'border-white/10 text-gray-500 hover:border-white/30'}`}>TOUT TEMPS</button>
-                 {years.length > 0 && <div className="w-px h-4 bg-white/10 mx-1 self-center"></div>}
+                 {years.length > 0 && <div className="w-px h-4 bg-white/10 mx-1 self-center shrink-0"></div>}
                  {years.map(y => (
-                     <button key={y} onClick={() => setSelectedYear(y)} className={`px-3 py-1 rounded-lg text-[10px] font-bold border transition-all ${selectedYear===y ? 'bg-white/10 text-white border-white/30' : 'border-white/10 text-gray-500 hover:border-white/30'}`}>{y}</button>
+                     <button key={y} onClick={() => setSelectedYear(y)} className={`px-3 py-1 rounded-lg text-[10px] font-bold border transition-all shrink-0 ${selectedYear===y ? 'bg-white/10 text-white border-white/30' : 'border-white/10 text-gray-500 hover:border-white/30'}`}>{y}</button>
                  ))}
              </div>
         </div>
@@ -183,7 +173,6 @@ export default function HallOfRecords({ rawRecords, userWeight = 68 }: { rawReco
                 const isInverse = !!config.inverse;
                 const record = getBestForMetric(key, isInverse);
                 
-                // Calcul de si c'est un Personal Record
                 let isPR = false;
                 if (record) {
                     if (isInverse) {
@@ -193,7 +182,7 @@ export default function HallOfRecords({ rawRecords, userWeight = 68 }: { rawReco
                     }
                 }
 
-                const wkg = (activeTab === 'power' && record && !key.includes('Avg')) ? (Number(record.value) / userWeight).toFixed(2) : null;
+                const wkg = (activeTab === 'power' && record && !key.includes('avg')) ? (Number(record.value) / userWeight).toFixed(2) : null;
 
                 if (!record) return (
                     <div key={key} className="bg-[#0a0a0c]/50 border border-white/5 rounded-2xl p-6 flex flex-col items-center justify-center gap-3 opacity-40 min-h-[160px]">
@@ -286,7 +275,7 @@ export default function HallOfRecords({ rawRecords, userWeight = 68 }: { rawReco
                 color={UI_CONFIG[selectedMetric].color}
                 isInverse={UI_CONFIG[selectedMetric].inverse}
                 format={UI_CONFIG[selectedMetric].format}
-                allRecords={rawRecords}
+                allRecords={safeRecords} // On passe les records normalisés
             />
         )}
     </div>
