@@ -1,11 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Crown, Trophy, Medal, User, Shield } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Crown, Trophy, Medal, User, Shield, Users } from 'lucide-react';
 import { getLegendDetails } from '@/app/actions/getLegendDetails';
-import LegendDetailsModal from './LegendDetailsModal'; // Import relatif (même dossier)
-
-// --- SOUS-COMPOSANTS ---
+import LegendDetailsModal from './LegendDetailsModal';
 
 const RankBadge = ({ rank }: { rank: number }) => {
     if (rank === 1) return <div className="w-6 h-6 rounded-full bg-yellow-500 flex items-center justify-center shadow-[0_0_10px_rgba(234,179,8,0.8)]"><Crown size={14} className="text-black fill-black" /></div>;
@@ -40,7 +38,6 @@ const PodiumCard = ({ legend, rank, onOpenDetails }: { legend: any, rank: number
                 <p className="text-xs text-gray-500 font-mono mt-1">{legend.total_segments || 0} segments chassés</p>
             </div>
 
-            {/* BADGES CLIQUABLES */}
             <div className="flex items-center gap-3 w-full justify-center bg-white/5 p-2 rounded-xl border border-white/5">
                 <button 
                     onClick={() => onOpenDetails(legend, 'KOM')}
@@ -102,9 +99,8 @@ const LegendRow = ({ legend, rank, onOpenDetails }: { legend: any, rank: number,
     );
 };
 
-// --- COMPOSANT PRINCIPAL ---
-
 export default function HallOfLegends({ legends }: { legends: any[] }) {
+    const [filter, setFilter] = useState<'ALL' | 'M' | 'F'>('ALL');
     const [modalOpen, setModalOpen] = useState(false);
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [detailsData, setDetailsData] = useState<any[]>([]);
@@ -112,33 +108,33 @@ export default function HallOfLegends({ legends }: { legends: any[] }) {
     const [selectedType, setSelectedType] = useState<'KOM' | 'TOP10'>('KOM');
 
     const handleOpenDetails = async (user: any, type: 'KOM' | 'TOP10') => {
-    // Vérification de sécurité pour l'ID utilisateur
-    const userId = user.user_id || user.id;
-    if (!userId) {
-        console.error("Impossible de charger les détails : ID utilisateur manquant", user);
-        return;
-    }
+        const userId = user.user_id || user.id;
+        if (!userId) return;
 
-    setSelectedUser(user);
-    setSelectedType(type);
-    setModalOpen(true);
-    setLoadingDetails(true);
-    setDetailsData([]);
+        setSelectedUser(user);
+        setSelectedType(type);
+        setModalOpen(true);
+        setLoadingDetails(true);
+        setDetailsData([]);
 
-    try {
-        // On s'assure d'appeler l'action avec l'ID correct
-        const data = await getLegendDetails(userId, type);
-        
-        // Sécurité supplémentaire : On vérifie que chaque item a bien son segment_id
-        console.log("Données reçues de l'action:", data);
-        
-        setDetailsData(data);
-    } catch (error) {
-        console.error("Erreur lors de la récupération des segments:", error);
-    } finally {
-        setLoadingDetails(false);
-    }
-};
+        try {
+            const data = await getLegendDetails(userId, type);
+            setDetailsData(data);
+        } catch (error) {
+            console.error("Erreur lors de la récupération des segments:", error);
+        } finally {
+            setLoadingDetails(false);
+        }
+    };
+
+    // ⚡ Filtrage dynamique
+    const filteredLegends = useMemo(() => {
+        if (!legends) return [];
+        if (filter === 'ALL') return legends;
+        // On suppose que M et F sont les valeurs dans ta BDD pour le sexe
+        return legends.filter(l => l.gender === filter); 
+    }, [legends, filter]);
+
     if (!legends || legends.length === 0) return (
         <div className="flex flex-col items-center justify-center py-20 text-center gap-4 opacity-50">
             <Shield size={48} className="text-gray-600" />
@@ -146,12 +142,40 @@ export default function HallOfLegends({ legends }: { legends: any[] }) {
         </div>
     );
 
-    const top3 = legends.slice(0, 3);
-    const others = legends.slice(3);
+    const top3 = filteredLegends.slice(0, 3);
+    const others = filteredLegends.slice(3);
 
     return (
         <div className="flex flex-col gap-8 animate-in fade-in duration-500">
             
+            {/* ⚡ NOUVEAU : Boutons de filtre */}
+            <div className="flex justify-center mb-2">
+                <div className="bg-[#141419] border border-white/5 rounded-full p-1 flex items-center">
+                    <button 
+                        onClick={() => setFilter('ALL')}
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${filter === 'ALL' ? 'bg-white text-black' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        TOP-ALL
+                    </button>
+                    <button 
+                        onClick={() => setFilter('M')}
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${filter === 'M' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        HOMMES
+                    </button>
+                    <button 
+                        onClick={() => setFilter('F')}
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${filter === 'F' ? 'bg-pink-500 text-white' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        FEMMES
+                    </button>
+                </div>
+            </div>
+
+            {filteredLegends.length === 0 && (
+                 <div className="text-center py-10 text-gray-500">Aucun athlète dans cette catégorie.</div>
+            )}
+
             {/* PODIUM */}
             {top3.length > 0 && (
                 <div className="flex flex-col md:flex-row justify-center items-end gap-4 md:gap-6 mb-4 px-2">
@@ -164,14 +188,15 @@ export default function HallOfLegends({ legends }: { legends: any[] }) {
             {/* LISTE */}
             {others.length > 0 && (
                 <div className="flex flex-col gap-2">
-                    <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-4 mb-1">Poursuivants</div>
+                    <div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest pl-4 mb-1 flex items-center gap-2">
+                        <Users size={12} /> Poursuivants
+                    </div>
                     {others.map((legend, index) => (
                         <LegendRow key={legend.user_id} legend={legend} rank={index + 4} onOpenDetails={handleOpenDetails} />
                     ))}
                 </div>
             )}
 
-            {/* MODAL */}
             <LegendDetailsModal 
                 isOpen={modalOpen}
                 onClose={() => setModalOpen(false)}
