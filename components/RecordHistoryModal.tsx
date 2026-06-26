@@ -2,17 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { X, TrendingUp, Trophy, Crown, Calendar, Activity } from 'lucide-react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  ReferenceLine,
-  ComposedChart
-} from 'recharts';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ComposedChart } from 'recharts';
 import regression from 'regression';
 import { formatDuration } from './HallOfRecords';
 
@@ -28,23 +18,13 @@ interface RecordHistoryModalProps {
   allRecords: any[];
 }
 
-export default function RecordHistoryModal({
-  isOpen,
-  onClose,
-  metricId,
-  metricLabel,
-  unit,
-  color,
-  isInverse = false,
-  format = 'number',
-  allRecords
-}: RecordHistoryModalProps) {
+export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLabel, unit, color, isInverse = false, format = 'number', allRecords }: RecordHistoryModalProps) {
   
   const { chartData, yearlyBests, allTimeBest } = useMemo(() => {
     if (!allRecords || !metricId) return { chartData: [], yearlyBests: [], allTimeBest: 0 };
 
-    // Filtrer par métrique
-    const filtered = allRecords.filter((r) => r.type === metricId || r.metric_id === metricId);
+    // Filtre sécurité (case-insensitive via safeKey)
+    const filtered = allRecords.filter((r) => r.safeKey === metricId.toLowerCase());
 
     const bestsByMonth: Record<string, any> = {};
     const bestsByYear: Record<string, number> = {};
@@ -56,25 +36,17 @@ export default function RecordHistoryModal({
       const yearKey = dateObj.getFullYear().toString();
       const val = Number(r.value);
 
-      // Meilleur Global
-      if (isInverse) {
-          if (val < globalBest) globalBest = val;
-      } else {
-          if (val > globalBest) globalBest = val;
-      }
+      if (isInverse) { if (val < globalBest) globalBest = val; } 
+      else { if (val > globalBest) globalBest = val; }
 
-      // Meilleur par Année
-      if (!bestsByYear[yearKey]) {
-        bestsByYear[yearKey] = val;
-      } else {
+      if (!bestsByYear[yearKey]) { bestsByYear[yearKey] = val; } 
+      else {
         if (isInverse && val < bestsByYear[yearKey]) bestsByYear[yearKey] = val;
         if (!isInverse && val > bestsByYear[yearKey]) bestsByYear[yearKey] = val;
       }
 
-      // Meilleur par Mois
-      if (!bestsByMonth[monthKey]) {
-        bestsByMonth[monthKey] = r;
-      } else {
+      if (!bestsByMonth[monthKey]) { bestsByMonth[monthKey] = r; } 
+      else {
         const currentMonthBest = Number(bestsByMonth[monthKey].value);
         if (isInverse && val < currentMonthBest) bestsByMonth[monthKey] = r;
         if (!isInverse && val > currentMonthBest) bestsByMonth[monthKey] = r;
@@ -82,11 +54,7 @@ export default function RecordHistoryModal({
     });
 
     type ChartDataPoint = {
-        date: string;
-        monthLabel: string;
-        value: number;
-        original: any;
-        trend?: number; // On lui dit que trend peut exister
+        date: string; monthLabel: string; value: number; original: any; trend?: number;
     };
 
     const data: ChartDataPoint[] = Object.values(bestsByMonth)
@@ -98,18 +66,10 @@ export default function RecordHistoryModal({
         original: r
       }));
 
-    // --- CALCUL DE LA COURBE POLYNOMIALE (Degré 3) ---
     if (data.length > 2) {
-        // Préparer les données pour regression-js : [index, valeur]
         const regressionData = data.map((d, index) => [index, d.value] as [number, number]);
-        
-        // Calcul polynomial de degré 3
         const result = regression.polynomial(regressionData, { order: 3, precision: 4 });
-        
-        // Assigner la valeur prédite à chaque point
-        data.forEach((d, index) => {
-            d.trend = result.points[index][1];
-        });
+        data.forEach((d, index) => { d.trend = result.points[index][1]; });
     }
 
     const bestsArray = Object.entries(bestsByYear)
@@ -127,7 +87,6 @@ export default function RecordHistoryModal({
 
   const CustomTooltip = ({ active, payload }: any) => {
     if (active && payload && payload.length) {
-        // On récupère le payload de la vraie donnée (pas de la trendline)
         const dataPayload = payload.find((p:any) => p.dataKey === 'value');
         if (!dataPayload) return null;
         
@@ -139,16 +98,11 @@ export default function RecordHistoryModal({
         return (
             <div className="bg-[#0a0a0c] border border-white/10 p-4 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] min-w-[220px]">
                 <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-2">{data.monthLabel}</p>
-                
                 <div className="flex items-baseline gap-1 mb-3">
-                    <span className="text-3xl font-black text-white" style={{ color: color }}>
-                        {formatDisplayValue(data.value)}
-                    </span>
+                    <span className="text-3xl font-black text-white" style={{ color: color }}>{formatDisplayValue(data.value)}</span>
                     <span className="text-xs font-bold text-gray-400">{unit}</span>
                 </div>
-
                 <div className="h-px bg-white/10 w-full mb-3" />
-
                 <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                         <Calendar size={14} className="text-gray-500" />
@@ -156,9 +110,7 @@ export default function RecordHistoryModal({
                     </div>
                     <div className="flex items-center gap-2">
                         <Activity size={14} className="text-gray-500 shrink-0" />
-                        <span className="text-xs text-gray-400 truncate max-w-[180px]" title={activityName}>
-                            {activityName}
-                        </span>
+                        <span className="text-xs text-gray-400 truncate max-w-[180px]" title={activityName}>{activityName}</span>
                     </div>
                 </div>
             </div>
@@ -173,7 +125,6 @@ export default function RecordHistoryModal({
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-200 p-4">
       <div className="bg-[#0f0f13] border border-white/10 w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]">
         
-        {/* Header */}
         <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#141419]">
           <div className="flex items-center gap-4">
             <div className="p-3 rounded-xl bg-white/5 border border-white/5 shadow-inner">
@@ -190,79 +141,31 @@ export default function RecordHistoryModal({
         </div>
 
         <div className="overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* Graphique */}
             <div className="lg:col-span-2 flex flex-col gap-4">
                 <div className="bg-black/40 rounded-2xl p-4 border border-white/5 h-[400px] relative">
                     <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={chartData} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-                            
-                            <XAxis 
-                                dataKey="date" 
-                                stroke="#444" 
-                                fontSize={10} 
-                                tickLine={false} 
-                                axisLine={false}
-                                minTickGap={30}
-                                dy={10}
-                            />
-                            
-                            <YAxis 
-                                stroke="#444" 
-                                fontSize={10} 
-                                tickLine={false} 
-                                axisLine={false} 
-                                domain={['auto', 'auto']}
-                                tickFormatter={(val) => format === 'time' ? formatDuration(val) : val}
-                                reversed={isInverse} // Magique : Inverse l'axe Y si un temps plus bas = meilleur
-                                dx={-5}
-                            />
-                            
+                            <XAxis dataKey="date" stroke="#444" fontSize={10} tickLine={false} axisLine={false} minTickGap={30} dy={10} />
+                            <YAxis stroke="#444" fontSize={10} tickLine={false} axisLine={false} domain={['auto', 'auto']} tickFormatter={(val) => format === 'time' ? formatDuration(val) : val} reversed={isInverse} dx={-5} />
                             <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#ffffff20' }} />
-                            
                             <ReferenceLine y={allTimeBest} stroke={color} strokeDasharray="3 3" opacity={0.4} />
-                            
-                            {/* La Ligne de Tendance Polynomiale (Lisse) */}
-                            {chartData.length > 2 && (
-                                <Line 
-                                    type="monotone" 
-                                    dataKey="trend" 
-                                    stroke="#ffffff" 
-                                    strokeWidth={2} 
-                                    dot={false}
-                                    activeDot={false}
-                                    opacity={0.3}
-                                    strokeDasharray="5 5"
-                                />
-                            )}
-
-                            {/* Les vraies données */}
-                            <Line 
-                                type="monotone" 
-                                dataKey="value" 
-                                stroke={color} 
-                                strokeWidth={3} 
-                                dot={{ fill: '#0f0f13', stroke: color, r: 4, strokeWidth: 2 }} 
-                                activeDot={{ r: 7, fill: color, stroke: '#fff', strokeWidth: 2 }} 
-                            />
+                            {chartData.length > 2 && <Line type="monotone" dataKey="trend" stroke="#ffffff" strokeWidth={2} dot={false} activeDot={false} opacity={0.3} strokeDasharray="5 5" />}
+                            <Line type="monotone" dataKey="value" stroke={color} strokeWidth={3} dot={{ fill: '#0f0f13', stroke: color, r: 4, strokeWidth: 2 }} activeDot={{ r: 7, fill: color, stroke: '#fff', strokeWidth: 2 }} />
                         </ComposedChart>
                     </ResponsiveContainer>
                 </div>
             </div>
 
-            {/* Stats Annuelles */}
+            {/* ⚡ SCROLLBAR INVISIBLE STYLISÉE ICI */}
             <div className="flex flex-col gap-4">
-                <div className="bg-black/40 rounded-2xl p-5 border border-white/5 h-full max-h-[400px] overflow-y-auto custom-scrollbar">
+                <div className="bg-black/40 rounded-2xl p-5 border border-white/5 h-full max-h-[400px] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-white/20">
                     <h3 className="text-xs font-bold text-gray-400 mb-5 flex items-center gap-2 tracking-widest uppercase">
                         <Trophy size={14} /> Sommets Annuels
                     </h3>
                     <div className="flex flex-col gap-3">
                         {yearlyBests.map((item) => {
-                            const isPR = isInverse 
-                                ? item.value <= allTimeBest + 0.01 
-                                : item.value >= allTimeBest - 0.01;
-                                
+                            const isPR = isInverse ? item.value <= allTimeBest + 0.01 : item.value >= allTimeBest - 0.01;
                             return (
                                 <div key={item.year} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${isPR ? `bg-[${color}]/10 border-[${color}]/40 shadow-lg` : 'bg-white/5 border-white/5'}`}>
                                     <div className="flex items-center gap-3">
@@ -279,7 +182,6 @@ export default function RecordHistoryModal({
                     </div>
                 </div>
             </div>
-
         </div>
       </div>
     </div>
