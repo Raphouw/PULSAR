@@ -54,7 +54,7 @@ function getMaxDeltaForDuration(valData: number[], timeData: number[], targetDur
       // ⚡ REQUIS & SECURITÉ ANTI-PAUSE/GLITCH : Vitesse max humaine fixée à 80 km/h (22.2 m/s)
       if (isDistance) {
         const speedMs = delta / realTimeDiff;
-        if (speedMs > 22.2 || speedMs < 0) continue; 
+        if (speedMs > 30 || speedMs < 0) continue; 
       }
 
       if (delta > maxDelta) maxDelta = delta;
@@ -93,8 +93,9 @@ function getMinTimeForDistance(distData: number[], timeData: number[], targetDis
 }
 
 // --- CONFIGURATION EXHAUSTIVE ET UNIFIÉE DES MÉTRIQUES ---
+// --- CONFIGURATION EXHAUSTIVE ET UNIFIÉE DES MÉTRIQUES ---
 const METRICS_CONFIG = [
-  // PUISSANCE (Maintenant poussée jusqu'à 8 Heures !)
+  // PUISSANCE
   { id: 'P1s', category: 'power', source: 'watts', type: 'avg', duration: 1, limit: 2500 },
   { id: 'P5s', category: 'power', source: 'watts', type: 'avg', duration: 5, limit: 2000 },
   { id: 'P15s', category: 'power', source: 'watts', type: 'avg', duration: 15, limit: 1800 },
@@ -110,7 +111,6 @@ const METRICS_CONFIG = [
   { id: 'P8h', category: 'power', source: 'watts', type: 'avg', duration: 28800, limit: 250 },
 
   // CARDIO
-// CARDIO
   { id: 'HR_Max', category: 'heartrate', source: 'heartrate', type: 'avg', duration: 1, limit: 250 },
   { id: 'HR_1m', category: 'heartrate', source: 'heartrate', type: 'avg', duration: 60, limit: 240 },
   { id: 'HR_5m', category: 'heartrate', source: 'heartrate', type: 'avg', duration: 300, limit: 230 },
@@ -121,16 +121,18 @@ const METRICS_CONFIG = [
   { id: 'HR_5h', category: 'heartrate', source: 'heartrate', type: 'avg', duration: 18000, limit: 180 },
   { id: 'HR_8h', category: 'heartrate', source: 'heartrate', type: 'avg', duration: 28800, limit: 170 },
 
-  // VAM (Dénivelé positif à l'heure)
-  { id: 'VAM_Max', category: 'vam', source: 'altitude', type: 'vam', duration: 60, multiplier: 60, limit: 3500 },
-  { id: 'VAM_1m', category: 'vam', source: 'altitude', type: 'vam', duration: 60, multiplier: 60, limit: 3500 },
-  { id: 'VAM_5m', category: 'vam', source: 'altitude', type: 'vam', duration: 300, multiplier: 12, limit: 2800 },
-  { id: 'VAM_10m', category: 'vam', source: 'altitude', type: 'vam', duration: 600, multiplier: 6, limit: 2500 },
-  { id: 'VAM_20m', category: 'vam', source: 'altitude', type: 'vam', duration: 1200, multiplier: 3, limit: 2200 },
-  { id: 'VAM_30m', category: 'vam', source: 'altitude', type: 'vam', duration: 1800, multiplier: 2, limit: 2000 },
-  { id: 'VAM_1h', category: 'vam', source: 'altitude', type: 'vam', duration: 3600, multiplier: 1, limit: 1800 },
+  // VAM (LIMITES STRICTES ANTI-GLITCH GPS)
+  // VAM_Max calculé sur 10s (x360 pour ramener à l'heure).
+  { id: 'VAM_Max', category: 'vam', source: 'altitude', type: 'vam', duration: 10, multiplier: 360, limit: 2500 },
+  { id: 'VAM_1m', category: 'vam', source: 'altitude', type: 'vam', duration: 60, multiplier: 60, limit: 2000 },
+  { id: 'VAM_5m', category: 'vam', source: 'altitude', type: 'vam', duration: 300, multiplier: 12, limit: 1800 },
+  { id: 'VAM_10m', category: 'vam', source: 'altitude', type: 'vam', duration: 600, multiplier: 6, limit: 1600 },
+  { id: 'VAM_20m', category: 'vam', source: 'altitude', type: 'vam', duration: 1200, multiplier: 3, limit: 1400 },
+  { id: 'VAM_30m', category: 'vam', source: 'altitude', type: 'vam', duration: 1800, multiplier: 2, limit: 1300 },
+  { id: 'VAM_1h', category: 'vam', source: 'altitude', type: 'vam', duration: 3600, multiplier: 1, limit: 1200 },
 
-  // KM / TEMPS (Distance ramenée en km)
+  // KM / TEMPS
+  { id: 'dist_1m', category: 'dist_time', source: 'distance', type: 'distance', duration: 60, multiplier: 0.001, limit: 5 },
   { id: 'dist_5m', category: 'dist_time', source: 'distance', type: 'distance', duration: 300, multiplier: 0.001, limit: 8 },
   { id: 'dist_15m', category: 'dist_time', source: 'distance', type: 'distance', duration: 900, multiplier: 0.001, limit: 22 },
   { id: 'dist_30m', category: 'dist_time', source: 'distance', type: 'distance', duration: 1800, multiplier: 0.001, limit: 40 },
@@ -138,9 +140,11 @@ const METRICS_CONFIG = [
   { id: 'dist_2h', category: 'dist_time', source: 'distance', type: 'distance', duration: 7200, multiplier: 0.001, limit: 120 },
   { id: 'dist_3h', category: 'dist_time', source: 'distance', type: 'distance', duration: 10800, multiplier: 0.001, limit: 175 },
   { id: 'dist_4h', category: 'dist_time', source: 'distance', type: 'distance', duration: 14400, multiplier: 0.001, limit: 220 },
-  { id: 'dist_5h', category: 'dist_time', source: 'distance', type: 'distance', duration: 18000, multiplier: 0.001, limit: 260 },
+  { id: 'dist_5h', category: 'dist_time', source: 'distance', type: 'distance', duration: 18000, multiplier: 0.001, limit: 250 },
+  { id: 'dist_10h', category: 'dist_time', source: 'distance', type: 'distance', duration: 36000, multiplier: 0.001, limit: 500 },
 
-  // TEMPS / KM (Temps en secondes pour une distance en mètres)
+
+  // TEMPS / KM
   { id: 'time_1k', category: 'time_dist', source: 'distance', type: 'min_time', target: 1000, limit: 1200 },
   { id: 'time_3k', category: 'time_dist', source: 'distance', type: 'min_time', target: 3000, limit: 3600 },
   { id: 'time_5k', category: 'time_dist', source: 'distance', type: 'min_time', target: 5000, limit: 5400 },
@@ -149,7 +153,11 @@ const METRICS_CONFIG = [
   { id: 'time_30k', category: 'time_dist', source: 'distance', type: 'min_time', target: 30000, limit: 32400 },
   { id: 'time_40k', category: 'time_dist', source: 'distance', type: 'min_time', target: 40000, limit: 43200 },
   { id: 'time_50k', category: 'time_dist', source: 'distance', type: 'min_time', target: 50000, limit: 54000 },
+  { id: 'time_75k', category: 'time_dist', source: 'distance', type: 'min_time', target: 75000, limit: 80000 },
   { id: 'time_100k', category: 'time_dist', source: 'distance', type: 'min_time', target: 100000, limit: 108000 },
+  { id: 'time_150k', category: 'time_dist', source: 'distance', type: 'min_time', target: 150000, limit: 162000 },
+  { id: 'time_160k', category: 'time_dist', source: 'distance', type: 'min_time', target: 160000, limit: 173000 },
+  { id: 'time_200k', category: 'time_dist', source: 'distance', type: 'min_time', target: 200000, limit: 1216000 },
 ];
 
 export function analyzeActivityForHallOfFame(activity: any) {

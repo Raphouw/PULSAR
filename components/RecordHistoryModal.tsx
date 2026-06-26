@@ -85,20 +85,21 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
   };
 
   // ⚡ HELPER NOUVEAU : Calcule la vitesse moyenne d'une ligne de record de distance/temps
-  const calculateSpeedKmh = (mId: string, val: number) => {
-      const idLower = mId.toLowerCase();
-      const cfg = UI_CONFIG[metricId];
+const calculateSpeedKmh = (mId: string, val: number) => {
+      const cfg = UI_CONFIG[mId.toLowerCase()];
       if (!cfg) return null;
 
       if (cfg.tab === 'time_dist') {
-          // target = mètres, val = secondes
-          const targetMetres = cfg.target || 1000;
+          // target = mètres (ex: 3000m), val = secondes (ex: 600s)
+          const targetMetres = cfg.target;
+          if (!targetMetres) return null;
           const hours = val / 3600;
           return hours > 0 ? ((targetMetres / 1000) / hours).toFixed(1) : null;
       } 
       else if (cfg.tab === 'dist_time') {
-          // duration = secondes, val = kilomètres
-          const durationSec = cfg.duration || 300;
+          // duration = secondes (ex: 18000s = 5h), val = kilomètres (ex: 140km)
+          const durationSec = cfg.duration;
+          if (!durationSec) return null;
           const hours = durationSec / 3600;
           return hours > 0 ? (val / hours).toFixed(1) : null;
       }
