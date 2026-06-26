@@ -1,10 +1,10 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import { X, TrendingUp, Trophy, Crown, Calendar, Activity } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, ComposedChart } from 'recharts';
+import { X, TrendingUp, Trophy, Crown, Calendar, Activity, Gauge } from 'lucide-react';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Line, ComposedChart } from 'recharts';
 import regression from 'regression';
-import { formatDuration } from './HallOfRecords';
+import { formatDuration, UI_CONFIG } from './HallOfRecords';
 
 interface RecordHistoryModalProps {
   isOpen: boolean;
@@ -23,7 +23,6 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
   const { chartData, yearlyBests, allTimeBest } = useMemo(() => {
     if (!allRecords || !metricId) return { chartData: [], yearlyBests: [], allTimeBest: 0 };
 
-    // Filtre sécurité (case-insensitive via safeKey)
     const filtered = allRecords.filter((r) => r.safeKey === metricId.toLowerCase());
 
     const bestsByMonth: Record<string, any> = {};
@@ -81,8 +80,29 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
 
   const formatDisplayValue = (val: number) => {
       if (format === 'time') return formatDuration(val);
-      if (metricId.includes('hr') || metricId.includes('calories')) return Math.round(val);
+      if (metricId.toLowerCase().includes('hr') || metricId.toLowerCase().includes('calories')) return Math.round(val);
       return val.toFixed(1);
+  };
+
+  // ⚡ HELPER NOUVEAU : Calcule la vitesse moyenne d'une ligne de record de distance/temps
+  const calculateSpeedKmh = (mId: string, val: number) => {
+      const idLower = mId.toLowerCase();
+      const cfg = UI_CONFIG[metricId];
+      if (!cfg) return null;
+
+      if (cfg.tab === 'time_dist') {
+          // target = mètres, val = secondes
+          const targetMetres = cfg.target || 1000;
+          const hours = val / 3600;
+          return hours > 0 ? ((targetMetres / 1000) / hours).toFixed(1) : null;
+      } 
+      else if (cfg.tab === 'dist_time') {
+          // duration = secondes, val = kilomètres
+          const durationSec = cfg.duration || 300;
+          const hours = durationSec / 3600;
+          return hours > 0 ? (val / hours).toFixed(1) : null;
+      }
+      return null;
   };
 
   const CustomTooltip = ({ active, payload }: any) => {
@@ -95,13 +115,23 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
         const exactDate = new Date(originalRecord.date_recorded).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
         const activityName = originalRecord.activities?.name || "Activité inconnue";
 
+        // Vitesse calculée en direct
+        const speedKmh = calculateSpeedKmh(metricId, data.value);
+
         return (
             <div className="bg-[#0a0a0c] border border-white/10 p-4 rounded-xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] min-w-[220px]">
                 <p className="text-gray-500 text-[10px] font-bold uppercase tracking-wider mb-2">{data.monthLabel}</p>
-                <div className="flex items-baseline gap-1 mb-3">
+                <div className="flex items-baseline gap-1 mb-1">
                     <span className="text-3xl font-black text-white" style={{ color: color }}>{formatDisplayValue(data.value)}</span>
                     <span className="text-xs font-bold text-gray-400">{unit}</span>
                 </div>
+
+                {speedKmh && (
+                    <div className="text-xs font-bold text-emerald-400 flex items-center gap-1.5 mb-2 bg-emerald-500/10 px-2 py-0.5 rounded w-fit">
+                        <Gauge size={12} /> {speedKmh} km/h
+                    </div>
+                )}
+
                 <div className="h-px bg-white/10 w-full mb-3" />
                 <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
@@ -157,7 +187,6 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
                 </div>
             </div>
 
-            {/* ⚡ SCROLLBAR INVISIBLE STYLISÉE ICI */}
             <div className="flex flex-col gap-4">
                 <div className="bg-black/40 rounded-2xl p-5 border border-white/5 h-full max-h-[400px] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-white/20">
                     <h3 className="text-xs font-bold text-gray-400 mb-5 flex items-center gap-2 tracking-widest uppercase">
@@ -166,11 +195,20 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
                     <div className="flex flex-col gap-3">
                         {yearlyBests.map((item) => {
                             const isPR = isInverse ? item.value <= allTimeBest + 0.01 : item.value >= allTimeBest - 0.01;
+                            const speedKmh = calculateSpeedKmh(metricId, item.value);
+
                             return (
                                 <div key={item.year} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${isPR ? `bg-[${color}]/10 border-[${color}]/40 shadow-lg` : 'bg-white/5 border-white/5'}`}>
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-sm font-bold text-gray-400 bg-black/50 px-2 py-1 rounded-md font-mono">{item.year}</span>
-                                        {isPR && <Crown size={16} className="text-yellow-500 animate-pulse" fill="currentColor" />}
+                                    <div className="flex flex-col gap-1.5">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-sm font-bold text-gray-400 bg-black/50 px-2 py-1 rounded-md font-mono">{item.year}</span>
+                                            {isPR && <Crown size={16} className="text-yellow-500 animate-pulse" fill="currentColor" />}
+                                        </div>
+                                        {speedKmh && (
+                                            <span className="text-[11px] font-bold text-emerald-400 font-mono">
+                                                {speedKmh} km/h
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="text-xl font-black text-white text-right">
                                         {formatDisplayValue(item.value)}

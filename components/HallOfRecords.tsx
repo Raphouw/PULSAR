@@ -17,11 +17,16 @@ export const UI_CONFIG: Record<string, any> = {
     'p_avg': { label: 'P-Moy Max', icon: Zap, unit: 'W', color: '#d04fd7', tab: 'power' },
 
     // CARDIO
+    // CARDIO
     'hr_max': { label: 'FC Max', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
     'hr_1m': { label: 'FC Max (1m)', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
     'hr_5m': { label: 'FC Max (5m)', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
     'hr_20m': { label: 'FC Max (20m)', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
     'hr_60m': { label: 'FC Max (1h)', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
+    'hr_2h': { label: 'FC Max (2h)', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
+    'hr_3h': { label: 'FC Max (3h)', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
+    'hr_5h': { label: 'FC Max (5h)', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
+    'hr_8h': { label: 'FC Max (8h)', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
     'hr_avg': { label: 'FC Moy Max', icon: Heart, unit: 'BPM', color: '#ef4444', tab: 'cardio' },
 
     // PHYSIQUE
