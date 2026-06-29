@@ -35,16 +35,16 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
       const yearKey = dateObj.getFullYear().toString();
       const val = Number(r.value);
 
-      if (isInverse) { if (val < globalBest) globalBest = val; }
+      if (isInverse) { if (val < globalBest) globalBest = val; } 
       else { if (val > globalBest) globalBest = val; }
 
-      if (!bestsByYear[yearKey]) { bestsByYear[yearKey] = val; }
+      if (!bestsByYear[yearKey]) { bestsByYear[yearKey] = val; } 
       else {
         if (isInverse && val < bestsByYear[yearKey]) bestsByYear[yearKey] = val;
         if (!isInverse && val > bestsByYear[yearKey]) bestsByYear[yearKey] = val;
       }
 
-      if (!bestsByMonth[monthKey]) { bestsByMonth[monthKey] = r; }
+      if (!bestsByMonth[monthKey]) { bestsByMonth[monthKey] = r; } 
       else {
         const currentMonthBest = Number(bestsByMonth[monthKey].value);
         if (isInverse && val < currentMonthBest) bestsByMonth[monthKey] = r;
@@ -52,7 +52,9 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
       }
     });
 
-    type ChartDataPoint = { date: string; monthLabel: string; value: number; original: any; trend?: number; };
+    type ChartDataPoint = {
+        date: string; monthLabel: string; value: number; original: any; trend?: number;
+    };
 
     const data: ChartDataPoint[] = Object.values(bestsByMonth)
       .sort((a: any, b: any) => new Date(a.date_recorded).getTime() - new Date(b.date_recorded).getTime())
@@ -91,7 +93,7 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
           if (!targetMetres) return null;
           const hours = val / 3600;
           return hours > 0 ? ((targetMetres / 1000) / hours).toFixed(1) : null;
-      }
+      } 
       else if (cfg.tab === 'dist_time') {
           const durationSec = cfg.duration;
           if (!durationSec) return null;
@@ -110,6 +112,7 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
         const originalRecord = data.original;
         const exactDate = new Date(originalRecord.date_recorded).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' });
         const activityName = originalRecord.activities?.name || "Activité inconnue";
+
         const speedKmh = calculateSpeedKmh(metricId, data.value);
 
         return (
@@ -147,8 +150,7 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-200 p-4">
-      {/* CORRECTION 1 : Réduction max-w-4xl et max-h-[85vh] */}
-      <div className="bg-[#0f0f13] border border-white/10 w-full max-w-4xl rounded-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[85vh]">
+      <div className="bg-[#0f0f13] border border-white/10 w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]">
         
         <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#141419]">
           <div className="flex items-center gap-4">
@@ -167,8 +169,7 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
 
         <div className="overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 flex flex-col gap-4">
-                {/* CORRECTION 2 : Hauteur du graphique réduite à 300px */}
-                <div className="bg-black/40 rounded-2xl p-4 border border-white/5 h-[300px] relative">
+                <div className="bg-black/40 rounded-2xl p-4 border border-white/5 h-[400px] relative">
                     <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={chartData} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>
                             <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
@@ -184,18 +185,17 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
             </div>
 
             <div className="flex flex-col gap-4">
-                <div className="bg-black/40 rounded-2xl p-5 border border-white/5 h-full max-h-[300px] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-white/20">
+                <div className="bg-black/40 rounded-2xl p-5 border border-white/5 h-full max-h-[400px] overflow-y-auto [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-white/20">
                     <h3 className="text-xs font-bold text-gray-400 mb-5 flex items-center gap-2 tracking-widest uppercase">
                         <Trophy size={14} /> Sommets Annuels
                     </h3>
                     <div className="flex flex-col gap-3">
                         {yearlyBests.map((item) => {
-                            // CORRECTION 3 : Résolution mathématique des couronnes
                             const isPR = Math.abs(item.value - allTimeBest) <= 0.01;
                             const speedKmh = calculateSpeedKmh(metricId, item.value);
 
                             return (
-                                <div key={item.year} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${isPR ? `border-yellow-500/40 bg-yellow-500/10 shadow-lg` : 'bg-white/5 border-white/5'}`}>
+                                <div key={item.year} className={`flex items-center justify-between p-4 rounded-xl border transition-all ${isPR ? `bg-[${color}]/10 border-[${color}]/40 shadow-lg` : 'bg-white/5 border-white/5'}`}>
                                     <div className="flex flex-col gap-1.5">
                                         <div className="flex items-center gap-2">
                                             <span className="text-sm font-bold text-gray-400 bg-black/50 px-2 py-1 rounded-md font-mono">{item.year}</span>
@@ -207,7 +207,7 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
                                             </span>
                                         )}
                                     </div>
-                                    <div className="text-xl font-black text-white text-right" style={isPR ? { color: color } : {}}>
+                                    <div className="text-xl font-black text-white text-right">
                                         {formatDisplayValue(item.value)}
                                         {format !== 'time' && <span className="text-xs font-normal text-gray-500 ml-1">{unit}</span>}
                                     </div>

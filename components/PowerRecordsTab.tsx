@@ -9,7 +9,6 @@ export default function PowerRecordsTab({ rawRecords, userWeight = 68 }: { rawRe
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
     const [powerMode, setPowerMode] = useState<'power_elapsed' | 'power_moving' | 'power_np'>('power_elapsed');
 
-    // Filtre sur la catégorie sélectionnée par le Tab
     const safeRecords = useMemo(() => {
         if (!rawRecords) return [];
         // L'astuce : Le mode "Elapsed" utilise la catégorie classique 'power' dans la BDD
@@ -31,8 +30,8 @@ export default function PowerRecordsTab({ rawRecords, userWeight = 68 }: { rawRe
             const key = r.safeKey;
             if (!key || map.has(key)) return;
 
-            // Gestion de la P-Moy Max qui n'a pas de chiffre
-            if (key === 'pe_pmoymax' || key === 'pm_pmoymax' || key === 'np_pmoymax') {
+            // Gestion propre de la P-Moy Max qui n'a pas de chiffre
+            if (key === 'pmoymax' || key === 'pm_pmoymax' || key === 'np_pmoymax') {
                 map.set(key, { id: key, label: 'P-MOY MAX', seconds: 999999 });
                 return;
             }
@@ -42,21 +41,13 @@ export default function PowerRecordsTab({ rawRecords, userWeight = 68 }: { rawRe
                 const val = parseInt(match[1]);
                 const unit = match[2].toLowerCase();
                 let seconds = val;
-                let labelUnit = 'sec';
+                let labelUnit = 's';
                 
-                if (unit === 'm') { seconds = val * 60; labelUnit = 'min'; }
-                if (unit === 'h') { seconds = val * 3600; labelUnit = val === 1 ? 'heure' : 'heures'; }
+                if (unit === 'm') { seconds = val * 60; labelUnit = 'm'; }
+                if (unit === 'h') { seconds = val * 3600; labelUnit = 'h'; }
 
-                // Injection de tes labels stylisés (ex: "SPRINT (15S)")
-                let customLabel = `${val} ${labelUnit.toUpperCase()}`;
-                if (seconds === 1) customLabel = 'P-MAX (1S)';
-                else if (seconds === 5) customLabel = 'SPRINT (5S)';
-                else if (seconds === 15) customLabel = 'SPRINT (15S)';
-                else if (seconds === 30) customLabel = 'SPRINT (30S)';
-                else if (seconds === 60) customLabel = 'ANAÉROBIE (1M)';
-                else if (seconds === 300) customLabel = 'PMA (5M)';
-                else if (seconds === 1200) customLabel = 'SEUIL (20M)';
-                else if (seconds === 3600) customLabel = 'ENDURANCE (1H)';
+                // Noms propres et techniques ("P-15S", "P-1H")
+                const customLabel = seconds === 1 ? 'P-MAX (1S)' : `P-${val}${labelUnit.toUpperCase()}`;
                 
                 map.set(key, { id: key, label: customLabel, seconds });
             }
