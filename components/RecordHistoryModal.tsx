@@ -52,9 +52,7 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
       }
     });
 
-    type ChartDataPoint = {
-        date: string; monthLabel: string; value: number; original: any; trend?: number;
-    };
+    type ChartDataPoint = { date: string; monthLabel: string; value: number; original: any; trend?: number; };
 
     const data: ChartDataPoint[] = Object.values(bestsByMonth)
       .sort((a: any, b: any) => new Date(a.date_recorded).getTime() - new Date(b.date_recorded).getTime())
@@ -150,6 +148,7 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm animate-in fade-in duration-200 p-4">
+      {/* Retour de la taille max-w-5xl */}
       <div className="bg-[#0f0f13] border border-white/10 w-full max-w-5xl rounded-3xl overflow-hidden shadow-2xl relative flex flex-col max-h-[90vh]">
         
         <div className="p-6 border-b border-white/5 flex justify-between items-center bg-[#141419]">
@@ -169,6 +168,7 @@ export default function RecordHistoryModal({ isOpen, onClose, metricId, metricLa
 
         <div className="overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 flex flex-col gap-4">
+                {/* Retour de la hauteur à 400px */}
                 <div className="bg-black/40 rounded-2xl p-4 border border-white/5 h-[400px] relative">
                     <ResponsiveContainer width="100%" height="100%">
                         <ComposedChart data={chartData} margin={{ top: 20, right: 10, left: -10, bottom: 0 }}>

@@ -92,15 +92,16 @@ function getMinTimeForDistance(distData: number[], timeData: number[], targetDis
   return minTime === Infinity ? 0 : minTime;
 }
 
-// --- CONFIGURATION EXHAUSTIVE ET SÉCURISÉE DES METRIQUES ---
+// --- RESTAURATION EXACTE DES IDs D'ORIGINE ---
 const METRICS_CONFIG: any[] = [];
 
-// 1. PUISSANCE (On sépare les IDs pour éviter la violation de contrainte Unique SQL)
+// 1. PUISSANCE (Attention : c'est P60m et pas P1h)
 const powerDurations = [
-  { d: 1, id: 'P1s', shortId: '1s' }, { d: 15, id: 'P15s', shortId: '15s' }, { d: 30, id: 'P30s', shortId: '30s' },
-  { d: 60, id: 'P1m', shortId: '1m' }, { d: 300, id: 'P5m', shortId: '5m' }, { d: 1200, id: 'P20m', shortId: '20m' }, 
-  { d: 3600, id: 'P1h', shortId: '1h' }, { d: 7200, id: 'P2h', shortId: '2h' }, { d: 10800, id: 'P3h', shortId: '3h' }, 
-  { d: 14400, id: 'P4h', shortId: '4h' }, { d: 18000, id: 'P5h', shortId: '5h' }, { d: 28800, id: 'P8h', shortId: '8h' }
+  { d: 1, id: 'P1s', shortId: '1s' }, { d: 5, id: 'P5s', shortId: '5s' }, { d: 15, id: 'P15s', shortId: '15s' },
+  { d: 30, id: 'P30s', shortId: '30s' }, { d: 60, id: 'P1m', shortId: '1m' }, { d: 300, id: 'P5m', shortId: '5m' }, 
+  { d: 1200, id: 'P20m', shortId: '20m' }, { d: 3600, id: 'P60m', shortId: '60m' }, { d: 7200, id: 'P2h', shortId: '2h' }, 
+  { d: 10800, id: 'P3h', shortId: '3h' }, { d: 14400, id: 'P4h', shortId: '4h' }, { d: 18000, id: 'P5h', shortId: '5h' }, 
+  { d: 28800, id: 'P8h', shortId: '8h' }
 ];
 
 powerDurations.forEach(({ d, id, shortId }) => {
@@ -110,38 +111,38 @@ powerDurations.forEach(({ d, id, shortId }) => {
 });
 
 METRICS_CONFIG.push(
-  // 2. CARDIO (Tous les trous bouchés jusqu'à 8h)
-  { id: 'FCmax', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 1, limit: 250 },
-  { id: 'FCmax 1min', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 60, limit: 240 },
-  { id: 'FCmax 5min', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 300, limit: 230 },
-  { id: 'FCmax 20min', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 1200, limit: 220 },
-  { id: 'FCmax 1h', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 3600, limit: 210 },
-  { id: 'FCmax 2h', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 7200, limit: 200 },
-  { id: 'FCmax 3h', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 10800, limit: 190 },
-  { id: 'FCmax 5h', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 18000, limit: 180 },
-  { id: 'FCmax 8h', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 28800, limit: 170 },
+  // 2. CARDIO (Préfixe HR_ d'origine au lieu de FCmax)
+  { id: 'HR_Max', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 1, limit: 250 },
+  { id: 'HR_1m', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 60, limit: 240 },
+  { id: 'HR_5m', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 300, limit: 230 },
+  { id: 'HR_20m', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 1200, limit: 220 },
+  { id: 'HR_60m', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 3600, limit: 210 },
+  { id: 'HR_2h', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 7200, limit: 200 },
+  { id: 'HR_3h', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 10800, limit: 190 },
+  { id: 'HR_5h', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 18000, limit: 180 },
+  { id: 'HR_8h', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 28800, limit: 170 },
 
-  // 3. VAM
-  { id: 'VAMmax', category: 'vam', source: 'altitude', type: 'vam', duration: 10, multiplier: 360, limit: 3000 },
-  { id: 'VAM1mMax', category: 'vam', source: 'altitude', type: 'vam', duration: 60, multiplier: 60, limit: 2500 },
-  { id: 'VAM5minMax', category: 'vam', source: 'altitude', type: 'vam', duration: 300, multiplier: 12, limit: 2000 },
-  { id: 'VAM10minMax', category: 'vam', source: 'altitude', type: 'vam', duration: 600, multiplier: 6, limit: 1800 },
-  { id: 'VAM20minMax', category: 'vam', source: 'altitude', type: 'vam', duration: 1200, multiplier: 3, limit: 1600 },
-  { id: 'VAM30minMax', category: 'vam', source: 'altitude', type: 'vam', duration: 1800, multiplier: 2, limit: 1400 },
-  { id: 'VAM1hMax', category: 'vam', source: 'altitude', type: 'vam', duration: 3600, multiplier: 1, limit: 1200 },
+  // 3. VAM (Avec les underscores d'origine)
+  { id: 'VAM_Max', category: 'vam', source: 'altitude', type: 'vam', duration: 10, multiplier: 360, limit: 3000 },
+  { id: 'VAM_1m', category: 'vam', source: 'altitude', type: 'vam', duration: 60, multiplier: 60, limit: 2500 },
+  { id: 'VAM_5m', category: 'vam', source: 'altitude', type: 'vam', duration: 300, multiplier: 12, limit: 2000 },
+  { id: 'VAM_10m', category: 'vam', source: 'altitude', type: 'vam', duration: 600, multiplier: 6, limit: 1800 },
+  { id: 'VAM_20m', category: 'vam', source: 'altitude', type: 'vam', duration: 1200, multiplier: 3, limit: 1600 },
+  { id: 'VAM_30m', category: 'vam', source: 'altitude', type: 'vam', duration: 1800, multiplier: 2, limit: 1400 },
+  { id: 'VAM_1h', category: 'vam', source: 'altitude', type: 'vam', duration: 3600, multiplier: 1, limit: 1200 },
 
-  // 4. TEMPS/KM (Inclus 150km, 100 miles, 200km)
+  // 4. TEMPS/KM (C'est _1k et non _1km)
   ...[
-    { k: 1, id: 'time_1km' }, { k: 3, id: 'time_3km' }, { k: 5, id: 'time_5km' },
-    { k: 10, id: 'time_10km' }, { k: 20, id: 'time_20km' }, { k: 30, id: 'time_30km' },
-    { k: 40, id: 'time_40km' }, { k: 50, id: 'time_50km' }, { k: 75, id: 'time_75km' },
-    { k: 100, id: 'time_100km' }, { k: 150, id: 'time_150km' }, 
-    { k: 160.934, id: 'time_100mi' }, { k: 200, id: 'time_200km' }
+    { k: 1, id: 'time_1k' }, { k: 3, id: 'time_3k' }, { k: 5, id: 'time_5k' },
+    { k: 10, id: 'time_10k' }, { k: 20, id: 'time_20k' }, { k: 30, id: 'time_30k' },
+    { k: 40, id: 'time_40k' }, { k: 50, id: 'time_50k' }, { k: 75, id: 'time_75k' },
+    { k: 100, id: 'time_100k' }, { k: 150, id: 'time_150k' }, 
+    { k: 160.934, id: 'time_160k' }, { k: 200, id: 'time_200k' }
   ].map(({k, id}) => ({
     id, category: 'time_dist', source: 'distance', type: 'min_time', target: k * 1000, limit: 800000 
   })),
 
-  // 5. KM/TEMPS (Inclus 1 min, 10h)
+  // 5. KM/TEMPS
   ...[
     { s: 60, id: 'dist_1m' }, { s: 300, id: 'dist_5m' }, { s: 900, id: 'dist_15m' },
     { s: 1800, id: 'dist_30m' }, { s: 3600, id: 'dist_1h' }, { s: 7200, id: 'dist_2h' },
@@ -193,17 +194,19 @@ export function analyzeActivityForHallOfFame(activity: any) {
     if (elevGain > 0 && distKm > 0) {
       records.push(createRow(userId, activityId, dateRecorded, 'physique', 'ratio d+/km max', 0, elevGain / distKm));
     }
+
     if (hrAvg > 0 && powerAvg > 0) {
       const bpmW = hrAvg / powerAvg;
       records.push(createRow(userId, activityId, dateRecorded, 'physique', 'BPM/w min', 0, bpmW));
       records.push(createRow(userId, activityId, dateRecorded, 'physique', 'BPM/w max', 0, bpmW));
     }
 
-    if (hrAvg > 0) records.push(createRow(userId, activityId, dateRecorded, 'heartrate', 'FCmoymax', 0, hrAvg));
+    // Averages (Restaurés avec les bons IDs d'origine : HR_Avg et P_Avg)
+    if (hrAvg > 0) records.push(createRow(userId, activityId, dateRecorded, 'heartrate', 'HR_Avg', 0, hrAvg));
     if (powerAvg > 0) {
-      records.push(createRow(userId, activityId, dateRecorded, 'power', 'Pmoymax', 0, powerAvg));
-      records.push(createRow(userId, activityId, dateRecorded, 'power_moving', 'PM_Pmoymax', 0, powerAvg));
-      records.push(createRow(userId, activityId, dateRecorded, 'power_np', 'NP_Pmoymax', 0, powerAvg)); 
+      records.push(createRow(userId, activityId, dateRecorded, 'power', 'P_Avg', 0, powerAvg));
+      records.push(createRow(userId, activityId, dateRecorded, 'power_moving', 'PM_Avg', 0, powerAvg));
+      records.push(createRow(userId, activityId, dateRecorded, 'power_np', 'NP_Avg', 0, powerAvg)); 
     }
 
     // --- ANALYSE DES STREAMS ---
