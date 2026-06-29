@@ -9,7 +9,6 @@ export default function PowerRecordsTab({ rawRecords, userWeight = 68 }: { rawRe
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
     const [powerMode, setPowerMode] = useState<'power_elapsed' | 'power_moving' | 'power_np'>('power_elapsed');
 
-    // On isole les records en fonction du type de puissance choisi
     const safeRecords = useMemo(() => {
         if (!rawRecords) return [];
         return rawRecords
@@ -17,7 +16,7 @@ export default function PowerRecordsTab({ rawRecords, userWeight = 68 }: { rawRe
             .map(r => ({ ...r, safeKey: r.metric_id }));
     }, [rawRecords, powerMode]);
 
-    // On mappe les clés pour garder l'ordre (1s, 15s, 30s, 1m, 5m, 20m, 1h, Pmoymax)
+    // On mappe les clés pour garder l'ordre parfait exact que tu avais
     const powerKeys = useMemo(() => {
         const map = new Map<string, { id: string, label: string, seconds: number }>();
         const order = { 'P1s': 1, 'P15s': 15, 'P30s': 30, 'P1m': 60, 'P5m': 300, 'P20m': 1200, 'P1h': 3600, 'Pmoymax': 9999 };

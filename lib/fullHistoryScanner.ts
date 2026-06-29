@@ -1,23 +1,17 @@
 import { supabaseAdmin } from '@/lib/supabaseAdminClient';
 
 // --- MOTEURS DE CALCUL TEMPORELS ---
-
 function getElapsedMaxAverage(valData: number[], timeData: number[], targetDuration: number): number {
   if (!valData || !timeData || valData.length === 0) return 0;
   if (targetDuration === 1) return Math.max(...valData.filter(v => typeof v === 'number'));
 
-  let maxAvg = 0;
-  let i = 0;
-  let currentSum = 0;
-
+  let maxAvg = 0, i = 0, currentSum = 0;
   for (let j = 0; j < timeData.length; j++) {
     currentSum += (typeof valData[j] === 'number' ? valData[j] : 0);
-    // On avance le pointeur de début si la fenêtre dépasse le temps cible
     while (timeData[j] - timeData[i] >= targetDuration && i < j) {
       currentSum -= (typeof valData[i] === 'number' ? valData[i] : 0);
       i++;
     }
-    // Si la fenêtre fait la bonne taille (tolérance de 3s), on valide. Le diviseur EST le temps cible (inclut les pauses de 0W)
     if (timeData[j] - timeData[i] >= targetDuration - 3) {
       const avg = currentSum / targetDuration;
       if (avg > maxAvg) maxAvg = avg;
@@ -30,10 +24,7 @@ function getMovingMaxAverage(valData: number[], movingTimeData: number[], target
   if (!valData || !movingTimeData || valData.length === 0) return 0;
   if (targetDuration === 1) return Math.max(...valData.filter(v => typeof v === 'number'));
 
-  let maxAvg = 0;
-  let i = 0;
-  let currentSum = 0;
-
+  let maxAvg = 0, i = 0, currentSum = 0;
   for (let j = 0; j < movingTimeData.length; j++) {
     currentSum += (typeof valData[j] === 'number' ? valData[j] : 0);
     while (movingTimeData[j] - movingTimeData[i] >= targetDuration && i < j) {
@@ -50,10 +41,7 @@ function getMovingMaxAverage(valData: number[], movingTimeData: number[], target
 
 function getNPMax(pow4Data: number[], timeData: number[], targetDuration: number): number {
   if (!pow4Data || !timeData || pow4Data.length === 0) return 0;
-  let maxNP = 0;
-  let i = 0;
-  let currentSumPow4 = 0;
-
+  let maxNP = 0, i = 0, currentSumPow4 = 0;
   for (let j = 0; j < timeData.length; j++) {
     currentSumPow4 += pow4Data[j];
     while (timeData[j] - timeData[i] >= targetDuration && i < j) {
@@ -104,7 +92,6 @@ function getMinTimeForDistance(distData: number[], timeData: number[], targetDis
   return minTime === Infinity ? 0 : minTime;
 }
 
-
 // --- CONFIGURATION EXHAUSTIVE DES METRIQUES ---
 const METRICS_CONFIG: any[] = [];
 
@@ -113,6 +100,7 @@ const powerDurations = [
   { d: 1, id: 'P1s' }, { d: 15, id: 'P15s' }, { d: 30, id: 'P30s' },
   { d: 60, id: 'P1m' }, { d: 300, id: 'P5m' }, { d: 1200, id: 'P20m' }, { d: 3600, id: 'P1h' }
 ];
+
 powerDurations.forEach(({ d, id }) => {
   METRICS_CONFIG.push({ id, category: 'power_elapsed', source: 'watts', type: 'power_elapsed', duration: d, limit: 2500 });
   METRICS_CONFIG.push({ id, category: 'power_moving', source: 'watts', type: 'power_moving', duration: d, limit: 2500 });
@@ -120,7 +108,7 @@ powerDurations.forEach(({ d, id }) => {
 });
 
 METRICS_CONFIG.push(
-  // 2. CARDIO : FCmax, Fcmax 1m, 5m, 20m, 1h
+  // 2. CARDIO : FCmax, Fcmax_1m, 5m, 20m, 1h
   { id: 'FCmax', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 1, limit: 250 },
   { id: 'FCmax_1m', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 60, limit: 240 },
   { id: 'FCmax_5m', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 300, limit: 230 },
@@ -138,7 +126,7 @@ METRICS_CONFIG.push(
 
   // 4. TEMPS/KM : 1km, 3km, 5km, 10km, 20km, 30km, 40km, 50km, 75km, 100km, 150km, 100 miles, 200km
   ...[1, 3, 5, 10, 20, 30, 40, 50, 75, 100, 150, 160.934, 200].map(k => ({
-    id: `time_${k === 160.934 ? '100mi' : k + 'km'}`, category: 'time_dist', source: 'distance', type: 'min_time', target: k * 1000, limit: k * 3600
+    id: `time_${k === 160.934 ? '100mi' : k + 'k'}`, category: 'time_dist', source: 'distance', type: 'min_time', target: k * 1000, limit: k * 3600
   })),
 
   // 5. KM/TEMPS : 5min, 15min, 30min, 1h, 2h, 3h, 4h, 5h, 10h
@@ -149,8 +137,7 @@ METRICS_CONFIG.push(
 
 export function analyzeActivityForHallOfFame(activity: any) {
   const records: any[] = [];
-  const foundGlobalMetrics = new Set<string>();
-
+  
   try {
     const allowedTypes = ['Ride', 'VirtualRide', 'EBikeRide', 'GravelRide'];
     if (activity.type && !allowedTypes.includes(activity.type)) return records;
@@ -165,27 +152,41 @@ export function analyzeActivityForHallOfFame(activity: any) {
     const activityId = activity.id;
     const dateRecorded = activity.start_time || new Date().toISOString();
 
-    // --- ENREGISTREMENT DES MÉTRIQUES GLOBALES "PHYSIQUE" ---
-    if (activity.distance_km > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'Dist Max', 0, activity.distance_km));
-    if (activity.elevation_gain_m > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'D+ max', 0, activity.elevation_gain_m));
-    if (activity.max_speed_kmh > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'Vit max', 0, activity.max_speed_kmh));
-    if (activity.avg_speed_kmh > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'Vit moy max', 0, activity.avg_speed_kmh));
-    if (activity.duration_s > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'Durée max', 0, activity.duration_s));
-    if (activity.calories_kcal > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'kcal max', 0, activity.calories_kcal));
-    if (activity.tss > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'TSS max', 0, activity.tss));
-    if (activity.intensity_factor > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'IF max', 0, activity.intensity_factor));
-    if (activity.elevation_gain_m > 0 && activity.distance_km > 0) {
-      records.push(createRow(userId, activityId, dateRecorded, 'physique', 'ratio d+/km max', 0, activity.elevation_gain_m / activity.distance_km));
+    // --- ENREGISTREMENT SÉCURISÉ DES MÉTRIQUES GLOBALES "PHYSIQUE" ---
+    // Sécurité : On gère les noms de variables Strava standard ou tes colonnes custom Supabase
+    const distKm = activity.distance_km || (activity.distance ? activity.distance / 1000 : 0);
+    const elevGain = activity.elevation_gain_m || activity.total_elevation_gain || 0;
+    const maxSpeedKmh = activity.max_speed_kmh || (activity.max_speed ? activity.max_speed * 3.6 : 0);
+    const avgSpeedKmh = activity.avg_speed_kmh || (activity.average_speed ? activity.average_speed * 3.6 : 0);
+    const durationS = activity.duration_s || activity.elapsed_time || activity.moving_time || 0;
+    const kcal = activity.calories_kcal || activity.calories || activity.kilojoules || 0;
+    const hrAvg = activity.avg_heartrate || activity.average_heartrate || 0;
+    const powerAvg = activity.avg_power_w || activity.average_watts || activity.weighted_average_power || 0;
+    const tss = activity.tss || activity.suffer_score || 0;
+    const intensity = activity.intensity_factor || 0;
+
+    if (distKm > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'Dist Max', 0, distKm));
+    if (elevGain > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'D+ max', 0, elevGain));
+    if (maxSpeedKmh > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'Vit max', 0, maxSpeedKmh));
+    if (avgSpeedKmh > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'Vit moy max', 0, avgSpeedKmh));
+    if (durationS > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'Durée max', 0, durationS));
+    if (kcal > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'kcal max', 0, kcal));
+    if (tss > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'TSS max', 0, tss));
+    if (intensity > 0) records.push(createRow(userId, activityId, dateRecorded, 'physique', 'IF max', 0, intensity));
+    
+    if (elevGain > 0 && distKm > 0) {
+      records.push(createRow(userId, activityId, dateRecorded, 'physique', 'ratio d+/km max', 0, elevGain / distKm));
     }
-    if (activity.avg_heartrate > 0 && activity.avg_power_w > 0) {
-      records.push(createRow(userId, activityId, dateRecorded, 'physique', 'BPM/w', 0, activity.avg_heartrate / activity.avg_power_w));
+    if (hrAvg > 0 && powerAvg > 0) {
+      records.push(createRow(userId, activityId, dateRecorded, 'physique', 'BPM/w', 0, hrAvg / powerAvg));
     }
 
-    // Statistiques moyennes (Cardio & Power)
-    if (activity.avg_heartrate > 0) records.push(createRow(userId, activityId, dateRecorded, 'heartrate', 'FCmoymax', 0, activity.avg_heartrate));
-    if (activity.avg_power_w > 0) {
-      records.push(createRow(userId, activityId, dateRecorded, 'power_elapsed', 'Pmoymax', 0, activity.avg_power_w));
-      records.push(createRow(userId, activityId, dateRecorded, 'power_moving', 'Pmoymax', 0, activity.avg_power_w)); // Simplification pour la moyenne DB
+    // Statistiques moyennes (Cardio & Power Pmoymax)
+    if (hrAvg > 0) records.push(createRow(userId, activityId, dateRecorded, 'heartrate', 'FCmoymax', 0, hrAvg));
+    if (powerAvg > 0) {
+      records.push(createRow(userId, activityId, dateRecorded, 'power_elapsed', 'Pmoymax', 0, powerAvg));
+      records.push(createRow(userId, activityId, dateRecorded, 'power_moving', 'Pmoymax', 0, powerAvg));
+      records.push(createRow(userId, activityId, dateRecorded, 'power_np', 'Pmoymax', 0, powerAvg)); 
     }
 
     // --- ANALYSE DES STREAMS ---
@@ -193,7 +194,7 @@ export function analyzeActivityForHallOfFame(activity: any) {
       const timeStream = streams.time;
       const wattsStream = streams.watts || [];
 
-      // Pré-calcul: Moving Time & NP Pow4
+      // Pré-calcul: Moving Time & NP Pow4 (Sécurisé contre les tableaux watts vides)
       const movingTimeStream = [0];
       let currentMovingTime = 0;
       const pow4Stream = new Array(timeStream.length).fill(0);
@@ -201,18 +202,20 @@ export function analyzeActivityForHallOfFame(activity: any) {
 
       for (let i = 1; i < timeStream.length; i++) {
         let dt = timeStream[i] - timeStream[i - 1];
-        if (dt > 5) dt = 1; // Gel du chrono moving pendant les pauses > 5s
+        if (dt > 5) dt = 1; 
         currentMovingTime += dt;
         movingTimeStream.push(currentMovingTime);
 
-        const val = wattsStream[i] || 0;
-        r_sum += val;
-        while (timeStream[i] - timeStream[r_i] > 30 && r_i <= i) {
-          r_sum -= wattsStream[r_i] || 0;
-          r_i++;
+        if (wattsStream.length > 0) {
+            const val = wattsStream[i] || 0;
+            r_sum += val;
+            while (timeStream[i] - timeStream[r_i] > 30 && r_i <= i) {
+              r_sum -= wattsStream[r_i] || 0;
+              r_i++;
+            }
+            const windowDt = timeStream[i] - timeStream[r_i] || 1;
+            pow4Stream[i] = Math.pow(r_sum / windowDt, 4);
         }
-        const windowDt = timeStream[i] - timeStream[r_i] || 1;
-        pow4Stream[i] = Math.pow(r_sum / windowDt, 4);
       }
 
       METRICS_CONFIG.forEach(config => {
