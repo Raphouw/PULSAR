@@ -95,43 +95,55 @@ function getMinTimeForDistance(distData: number[], timeData: number[], targetDis
 // --- CONFIGURATION EXHAUSTIVE DES METRIQUES ---
 const METRICS_CONFIG: any[] = [];
 
-// 1. PUISSANCE : Pmax (1s), P15s, P30s, P1m, P5m, P20m, P1h
+// 1. PUISSANCE
 const powerDurations = [
   { d: 1, id: 'P1s' }, { d: 15, id: 'P15s' }, { d: 30, id: 'P30s' },
   { d: 60, id: 'P1m' }, { d: 300, id: 'P5m' }, { d: 1200, id: 'P20m' }, { d: 3600, id: 'P1h' }
 ];
 
 powerDurations.forEach(({ d, id }) => {
-  METRICS_CONFIG.push({ id, category: 'power_elapsed', source: 'watts', type: 'power_elapsed', duration: d, limit: 2500 });
+  // Le mode Elapsed retourne en catégorie 'power' pour valider le scan et stopper la boucle infinie
+  METRICS_CONFIG.push({ id, category: 'power', source: 'watts', type: 'power_elapsed', duration: d, limit: 2500 });
   METRICS_CONFIG.push({ id, category: 'power_moving', source: 'watts', type: 'power_moving', duration: d, limit: 2500 });
   if (d >= 30) METRICS_CONFIG.push({ id, category: 'power_np', source: 'watts', type: 'power_np', duration: d, limit: 2500 });
 });
 
 METRICS_CONFIG.push(
-  // 2. CARDIO : FCmax, Fcmax_1m, 5m, 20m, 1h
+  // 2. CARDIO 
   { id: 'FCmax', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 1, limit: 250 },
-  { id: 'FCmax_1m', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 60, limit: 240 },
-  { id: 'FCmax_5m', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 300, limit: 230 },
-  { id: 'FCmax_20m', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 1200, limit: 220 },
-  { id: 'FCmax_1h', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 3600, limit: 210 },
+  { id: 'FCmax 1min', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 60, limit: 240 },
+  { id: 'FCmax 5min', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 300, limit: 230 },
+  { id: 'FCmax 20min', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 1200, limit: 220 },
+  { id: 'FCmax 1h', category: 'heartrate', source: 'heartrate', type: 'avg_elapsed', duration: 3600, limit: 210 },
 
-  // 3. VAM : VAMmax(10s), 1m, 5m, 10m, 20m, 30m, 1h
-  { id: 'VAMmax', category: 'vam', source: 'altitude', type: 'vam', duration: 10, multiplier: 360, limit: 2500 },
-  { id: 'VAM1mMax', category: 'vam', source: 'altitude', type: 'vam', duration: 60, multiplier: 60, limit: 2200 },
-  { id: 'VAM5minMax', category: 'vam', source: 'altitude', type: 'vam', duration: 300, multiplier: 12, limit: 1800 },
-  { id: 'VAM10minMax', category: 'vam', source: 'altitude', type: 'vam', duration: 600, multiplier: 6, limit: 1600 },
-  { id: 'VAM20minMax', category: 'vam', source: 'altitude', type: 'vam', duration: 1200, multiplier: 3, limit: 1400 },
-  { id: 'VAM30minMax', category: 'vam', source: 'altitude', type: 'vam', duration: 1800, multiplier: 2, limit: 1300 },
+  // 3. VAM 
+  { id: 'VAMmax', category: 'vam', source: 'altitude', type: 'vam', duration: 10, multiplier: 360, limit: 3000 },
+  { id: 'VAM1mMax', category: 'vam', source: 'altitude', type: 'vam', duration: 60, multiplier: 60, limit: 2500 },
+  { id: 'VAM5minMax', category: 'vam', source: 'altitude', type: 'vam', duration: 300, multiplier: 12, limit: 2000 },
+  { id: 'VAM10minMax', category: 'vam', source: 'altitude', type: 'vam', duration: 600, multiplier: 6, limit: 1800 },
+  { id: 'VAM20minMax', category: 'vam', source: 'altitude', type: 'vam', duration: 1200, multiplier: 3, limit: 1600 },
+  { id: 'VAM30minMax', category: 'vam', source: 'altitude', type: 'vam', duration: 1800, multiplier: 2, limit: 1400 },
   { id: 'VAM1hMax', category: 'vam', source: 'altitude', type: 'vam', duration: 3600, multiplier: 1, limit: 1200 },
 
-  // 4. TEMPS/KM : 1km, 3km, 5km, 10km, 20km, 30km, 40km, 50km, 75km, 100km, 150km, 100 miles, 200km
-  ...[1, 3, 5, 10, 20, 30, 40, 50, 75, 100, 150, 160.934, 200].map(k => ({
-    id: `time_${k === 160.934 ? '100mi' : k + 'k'}`, category: 'time_dist', source: 'distance', type: 'min_time', target: k * 1000, limit: k * 3600
+  // 4. TEMPS/KM (Inclus 150km, 100 miles, 200km)
+  ...[
+    { k: 1, id: 'time_1km' }, { k: 3, id: 'time_3km' }, { k: 5, id: 'time_5km' },
+    { k: 10, id: 'time_10km' }, { k: 20, id: 'time_20km' }, { k: 30, id: 'time_30km' },
+    { k: 40, id: 'time_40km' }, { k: 50, id: 'time_50km' }, { k: 75, id: 'time_75km' },
+    { k: 100, id: 'time_100km' }, { k: 150, id: 'time_150km' }, 
+    { k: 160.934, id: 'time_100 miles' }, { k: 200, id: 'time_200km' }
+  ].map(({k, id}) => ({
+    id, category: 'time_dist', source: 'distance', type: 'min_time', target: k * 1000, limit: 800000 
   })),
 
-  // 5. KM/TEMPS : 5min, 15min, 30min, 1h, 2h, 3h, 4h, 5h, 10h
-  ...[300, 900, 1800, 3600, 7200, 10800, 14400, 18000, 36000].map(s => ({
-    id: `dist_${s >= 3600 ? (s/3600)+'h' : (s/60)+'m'}`, category: 'dist_time', source: 'distance', type: 'distance', duration: s, multiplier: 0.001, limit: 500
+  // 5. KM/TEMPS (Inclus 1 min, 10h)
+  ...[
+    { s: 60, id: 'dist_1m' }, { s: 300, id: 'dist_5m' }, { s: 900, id: 'dist_15m' },
+    { s: 1800, id: 'dist_30m' }, { s: 3600, id: 'dist_1h' }, { s: 7200, id: 'dist_2h' },
+    { s: 10800, id: 'dist_3h' }, { s: 14400, id: 'dist_4h' }, { s: 18000, id: 'dist_5h' },
+    { s: 36000, id: 'dist_10h' }
+  ].map(({s, id}) => ({
+    id, category: 'dist_time', source: 'distance', type: 'distance', duration: s, multiplier: 0.001, limit: 1000
   }))
 );
 
@@ -153,7 +165,6 @@ export function analyzeActivityForHallOfFame(activity: any) {
     const dateRecorded = activity.start_time || new Date().toISOString();
 
     // --- ENREGISTREMENT SÉCURISÉ DES MÉTRIQUES GLOBALES "PHYSIQUE" ---
-    // Sécurité : On gère les noms de variables Strava standard ou tes colonnes custom Supabase
     const distKm = activity.distance_km || (activity.distance ? activity.distance / 1000 : 0);
     const elevGain = activity.elevation_gain_m || activity.total_elevation_gain || 0;
     const maxSpeedKmh = activity.max_speed_kmh || (activity.max_speed ? activity.max_speed * 3.6 : 0);
@@ -177,14 +188,20 @@ export function analyzeActivityForHallOfFame(activity: any) {
     if (elevGain > 0 && distKm > 0) {
       records.push(createRow(userId, activityId, dateRecorded, 'physique', 'ratio d+/km max', 0, elevGain / distKm));
     }
+    
+    // BPM/w (On crée les deux IDs pour que ta carte de config les trouve)
     if (hrAvg > 0 && powerAvg > 0) {
-      records.push(createRow(userId, activityId, dateRecorded, 'physique', 'BPM/w', 0, hrAvg / powerAvg));
+      const bpmW = hrAvg / powerAvg;
+      records.push(createRow(userId, activityId, dateRecorded, 'physique', 'BPM/w min', 0, bpmW));
+      records.push(createRow(userId, activityId, dateRecorded, 'physique', 'BPM/w max', 0, bpmW));
     }
+    
+    // Rappel: volume sur un mois max et streak journalière nécessitent des agrégations SQL globales,
+    // elles ne peuvent techniquement pas être calculées lors du scan unitaire d'une seule activité.
 
-    // Statistiques moyennes (Cardio & Power Pmoymax)
     if (hrAvg > 0) records.push(createRow(userId, activityId, dateRecorded, 'heartrate', 'FCmoymax', 0, hrAvg));
     if (powerAvg > 0) {
-      records.push(createRow(userId, activityId, dateRecorded, 'power_elapsed', 'Pmoymax', 0, powerAvg));
+      records.push(createRow(userId, activityId, dateRecorded, 'power', 'Pmoymax', 0, powerAvg));
       records.push(createRow(userId, activityId, dateRecorded, 'power_moving', 'Pmoymax', 0, powerAvg));
       records.push(createRow(userId, activityId, dateRecorded, 'power_np', 'Pmoymax', 0, powerAvg)); 
     }
@@ -194,7 +211,6 @@ export function analyzeActivityForHallOfFame(activity: any) {
       const timeStream = streams.time;
       const wattsStream = streams.watts || [];
 
-      // Pré-calcul: Moving Time & NP Pow4 (Sécurisé contre les tableaux watts vides)
       const movingTimeStream = [0];
       let currentMovingTime = 0;
       const pow4Stream = new Array(timeStream.length).fill(0);
