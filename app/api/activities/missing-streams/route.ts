@@ -36,8 +36,10 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const safeData = (data as any[]) || [];
+
   return NextResponse.json({ 
-    count: data.length, 
-    activities: data 
+    count: safeData.length, 
+    activities: safeData 
   });
 }
