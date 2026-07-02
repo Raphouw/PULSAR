@@ -2,10 +2,10 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { getTilesFromPolyline, getTileBounds } from '../../lib/mapUtils'; 
+import { getTilesFromPolyline, getTileBounds, lon2tile, lat2tile } from '../../lib/mapUtils';
 import { calculateMaxSquare, getSquareTiles, calculateTotalArea, findLargestCluster, getFutureTargets } from '../../lib/gridAlgo';
 import { Layers, Maximize, Eye, Grid, Activity, Target, Map as MapIcon, CheckSquare, Calendar, Focus, Crosshair, ArrowRightLeft, MoveVertical, Scan, ArrowUpRight, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
-import { useMap } from 'react-leaflet';
+import { useMap, useMapEvents } from 'react-leaflet';
 import { LatLngBoundsExpression, LatLngTuple } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { createBrowserSupabaseClient } from '../../lib/supabaseBrowserClient';
@@ -56,6 +56,45 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   return R * c;
 }
+
+
+// --- COMPOSANT : PINCEAU BLACKLIST (Zéro RAM) ---
+const MapInteractionHandler = ({ blacklistMode, visitedTilesSet, toggleBlacklistTile }: any) => {
+    // Un ref local pour éviter de spammer Supabase quand on "peint" en glissant la souris
+    const paintedTilesRef = React.useRef<Set<string>>(new Set());
+
+    React.useEffect(() => {
+        const handleMouseUp = () => paintedTilesRef.current.clear();
+        window.addEventListener('mouseup', handleMouseUp);
+        return () => window.removeEventListener('mouseup', handleMouseUp);
+    }, []);
+
+    useMapEvents({
+        click(e) {
+            if (!blacklistMode) return;
+            const x = lon2tile(e.latlng.lng, 14);
+            const y = lat2tile(e.latlng.lat, 14);
+            const tileKey = `${x},${y}`;
+            if (!visitedTilesSet.has(tileKey)) toggleBlacklistTile(tileKey);
+        },
+        mousemove(e) {
+            if (!blacklistMode) return;
+            // originalEvent.buttons === 1 signifie que le clic gauche est maintenu (Effet Pinceau)
+            if (e.originalEvent.buttons === 1) {
+                const x = lon2tile(e.latlng.lng, 14);
+                const y = lat2tile(e.latlng.lat, 14);
+                const tileKey = `${x},${y}`;
+                
+                // On vérifie qu'on ne l'a pas déjà peinte dans ce coup de pinceau pour protéger la BDD
+                if (!visitedTilesSet.has(tileKey) && !paintedTilesRef.current.has(tileKey)) {
+                    paintedTilesRef.current.add(tileKey); 
+                    toggleBlacklistTile(tileKey, null, true); // forceAdd = true
+                }
+            }
+        }
+    });
+    return null;
+};
 
 const getBoundsFromTiles = (tiles: Set<string>): LatLngBoundsExpression | null => {
     if (tiles.size === 0) return null;
@@ -132,15 +171,20 @@ export default function GlobalMapClient({
   };
 
   // --- ACTIONS BLACKLIST API ---
-  const toggleBlacklistTile = async (tileKey: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+  // --- ACTIONS BLACKLIST API ---
+  const toggleBlacklistTile = async (tileKey: string, e?: any, forceAdd: boolean = false) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    
+    // Si on peint et que la tuile est déjà blacklistée, on ignore (évite les clignotements)
+    if (forceAdd && blacklistedTilesSet.has(tileKey)) return;
+
     const newSet = new Set(blacklistedTilesSet);
     const isBlacklisted = newSet.has(tileKey);
 
-    if (isBlacklisted) {
+    if (isBlacklisted && !forceAdd) {
         newSet.delete(tileKey);
         await supabase.from('blacklisted_tiles').delete().match({ user_id: userId, tile_key: tileKey });
-    } else {
+    } else if (!isBlacklisted) {
         newSet.add(tileKey);
         await supabase.from('blacklisted_tiles').insert([{ user_id: userId, tile_key: tileKey }]);
     }
@@ -431,25 +475,6 @@ export default function GlobalMapClient({
         ...Array.from(blacklistedTilesSet)
     ]);
 
-    // 🔥 NOUVEAU : Grille d'interaction "fantôme" pour le pinceau Blacklist
-    if (blacklistMode) {
-        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-        visitedTilesSet.forEach(key => {
-            const [x, y] = key.split(',').map(Number);
-            if (x < minX) minX = x; if (x > maxX) maxX = x;
-            if (y < minY) minY = y; if (y > maxY) maxY = y;
-        });
-
-        if (minX !== Infinity) {
-            const PADDING = 15; // Ajoute une marge de 15 tuiles autour de ta zone explorée
-            for (let x = minX - PADDING; x <= maxX + PADDING; x++) {
-                for (let y = minY - PADDING; y <= maxY + PADDING; y++) {
-                    allKeysToRender.add(`${x},${y}`);
-                }
-            }
-        }
-    }
-
     return Array.from(allKeysToRender).map(tileKey => {
       const isVisited = visitedTilesSet.has(tileKey);
       const isBlacklisted = blacklistedTilesSet.has(tileKey);
@@ -458,12 +483,9 @@ export default function GlobalMapClient({
       const targetLevel = currentTargetsMap.get(tileKey);
       const isTargetVisible = showTargets && targetLevel !== undefined && activeTargetLevels.has(targetLevel!);
       const isFilling = showFilling && fillingTilesSet.has(tileKey) && targetMode === 'cluster';
-      
-      // Nouvelle condition : est-ce une tuile vide en mode pinceau ?
-      const isUnexploredInteractive = blacklistMode && !isVisited && !isBlacklisted;
 
-      // On bloque le rendu si ce n'est RIEN de tout ça
-      if ((!isVisited || !showGrid) && !isTargetVisible && !isFilling && !isBlacklisted && !isUnexploredInteractive) return null;
+      // On bloque l'affichage si ce n'est rien de tout ça
+      if ((!isVisited || !showGrid) && !isTargetVisible && !isFilling && !isBlacklisted) return null;
 
       const [x, y] = tileKey.split(',').map(Number);
       const bounds = getTileBounds(x, y, ZOOM);
@@ -475,9 +497,6 @@ export default function GlobalMapClient({
 
       if (isBlacklisted) {
           color = '#ff0055'; weight = 2; className = 'tile-blacklisted'; fillOpacity = 0.3; opacity = 0.8;
-      }
-      else if (isUnexploredInteractive) { // Style subtil pour les zones vides cliquables
-          color = '#ffffff'; weight = 1; className = 'tile-interactive-grid'; fillOpacity = 0.02; opacity = 0.15;
       }
       else if (isFilling) {
           color = '#f97316'; weight = 2; className = 'tile-glitch'; fillOpacity = 0.4; opacity = 1;
@@ -496,11 +515,12 @@ export default function GlobalMapClient({
 
       return (
         <Rectangle 
-          key={tileKey} bounds={bounds} 
+          key={tileKey} 
+          bounds={bounds} 
           pathOptions={{ color, weight, opacity, fillColor: color, fillOpacity, className }}
           eventHandlers={{
-            click: () => handleTileInteraction(tileKey, isVisited, bounds),
-            mouseover: () => { if (blacklistMode && !isVisited && !isBlacklisted) toggleBlacklistTile(tileKey); }
+            // On garde juste le clic pour le popup
+            click: () => handleTileInteraction(tileKey, isVisited, bounds)
           }}
         />
       );
@@ -696,6 +716,13 @@ export default function GlobalMapClient({
       <MapContainer center={[46.603354, 1.888334]} zoom={6} className="w-full h-full z-0 bg-[#050505]" zoomControl={false} preferCanvas={true} attributionControl={false}>
         <TileLayer url="https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png" />
         <MapAutoZoom targetBounds={zoomTarget} />
+        
+        {/* L'ÉCOUTEUR DE CLICS INVISIBLE EST ICI */}
+        <MapInteractionHandler 
+            blacklistMode={blacklistMode} 
+            visitedTilesSet={visitedTilesSet} 
+            toggleBlacklistTile={toggleBlacklistTile} 
+        />
 
         {boundsArea && (
             <Rectangle bounds={boundsArea} pathOptions={{ color: '#fff', weight: 1, dashArray: '4, 12', fill: false, opacity: 0.1 }} />
