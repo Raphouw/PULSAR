@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import GlobalMapClient from './GlobalMapClient';
 
 export const metadata = {
-  title: 'Carte Tactique Globale | PULSAR',
+  title: 'Carte Globale | PULSAR',
   description: 'Visualisation haute définition de l\'historique d\'exploration.',
 };
 
@@ -19,7 +19,6 @@ export default async function MapPage() {
 
   let userId: string | number | undefined = session.user?.id;
   
-  // Fallback de sécurité : Si l'ID n'est pas dans la session, on le cherche par email
   if (!userId && session.user?.email) {
     const { data: userData } = await supabaseAdmin
         .from('users')
@@ -33,15 +32,15 @@ export default async function MapPage() {
     redirect('/auth/signin?error=SessionExpired');
   }
 
-  // Conversion en Number pour la requête SQL
   const dbUserId = Number(userId);
 
-  // Récupération Optimisée (Uniquement les polylines pour la Heatmap/Trace)
+  // Récupération Optimisée et filtrée
   const { data: activitiesData, error } = await supabaseAdmin
     .from('activities')
     .select('id, name, type, start_time, polyline')
     .eq('user_id', dbUserId)
     .not('polyline', 'is', null) 
+    .neq('type', 'VirtualRide') // Maintien strict de la précision outdoor
     .order('start_time', { ascending: false });
 
   if (error) {
@@ -54,20 +53,25 @@ export default async function MapPage() {
     );
   }
 
-  // ⚡ FIX : Cast en any[] pour la normalisation
+  // Récupération de la Blacklist
+  const { data: blacklistData, error: blacklistError } = await supabaseAdmin
+    .from('blacklisted_tiles')
+    .select('tile_key')
+    .eq('user_id', dbUserId);
+
+  if (blacklistError) console.error("❌ ERREUR BLACKLIST:", blacklistError);
+
+  const initialBlacklist: string[] = blacklistData ? blacklistData.map((b: any) => b.tile_key) : [];
+
   const activities = (activitiesData || []) as any[];
 
-  // Normalisation pour le composant Leaflet/MapBox Client
-  // On décode le format JSONB "polyline" de Supabase vers une string simple
   const cleanActivities = activities.map(a => {
     let polyStr: string | null = null;
-
     if (typeof a.polyline === 'string') {
         polyStr = a.polyline;
     } else if (typeof a.polyline === 'object' && a.polyline !== null) {
         polyStr = a.polyline.polyline || null;
     }
-
     return {
       id: a.id,
       name: a.name || 'Zone Inconnue',
@@ -79,7 +83,7 @@ export default async function MapPage() {
 
   return (
     <div className="w-full h-screen bg-[#050505] overflow-hidden">
-      <GlobalMapClient activities={cleanActivities as any} />
+      <GlobalMapClient activities={cleanActivities as any} initialBlacklist={initialBlacklist} userId={dbUserId} />
     </div>
   );
 }

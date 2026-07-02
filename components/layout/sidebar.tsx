@@ -1,4 +1,3 @@
-// Fichier : app/components/layout/sidebar.tsx
 'use client';
 
 import Link from 'next/link';
@@ -6,11 +5,10 @@ import { usePathname } from 'next/navigation';
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
 import { 
-  ChevronRight, Zap, 
+  Zap, 
   Pin, PinOff, 
   Menu, X, 
-  PanelLeftClose, PanelLeftOpen, Settings2, 
-  Trophy,
+  Settings2, 
   TrophyIcon
 } from 'lucide-react';
 
@@ -65,7 +63,6 @@ const Icons = {
       <path d="M9 10h2" className="line-3"/>
     </svg>
   ),
-  
   Simulation: (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="icon-group icon-simulation">
       <path className="wind-line-1" d="M2 6h20" strokeDasharray="12 8"></path>
@@ -139,7 +136,6 @@ const Icons = {
   ),
   Admin: <Settings2 size={18} strokeWidth={1.5} className="icon-group" />,
   Trophy : <TrophyIcon size={18} strokeWidth={1.5} className="icon-group" />,
-
 };
 
 const groups = [
@@ -186,184 +182,111 @@ export default function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const isAdmin = session?.user?.id === "1";
+  
   const [hoveredLink, setHoveredLink] = useState<string | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  
-  // --- ÉTATS ---
-  const [isPinned, setIsPinned] = useState(false); // Mode "Épinglé" (Cadenas)
-  const [isHovered, setIsHovered] = useState(false); // Mode "Survol temporaire"
+  const [isPinned, setIsPinned] = useState(false);
+  const [isHovered, setIsHovered] = useState(false);
   const [mounted, setMounted] = useState(false);
 
-  // La sidebar est ouverte si Épinglée OU Survolée
+  // La sidebar est considérée comme "ouverte" en mode Desktop si elle est épinglée ou survolée
   const isSidebarOpen = isPinned || isHovered;
 
   useEffect(() => {
     setMounted(true);
-    // Charger la préférence "Pinned" du localStorage
     const savedPinState = localStorage.getItem('sidebar-pinned');
     const initialPinState = savedPinState ? JSON.parse(savedPinState) : true;
     setIsPinned(initialPinState);
   }, []);
 
-  // Met à jour la largeur globale (CSS variable) pour pousser le contenu
+  // Met à jour la largeur globale (CSS variable) pour pousser le contenu principal sur Desktop
   useEffect(() => {
     if (!mounted) return;
     const width = isSidebarOpen ? '210px' : '72px';
     updateGlobalWidth(width);
   }, [isSidebarOpen, mounted]);
 
-  // Action : Clic sur le bouton PIN
   const togglePin = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Empêche de propager le clic
+    e.stopPropagation();
     const newState = !isPinned;
     setIsPinned(newState);
     localStorage.setItem('sidebar-pinned', JSON.stringify(newState));
   };
 
-  // Navigation : Quand l'URL change (nouvelle page chargée), on reset le hover
   useEffect(() => {
     setIsMobileMenuOpen(false);
     setIsHovered(false); 
   }, [pathname]);
 
   const isLocked = session?.user?.onboarding_completed === false;
-  const currentWidth = isSidebarOpen ? '210px' : '72px';
-  const groupMarginBottom = isSidebarOpen ? '1.5rem' : '0.4rem';
 
-  if (!mounted) return <div style={{ width: currentWidth, background: 'var(--background)' }} />;
+  // Render minimal pendant le SSR pour éviter le mismatch d'hydratation
+  if (!mounted) return <div className="hidden md:block bg-[#0a0a0c]" style={{ width: isSidebarOpen ? '210px' : '72px' }} />;
 
   return (
     <>
       <style jsx global>{`
-        /* --- STRUCTURE PRINCIPALE --- */
-        .sidebar-container {
-            height: 100vh;
-            background: #0a0a0c;
-            border-right: 1px solid rgba(255, 255, 255, 0.06);
-            display: flex;
-            flex-direction: column;
-            z-index: 50;
-            transition: width 0.4s cubic-bezier(0.2, 0, 0, 1);
-            overflow-x: hidden;
-            position: fixed;
-            top: 0;
-            left: 0;
-        }
-
-        /* DESKTOP : Sticky */
-        @media (min-width: 768px) {
-            .sidebar-container {
-                position: sticky; 
-                top: 0;
-            }
-        }
-
-        /* --- STYLES TEXTES & LOGO --- */
-        .logo-link:hover .logo-text {
-            letter-spacing: 2px;
-            filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.6));
-            background: linear-gradient(135deg, #ffffff 0%, #d04fd7 100%);
-            -webkit-background-clip: text;
-        }
-
-        /* --- ANIMATIONS SVG (Toutes les keyframes) --- */
-
-        /* Dashboard */
+        /* --- ANIMATIONS SVG (Toutes les keyframes conservées) --- */
         .nav-link:hover .icon-dashboard .rect-1 { animation: eqMove 0.6s ease infinite alternate; }
         .nav-link:hover .icon-dashboard .rect-2 { animation: eqMove 0.6s ease infinite alternate 0.1s; }
         .nav-link:hover .icon-dashboard .rect-3 { animation: eqMove 0.6s ease infinite alternate 0.2s; }
         .nav-link:hover .icon-dashboard .rect-4 { animation: eqMove 0.6s ease infinite alternate 0.3s; }
         @keyframes eqMove { 0% { transform: scaleY(1); } 100% { transform: scaleY(0.6); transform-origin: bottom; } }
 
-        /* Activity */
         .nav-link:hover .icon-activity .pulse-line { animation: pulseGraph 1s ease-in-out infinite; stroke: #fff; }
-        @keyframes pulseGraph { 
-          0% { stroke-dasharray: 40; stroke-dashoffset: 40; } 
-          50% { stroke-dasharray: 40; stroke-dashoffset: 0; }
-          100% { stroke-dasharray: 40; stroke-dashoffset: -40; } 
-        }
+        @keyframes pulseGraph { 0% { stroke-dasharray: 40; stroke-dashoffset: 40; } 50% { stroke-dasharray: 40; stroke-dashoffset: 0; } 100% { stroke-dasharray: 40; stroke-dashoffset: -40; } }
 
-        /* Calendar */
         .nav-link:hover .icon-calendar .cal-day-1 { animation: dayCycle 2s ease infinite; }
         .nav-link:hover .icon-calendar .cal-day-2 { animation: dayCycle 2s ease infinite 0.25s; }
         .nav-link:hover .icon-calendar .cal-day-3 { animation: dayCycle 2s ease infinite 0.5s; }
         .nav-link:hover .icon-calendar .cal-day-4 { animation: dayCycle 2s ease infinite 0.75s; }
-        @keyframes dayCycle { 
-            0% { opacity: 0.3; } 
-            20% { opacity: 1; fill: #fff; }
-            50% { opacity: 1; fill: #fff; }
-            80% { opacity: 0.3; fill: currentColor; }
-            100% { opacity: 0.3; }
-        }
+        @keyframes dayCycle { 0% { opacity: 0.3; } 20%, 50% { opacity: 1; fill: #fff; } 80% { opacity: 0.3; fill: currentColor; } 100% { opacity: 0.3; } }
 
-        /* Training */
         .nav-link:hover .icon-training .stopwatch-hand { animation: timerSpin 1s linear infinite; transform-origin: 12px 12px; }
         @keyframes timerSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-        /* Simulation */
         .nav-link:hover .icon-simulation .wind-line-1 { animation: windSpeed 0.8s linear infinite; }
         .nav-link:hover .icon-simulation .wind-line-2 { animation: windSpeed 0.8s linear infinite 0.1s; }
         .nav-link:hover .icon-simulation .wind-line-3 { animation: windSpeed 0.8s linear infinite 0.2s; }
         .nav-link:hover .icon-simulation .wind-obj { stroke: #fff; }
-        @keyframes windSpeed { 
-            from { stroke-dashoffset: 20; opacity: 0.2; } 
-            to { stroke-dashoffset: 0; opacity: 1; stroke: #fff; } 
-        }
+        @keyframes windSpeed { from { stroke-dashoffset: 20; opacity: 0.2; } to { stroke-dashoffset: 0; opacity: 1; stroke: #fff; } }
 
-        /* Events */
         .nav-link:hover .icon-events .flag-pole { animation: waveFlag 1s ease-in-out infinite alternate; transform-origin: left center; }
-        @keyframes waveFlag { 
-            0% { transform: scaleX(1) skewY(0deg); } 
-            100% { transform: scaleX(0.95) skewY(-10deg); stroke: #fff; } 
-        }
+        @keyframes waveFlag { 0% { transform: scaleX(1) skewY(0deg); } 100% { transform: scaleX(0.95) skewY(-10deg); stroke: #fff; } }
 
-        /* Training Plan */
         .nav-link:hover .icon-training-plan .line-1 { animation: loadLine 0.8s ease infinite; }
         .nav-link:hover .icon-training-plan .line-2 { animation: loadLine 0.8s ease infinite 0.2s; }
         .nav-link:hover .icon-training-plan .line-3 { animation: loadLine 0.8s ease infinite 0.4s; }
         @keyframes loadLine { 0% { opacity: 0.3; } 50% { opacity: 1; stroke: #fff; transform: translateX(2px); } 100% { opacity: 0.3; } }
 
-        /* Route */
         .nav-link:hover .icon-route .arrow-plane { animation: flyPlane 1s ease-in-out infinite alternate; stroke: #fff; transform-origin: center; }
         @keyframes flyPlane { from { transform: translate(0,0); } to { transform: translate(2px, -2px) rotate(5deg); } }
 
-        /* Segment */
         .nav-link:hover .icon-segment .elev-bar-1 { animation: equalizerWave 1s ease infinite alternate; fill: #fff; }
         .nav-link:hover .icon-segment .elev-bar-2 { animation: equalizerWave 1s ease infinite alternate 0.15s; fill: #fff; }
         .nav-link:hover .icon-segment .elev-bar-3 { animation: equalizerWave 1s ease infinite alternate 0.3s; fill: #fff; }
         .nav-link:hover .icon-segment .elev-bar-4 { animation: equalizerWave 1s ease infinite alternate 0.45s; fill: #fff; }
         .nav-link:hover .icon-segment .elev-bar-5 { animation: equalizerWave 1s ease infinite alternate 0.6s; fill: #fff; }
-        @keyframes equalizerWave { 
-            0% { transform: scaleY(0.4); opacity: 0.6; } 
-            100% { transform: scaleY(1); opacity: 1; transform-origin: bottom; } 
-        }
+        @keyframes equalizerWave { 0% { transform: scaleY(0.4); opacity: 0.6; } 100% { transform: scaleY(1); opacity: 1; transform-origin: bottom; } }
 
-        /* Friends */
         .nav-link:hover .icon-friends .friend-pop { animation: popFriend 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) infinite alternate; stroke: #fff; }
         @keyframes popFriend { from { transform: scale(0.9); opacity: 0.5; transform-origin: center; } to { transform: scale(1.1); opacity: 1; } }
 
-        /* Compare */
         .nav-link:hover .icon-compare .arrow-tr { animation: expandTr 0.8s ease infinite alternate; stroke: #fff; }
         .nav-link:hover .icon-compare .arrow-bl { animation: expandBl 0.8s ease infinite alternate; stroke: #fff; }
         @keyframes expandTr { to { transform: translate(2px, -2px); } }
         @keyframes expandBl { to { transform: translate(-2px, 2px); } }
 
-        /* Map */
         .nav-link:hover .icon-map .gps-dot { fill: #fff; }
         .nav-link:hover .icon-map .gps-ring-1 { animation: radarPulse 1.5s ease-out infinite; stroke: #fff; fill: transparent; }
         .nav-link:hover .icon-map .gps-ring-2 { animation: radarPulse 1.5s ease-out infinite 0.4s; stroke: #fff; fill: transparent; }
-        @keyframes radarPulse {
-            0% { transform: scale(0.1); opacity: 1; transform-origin: center; stroke-width: 2px; }
-            100% { transform: scale(1); opacity: 0; transform-origin: center; stroke-width: 0px; }
-        }
+        @keyframes radarPulse { 0% { transform: scale(0.1); opacity: 1; transform-origin: center; stroke-width: 2px; } 100% { transform: scale(1); opacity: 0; transform-origin: center; stroke-width: 0px; } }
 
-        /* Algo */
         .nav-link:hover .icon-algo .chip-core { animation: corePulse 0.8s ease infinite alternate; fill: #fff; }
         .nav-link:hover .icon-algo .chip-legs { animation: legsGlow 0.8s ease infinite alternate; stroke: #fff; }
         @keyframes corePulse { from { opacity: 0.3; } to { opacity: 1; } }
         @keyframes legsGlow { from { opacity: 0.5; } to { opacity: 1; stroke-width: 2px; } }
 
-        /* World */
         .nav-link:hover .icon-world .net-center { fill: #fff; }
         .nav-link:hover .icon-world .net-link-1 { animation: pulseLink 2s ease infinite alternate; stroke: #fff; }
         .nav-link:hover .icon-world .net-link-2 { animation: pulseLink 2s ease infinite alternate 0.3s; stroke: #fff; }
@@ -371,166 +294,112 @@ export default function Sidebar() {
         .nav-link:hover .icon-world .net-node-1 { animation: pulseNode 2s ease infinite alternate; fill: #fff; }
         .nav-link:hover .icon-world .net-node-2 { animation: pulseNode 2s ease infinite alternate 0.3s; fill: #fff; }
         .nav-link:hover .icon-world .net-node-3 { animation: pulseNode 2s ease infinite alternate 0.6s; fill: #fff; }
-        
         @keyframes pulseLink { 0% { stroke-dashoffset: 10; opacity: 0.3; } 100% { stroke-dashoffset: 0; opacity: 1; } }
         @keyframes pulseNode { 0% { opacity: 0.3; r: 1.5; } 100% { opacity: 1; r: 2.2; } }
 
-        /* Profile */
         .nav-link:hover .icon-profile .scan-beam { animation: scanDown 1.5s linear infinite; stroke: #fff; }
         .nav-link:hover .icon-profile .id-head { stroke: #fff; transition: stroke 0.3s; }
-        @keyframes scanDown { 0% { transform: translateY(0); opacity: 0; } 20% { opacity: 1; } 80% { opacity: 1; } 100% { transform: translateY(12px); opacity: 0; } }
+        @keyframes scanDown { 0% { transform: translateY(0); opacity: 0; } 20%, 80% { opacity: 1; } 100% { transform: translateY(12px); opacity: 0; } }
 
         /* HOVER EFFECTS - WHITE ONLY */
         .nav-link:hover .link-text,
         .nav-link:hover svg, .nav-link:hover svg path, .nav-link:hover svg rect, .nav-link:hover svg circle, .nav-link:hover svg line, .nav-link:hover svg polygon, .nav-link:hover svg g {
-            color: #ffffff !important;
-            stroke: #ffffff !important;
-            fill: rgba(255,255,255,0) !important;
+            color: #ffffff !important; stroke: #ffffff !important; fill: rgba(255,255,255,0) !important;
         }
         .nav-link:hover svg .chip-core, .nav-link:hover svg .cal-day-1, .nav-link:hover svg .cal-day-2,
         .nav-link:hover svg .cal-day-3, .nav-link:hover svg .cal-day-4, .nav-link:hover svg .gps-dot,
         .nav-link:hover svg .net-center, .nav-link:hover svg .net-node-1, .nav-link:hover svg .net-node-2,
         .nav-link:hover svg .net-node-3, .nav-link:hover svg .elev-bar-1, .nav-link:hover svg .elev-bar-2,
         .nav-link:hover svg .elev-bar-3, .nav-link:hover svg .elev-bar-4, .nav-link:hover svg .elev-bar-5 {
-            fill: #ffffff !important;
-            stroke: none !important;
+            fill: #ffffff !important; stroke: none !important;
         }
         .nav-link:hover .link-text { transform: translateX(3px); }
-
-        /* Styles spécifiques pour le bouton Pin */
-        .pin-btn:hover {
-            background: rgba(255,255,255,0.08);
-            color: #fff;
-            border-color: rgba(255,255,255,0.2);
-        }
-        
-        .scroll-area::-webkit-scrollbar { width: 3px; }
-        .scroll-area::-webkit-scrollbar-track { background: transparent; }
-        .scroll-area::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 10px; }
       `}</style>
 
-      {/* BOUTON MOBILE */}
+      {/* --- BOUTON MOBILE --- */}
       <button 
-        className="mobile-toggle-btn" 
+        className="md:hidden fixed top-3 left-3 z-[100] bg-[#0f0f14]/90 backdrop-blur-md border border-white/10 text-white p-2 rounded-lg cursor-pointer"
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-        style={{
-            position: 'fixed', top: '12px', left: '12px', zIndex: 100,
-            background: 'rgba(15, 15, 20, 0.9)', backdropFilter: 'blur(8px)',
-            border: '1px solid rgba(255,255,255,0.1)', color: '#fff',
-            padding: '8px', borderRadius: '8px', cursor: 'pointer',
-            display: 'none'
-        }}
       >
         {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
       </button>
 
-      {/* OVERLAY MOBILE */}
+      {/* --- OVERLAY MOBILE --- */}
       <div 
-        className={`mobile-overlay ${isMobileMenuOpen ? 'visible' : ''}`} 
+        className={`md:hidden fixed inset-0 bg-black/80 backdrop-blur-sm z-40 transition-opacity duration-300 ${isMobileMenuOpen ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
         onClick={() => setIsMobileMenuOpen(false)}
-        style={{
-            display: isMobileMenuOpen ? 'block' : 'none',
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)',
-            backdropFilter: 'blur(2px)', zIndex: 45
-        }}
       />
 
       {/* --- SIDEBAR CONTAINER --- */}
       <aside 
-        className={`sidebar-container ${isMobileMenuOpen ? 'open' : ''}`}
-        // GESTION INTELLIGENTE DU SURVOL
-        // Si ce n'est pas épinglé (cadenas ouvert), on ouvre temporairement au survol
+        className={`fixed md:sticky top-0 left-0 h-screen bg-[#0a0a0c] border-r border-white/5 flex flex-col z-50 transition-all duration-400 ease-[cubic-bezier(0.2,0,0,1)] overflow-x-hidden
+          ${isMobileMenuOpen ? 'translate-x-0 w-[240px]' : '-translate-x-full md:translate-x-0'}
+          ${isSidebarOpen ? 'md:w-[210px]' : 'md:w-[72px]'}
+          ${isLocked ? 'opacity-40 pointer-events-none grayscale-[80%]' : ''}
+        `}
         onMouseEnter={() => !isPinned && setIsHovered(true)}
-        // Quand on sort la souris, on ferme le mode temporaire
         onMouseLeave={() => setIsHovered(false)}
-        style={{
-            width: currentWidth, 
-            ...(isLocked ? { opacity: 0.4, pointerEvents: 'none', filter: 'grayscale(0.8)' } : {})
-        }}
       >
         {/* HEADER : LOGO */}
-        <div style={{ 
-            display: 'flex', alignItems: 'center', 
-            // Si fermé : centré. Si ouvert : aligné à gauche.
-            justifyContent: !isSidebarOpen ? 'center' : 'flex-start', 
-            padding: '1.2rem 1rem', marginBottom: 0,
-            height: HEADER_HEIGHT // Hauteur fixe pour éviter les sauts
-        }}>
-            <Link href="/dashboard" className="logo-link" style={{ textDecoration: 'none', display: 'block' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer' }}>
-                    {/* Le logo "P" simple si fermé */}
-                    {!isSidebarOpen ? (
-                         <span style={{ fontSize: '1.4rem', fontWeight: 900, color: '#d04fd7' }}>P</span>
-                    ) : (
-                        // Logo complet si ouvert
-                        <>
-                            <span style={logoTextStyle} className="logo-text">PULSAR</span>
-                            <span style={versionBadgeStyle}>DEV</span>
-                        </>
-                    )}
-                </div>
+        <div className={`flex items-center px-4 h-[72px] shrink-0 ${!isSidebarOpen && !isMobileMenuOpen ? 'md:justify-center' : 'justify-start'}`}>
+            <Link href="/dashboard" className="flex items-center gap-2 group outline-none">
+                {!isSidebarOpen && !isMobileMenuOpen ? (
+                     <span className="text-[1.4rem] font-black text-[#d04fd7]">P</span>
+                ) : (
+                    <>
+                        <span className="text-[1.4rem] font-[800] tracking-[-0.5px] bg-gradient-to-br from-[#d04fd7] to-white bg-clip-text text-transparent group-hover:tracking-[2px] transition-all duration-300 whitespace-nowrap">PULSAR</span>
+                        <span className="text-[0.6rem] px-[5px] py-[1px] rounded bg-[#d04fd7]/10 border border-[#d04fd7]/30 text-[#d04fd7] font-bold mt-[2px]">DEV</span>
+                    </>
+                )}
             </Link>
         </div>
 
         {/* NAVIGATION SCROLLABLE */}
-        <div style={scrollAreaStyle} className="scroll-area">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
           {groups.map((group, index) => (
-            <div key={index} style={{ marginBottom: groupMarginBottom }}>
-              {/* TITRE DU GROUPE (Ligne ou Texte) */}
-              <div style={{ 
-                  marginBottom: '0.6rem', paddingLeft: !isSidebarOpen ? 0 : '0.8rem', 
-                  textAlign: !isSidebarOpen ? 'center' : 'left', height: '16px',
-                  display: 'flex', alignItems: 'center', justifyContent: !isSidebarOpen ? 'center' : 'flex-start'
-              }}>
-                 {!isSidebarOpen ? (
-                    <div style={{ width: '20px', height: '2px', background: 'linear-gradient(90deg, #d04fd7 0%, transparent 100%)', opacity: 0.5 }} />
+            <div key={index} className={isSidebarOpen || isMobileMenuOpen ? 'mb-6' : 'mb-1.5'}>
+              {/* TITRE DU GROUPE */}
+              <div className={`flex items-center mb-2.5 h-4 ${!isSidebarOpen && !isMobileMenuOpen ? 'justify-center' : 'pl-3.5'}`}>
+                 {!isSidebarOpen && !isMobileMenuOpen ? (
+                    <div className="w-5 h-[2px] bg-gradient-to-r from-[#d04fd7] to-transparent opacity-50" />
                  ) : (
-                    <span style={groupTitleStyle}>{group.title}</span>
+                    <span className="text-[0.6rem] uppercase font-[800] tracking-[1px] bg-gradient-to-r from-[#d04fd7] to-[#a0a0a0] bg-clip-text text-transparent whitespace-nowrap">
+                        {group.title}
+                    </span>
                  )}
               </div>
               
-              <ul style={ulStyle}>
+              {/* LIENS DU GROUPE */}
+              <ul className="space-y-1">
                 {group.links.map((link) => {
                   const isActive = pathname?.startsWith(link.href) ?? false;
                   const isHoveredLink = hoveredLink === link.href;
 
                   return (
-                    <li key={link.href} style={{ marginBottom: !isSidebarOpen ? '2px' : '4px' }}>
+                    <li key={link.href} className={!isSidebarOpen && !isMobileMenuOpen ? 'mb-[2px]' : 'mb-1'}>
                       <Link
                         href={link.href}
-                        className="nav-link"
-                        // Ferme le menu mobile au clic, mais ne touche pas à la sidebar desktop (gérée par URL)
-                        onClick={() => isMobileMenuOpen && setIsMobileMenuOpen(false)}
-                        style={{
-                            ...getLinkStyle(isActive, isHoveredLink),
-                            padding: !isSidebarOpen ? '0.5rem' : '0.55rem 0.8rem',
-                            justifyContent: !isSidebarOpen ? 'center' : 'flex-start'
-                        }}
+                        onClick={() => setIsMobileMenuOpen(false)}
                         onMouseEnter={() => setHoveredLink(link.href)}
                         onMouseLeave={() => setHoveredLink(null)}
+                        className={`nav-link group relative flex items-center mx-2 rounded-lg transition-all duration-200 overflow-hidden cursor-pointer
+                          ${!isSidebarOpen && !isMobileMenuOpen ? 'justify-center p-2' : 'justify-start px-3 py-[0.55rem]'}
+                          ${isActive ? 'bg-[#d04fd7]/10' : isHoveredLink ? 'bg-white/5' : 'bg-transparent'}
+                        `}
                       >
-                        {isActive && <div style={activeIndicatorStyle} />}
+                        {isActive && <div className="absolute left-0 top-[20%] h-[60%] w-[3px] bg-[#d04fd7] rounded-r-md shadow-[0_0_8px_#d04fd7]" />}
                         
-                        <span 
-                          className="link-icon"
-                          style={{ 
-                            marginRight: !isSidebarOpen ? 0 : '12px', display: 'flex',
-                            transition: 'color 0.2s', color: isActive ? '#d04fd7' : 'rgba(255,255,255,0.6)',
-                            minWidth: '18px'
-                          }}
-                        >
+                        <span className={`link-icon flex transition-colors duration-200 min-w-[18px] shrink-0
+                            ${!isSidebarOpen && !isMobileMenuOpen ? 'mr-0' : 'mr-3'} 
+                            ${isActive ? 'text-[#d04fd7]' : 'text-white/60'}
+                        `}>
                           {link.icon}
                         </span>
                         
-                        <span 
-                          className="link-text"
-                          style={{ 
-                            fontSize: '0.85rem', fontWeight: isActive ? 600 : 400,
-                            color: isActive ? '#fff' : 'rgba(255,255,255,0.8)',
-                            transition: 'all 0.3s', opacity: !isSidebarOpen ? 0 : 1,
-                            width: !isSidebarOpen ? 0 : 'auto', overflow: 'hidden', whiteSpace: 'nowrap'
-                          }}
-                        >
+                        <span className={`link-text text-[0.85rem] transition-all duration-300 whitespace-nowrap overflow-hidden
+                            ${isActive ? 'font-semibold text-white' : 'font-normal text-white/80'}
+                            ${!isSidebarOpen && !isMobileMenuOpen ? 'w-0 opacity-0' : 'w-auto opacity-100'}
+                        `}>
                           {link.label}
                         </span>
                       </Link>
@@ -540,73 +409,62 @@ export default function Sidebar() {
               </ul>
             </div>
           ))}
+
+          {/* SECTION ADMIN */}
           {isAdmin && (
-  <div style={{ marginTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.05)' }}>
-    <div style={{ 
-        marginBottom: '0.6rem', paddingLeft: !isSidebarOpen ? 0 : '0.8rem', 
-        textAlign: !isSidebarOpen ? 'center' : 'left', display: 'flex', alignItems: 'center'
-    }}>
-        {!isSidebarOpen ? (
-          <div style={{ width: '20px', height: '2px', background: '#d04fd7', margin: '10px auto' }} />
-        ) : (
-          <span style={groupTitleStyle}>ADMINISTRATION</span>
-        )}
-    </div>
-    <ul style={ulStyle}>
-      <li style={{ marginBottom: !isSidebarOpen ? '2px' : '4px' }}>
-        <Link
-          href="/admin"
-          className="nav-link"
-          style={{
-              ...getLinkStyle(pathname === '/admin', hoveredLink === '/admin'),
-              padding: !isSidebarOpen ? '0.5rem' : '0.55rem 0.8rem',
-              justifyContent: !isSidebarOpen ? 'center' : 'flex-start'
-          }}
-          onMouseEnter={() => setHoveredLink('/admin')}
-          onMouseLeave={() => setHoveredLink(null)}
-        >
-          {pathname === '/admin' && <div style={activeIndicatorStyle} />}
-          <span style={{ 
-              marginRight: !isSidebarOpen ? 0 : '12px', display: 'flex', 
-              color: pathname === '/admin' ? '#d04fd7' : 'rgba(255,255,255,0.6)' 
-          }}>
-            {Icons.Admin}
-          </span>
-          <span className="link-text" style={{ 
-              fontSize: '0.85rem', fontWeight: pathname === '/admin' ? 600 : 400,
-              color: pathname === '/admin' ? '#fff' : 'rgba(255,255,255,0.8)',
-              opacity: !isSidebarOpen ? 0 : 1, width: !isSidebarOpen ? 0 : 'auto',
-              transition: 'all 0.3s', overflow: 'hidden', whiteSpace: 'nowrap'
-          }}>
-            Command Center
-          </span>
-        </Link>
-      </li>
-    </ul>
-  </div>
-)}
+            <div className="mt-4 border-t border-white/5 pt-4">
+              <div className={`flex items-center mb-2.5 h-4 ${!isSidebarOpen && !isMobileMenuOpen ? 'justify-center' : 'pl-3.5'}`}>
+                 {!isSidebarOpen && !isMobileMenuOpen ? (
+                    <div className="w-5 h-[2px] bg-[#d04fd7] mx-auto" />
+                 ) : (
+                    <span className="text-[0.6rem] uppercase font-[800] tracking-[1px] bg-gradient-to-r from-[#d04fd7] to-[#a0a0a0] bg-clip-text text-transparent whitespace-nowrap">
+                        ADMINISTRATION
+                    </span>
+                 )}
+              </div>
+              <ul className="space-y-1">
+                <li className={!isSidebarOpen && !isMobileMenuOpen ? 'mb-[2px]' : 'mb-1'}>
+                  <Link
+                    href="/admin"
+                    onMouseEnter={() => setHoveredLink('/admin')}
+                    onMouseLeave={() => setHoveredLink(null)}
+                    className={`nav-link group relative flex items-center mx-2 rounded-lg transition-all duration-200 overflow-hidden cursor-pointer
+                      ${!isSidebarOpen && !isMobileMenuOpen ? 'justify-center p-2' : 'justify-start px-3 py-[0.55rem]'}
+                      ${pathname === '/admin' ? 'bg-[#d04fd7]/10' : hoveredLink === '/admin' ? 'bg-white/5' : 'bg-transparent'}
+                    `}
+                  >
+                    {pathname === '/admin' && <div className="absolute left-0 top-[20%] h-[60%] w-[3px] bg-[#d04fd7] rounded-r-md shadow-[0_0_8px_#d04fd7]" />}
+                    <span className={`link-icon flex transition-colors duration-200 min-w-[18px] shrink-0
+                        ${!isSidebarOpen && !isMobileMenuOpen ? 'mr-0' : 'mr-3'} 
+                        ${pathname === '/admin' ? 'text-[#d04fd7]' : 'text-white/60'}
+                    `}>
+                      {Icons.Admin}
+                    </span>
+                    <span className={`link-text text-[0.85rem] transition-all duration-300 whitespace-nowrap overflow-hidden
+                        ${pathname === '/admin' ? 'font-semibold text-white' : 'font-normal text-white/80'}
+                        ${!isSidebarOpen && !isMobileMenuOpen ? 'w-0 opacity-0' : 'w-auto opacity-100'}
+                    `}>
+                      Command Center
+                    </span>
+                  </Link>
+                </li>
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* --- ZONE DU BAS : PIN BUTTON & USER --- */}
-        <div style={{ marginTop: 0, borderTop: '1px solid rgba(255,255,255,0.06)', background: 'rgba(0,0,0,0.2)' }}>
+        <div className="mt-auto border-t border-white/5 bg-black/20 shrink-0">
             
-            {/* BOUTON PIN (Uniquement visible quand ouvert pour éviter le bruit visuel fermé) */}
-            {isSidebarOpen && (
-                <div style={{ padding: '0.5rem 1rem', display: 'flex', justifyContent: 'flex-end' }}>
+            {/* BOUTON PIN (Desktop Seulement, visible quand ouvert) */}
+            {(isSidebarOpen || isMobileMenuOpen) && (
+                <div className="hidden md:flex justify-end px-4 py-2">
                      <button
                         onClick={togglePin}
-                        className="pin-btn"
                         title={isPinned ? "Détacher la barre" : "Épingler la barre"}
-                        style={{
-                            background: 'transparent',
-                            border: '1px solid rgba(255,255,255,0.1)',
-                            borderRadius: '6px',
-                            padding: '6px',
-                            cursor: 'pointer',
-                            color: isPinned ? '#d04fd7' : 'rgba(255,255,255,0.5)',
-                            transition: 'all 0.2s',
-                            display: 'flex', alignItems: 'center', justifyContent: 'center'
-                        }}
+                        className={`p-1.5 rounded-md border transition-all flex items-center justify-center cursor-pointer 
+                            ${isPinned ? 'bg-white/10 text-[#d04fd7] border-white/20' : 'bg-transparent text-white/50 border-white/10 hover:bg-white/5 hover:text-white hover:border-white/20'}
+                        `}
                      >
                         {isPinned ? <Pin size={14} fill="currentColor" /> : <PinOff size={14} />}
                      </button>
@@ -615,27 +473,29 @@ export default function Sidebar() {
 
             {/* USER PROFILE */}
             {session?.user && (
-            <div style={{ padding: !isSidebarOpen ? '1rem 0.5rem' : '0.5rem 1rem 1rem 1rem', display: 'flex', justifyContent: 'center' }}>
-                <div style={footerProfileStyle}>
-                <div style={avatarPlaceholderStyle}>
-                    {session.user.image ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={session.user.image} alt="" style={{width:'100%', height:'100%', borderRadius:'50%'}}/>
-                    ) : (
-                        session.user.name?.charAt(0) || 'R'
-                    )}
-                </div>
-                
-                <div style={{ 
-                    overflow: 'hidden', transition: 'all 0.3s', opacity: !isSidebarOpen ? 0 : 1,
-                    width: !isSidebarOpen ? 0 : 'auto', marginLeft: !isSidebarOpen ? 0 : '10px'
-                }}>
-                    <div style={userNameStyle}>{session.user.name}</div>
-                    <div style={userRoleStyle}>
-                        <Zap size={10} style={{ marginRight: 3, fill: '#fbbf24', stroke: 'none' }} />
-                        Athlète
+            <div className={`flex justify-center transition-all ${!isSidebarOpen && !isMobileMenuOpen ? 'p-4' : 'px-4 pb-4 pt-2'}`}>
+                <div className="flex items-center w-full">
+                    {/* Avatar */}
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#2a2a35] to-[#151520] border border-white/10 flex items-center justify-center text-white font-bold text-sm shrink-0 overflow-hidden">
+                        {session.user.image ? (
+                            <img src={session.user.image} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                            session.user.name?.charAt(0) || 'R'
+                        )}
                     </div>
-                </div>
+                    
+                    {/* Infos (Nom & Role) */}
+                    <div className={`overflow-hidden transition-all duration-300 flex flex-col justify-center
+                        ${!isSidebarOpen && !isMobileMenuOpen ? 'w-0 opacity-0 ml-0' : 'w-auto opacity-100 ml-2.5'}
+                    `}>
+                        <div className="text-[0.85rem] font-semibold text-white truncate max-w-[120px]">
+                            {session.user.name}
+                        </div>
+                        <div className="text-[0.65rem] text-white/50 flex items-center mt-[-2px]">
+                            <Zap size={10} className="mr-[3px] fill-amber-400 stroke-none" />
+                            Athlète
+                        </div>
+                    </div>
                 </div>
             </div>
             )}
@@ -644,61 +504,3 @@ export default function Sidebar() {
     </>
   );
 }
-
-// ... STYLES UTILS ...
-const logoTextStyle: React.CSSProperties = {
-  fontSize: '1.4rem', fontWeight: 800, fontFamily: 'system-ui, sans-serif',
-  letterSpacing: '-0.5px', background: 'linear-gradient(135deg, #d04fd7 0%, #ffffff 100%)',
-  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', transition: 'all 0.3s ease', whiteSpace: 'nowrap'
-};
-
-const versionBadgeStyle: React.CSSProperties = {
-  fontSize: '0.6rem', padding: '1px 5px', borderRadius: '4px',
-  background: 'rgba(208, 79, 215, 0.1)', border: '1px solid rgba(208, 79, 215, 0.25)',
-  color: '#d04fd7', fontWeight: 700, marginTop: '2px'
-};
-
-const scrollAreaStyle: React.CSSProperties = {
-  flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '0.5rem 0',
-};
-
-const groupTitleStyle: React.CSSProperties = {
-  fontSize: '0.6rem', textTransform: 'uppercase', fontWeight: 800, letterSpacing: '1px',
-  background: 'linear-gradient(90deg, #d04fd7 0%, #a0a0a0 100%)',
-  WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', opacity: 1, whiteSpace: 'nowrap',
-};
-
-const ulStyle: React.CSSProperties = { listStyle: 'none', padding: 0, margin: 0 };
-
-const getLinkStyle = (isActive: boolean, isHovered: boolean): React.CSSProperties => {
-  return {
-    display: 'flex', alignItems: 'center', textDecoration: 'none',
-    margin: '0 0.5rem', borderRadius: '8px', transition: 'all 0.2s ease',
-    position: 'relative', overflow: 'hidden', cursor: 'pointer',
-    background: isActive ? 'rgba(208, 79, 215, 0.12)' : isHovered ? 'rgba(255,255,255,0.05)' : 'transparent',
-  };
-};
-
-const activeIndicatorStyle: React.CSSProperties = {
-  position: 'absolute', left: 0, top: '20%', height: '60%', width: '3px',
-  background: '#d04fd7', borderRadius: '0 4px 4px 0', boxShadow: '0 0 8px #d04fd7',
-};
-
-const footerProfileStyle: React.CSSProperties = { display: 'flex', alignItems: 'center', width: '100%' };
-
-const avatarPlaceholderStyle: React.CSSProperties = {
-  width: '32px', height: '32px', borderRadius: '50%',
-  background: 'linear-gradient(135deg, #2a2a35 0%, #151520 100%)',
-  border: '1px solid rgba(255,255,255,0.1)',
-  display: 'flex', alignItems: 'center', justifyContent: 'center',
-  color: '#fff', fontWeight: 'bold', fontSize: '0.8rem', flexShrink: 0
-};
-
-const userNameStyle: React.CSSProperties = {
-  fontSize: '0.85rem', fontWeight: 600, color: '#fff',
-  whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '120px'
-};
-
-const userRoleStyle: React.CSSProperties = {
-  fontSize: '0.65rem', color: 'rgba(255,255,255,0.5)', display: 'flex', alignItems: 'center'
-};
