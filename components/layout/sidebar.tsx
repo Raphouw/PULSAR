@@ -231,6 +231,9 @@ export default function Sidebar() {
         .nav-link:hover .icon-dashboard .rect-2 { animation: eqMove 0.6s ease infinite alternate 0.1s; }
         .nav-link:hover .icon-dashboard .rect-3 { animation: eqMove 0.6s ease infinite alternate 0.2s; }
         .nav-link:hover .icon-dashboard .rect-4 { animation: eqMove 0.6s ease infinite alternate 0.3s; }
+        /* CACHER LA SCROLLBAR */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         @keyframes eqMove { 0% { transform: scaleY(1); } 100% { transform: scaleY(0.6); transform-origin: bottom; } }
 
         .nav-link:hover .icon-activity .pulse-line { animation: pulseGraph 1s ease-in-out infinite; stroke: #fff; }
@@ -355,7 +358,7 @@ export default function Sidebar() {
         </div>
 
         {/* NAVIGATION SCROLLABLE */}
-        <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden py-2 no-scrollbar">
           {groups.map((group, index) => (
             <div key={index} className={isSidebarOpen || isMobileMenuOpen ? 'mb-6' : 'mb-1.5'}>
               {/* TITRE DU GROUPE */}

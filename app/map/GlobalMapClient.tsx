@@ -162,9 +162,10 @@ export default function GlobalMapClient({
   const { 
       visitedTilesSet, boundsArea, topSquares, totalArea, clusterSet, 
       squareTargetsMap, clusterTargetsMap, fillingTilesSet, coreTilesSet,    
-      currentMaxSquareBounds, clusterBounds
+      currentMaxSquareBounds, clusterBounds, tileVisitCounts // <-- AJOUT ICI
   } = useMemo(() => {
     const tiles = new Set<string>();
+    const tileCounts = new Map<string, number>(); // <-- AJOUT DE LA MAP DE COMPTAGE
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
     filteredActivities.forEach(act => {
@@ -176,6 +177,9 @@ export default function GlobalMapClient({
              if (blacklistedTilesSet.has(t)) toggleBlacklistTile(t); 
 
              tiles.add(t);
+             // On incrémente le compteur de passages pour cette tuile
+             tileCounts.set(t, (tileCounts.get(t) || 0) + 1);
+
              const [x, y] = t.split(',').map(Number);
              if (x < minX) minX = x; if (x > maxX) maxX = x;
              if (y < minY) minY = y; if (y > maxY) maxY = y;
@@ -308,7 +312,8 @@ export default function GlobalMapClient({
         visitedTilesSet: tiles, boundsArea: globalBounds, topSquares: calculatedTopSquares, 
         totalArea: area, clusterSet: biggestCluster, squareTargetsMap: sqTargets, 
         clusterTargetsMap: clTargets, fillingTilesSet: fillingSet, coreTilesSet: coreSet,
-        currentMaxSquareBounds: msBounds, clusterBounds: clBounds
+        currentMaxSquareBounds: msBounds, clusterBounds: clBounds,
+        tileVisitCounts: tileCounts // <-- NE PAS OUBLIER DE LE RETOURNER ICI
     };
   }, [filteredActivities, activeSquareRank, blacklistedTilesSet]);
 
@@ -426,6 +431,25 @@ export default function GlobalMapClient({
         ...Array.from(blacklistedTilesSet)
     ]);
 
+    // 🔥 NOUVEAU : Grille d'interaction "fantôme" pour le pinceau Blacklist
+    if (blacklistMode) {
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        visitedTilesSet.forEach(key => {
+            const [x, y] = key.split(',').map(Number);
+            if (x < minX) minX = x; if (x > maxX) maxX = x;
+            if (y < minY) minY = y; if (y > maxY) maxY = y;
+        });
+
+        if (minX !== Infinity) {
+            const PADDING = 15; // Ajoute une marge de 15 tuiles autour de ta zone explorée
+            for (let x = minX - PADDING; x <= maxX + PADDING; x++) {
+                for (let y = minY - PADDING; y <= maxY + PADDING; y++) {
+                    allKeysToRender.add(`${x},${y}`);
+                }
+            }
+        }
+    }
+
     return Array.from(allKeysToRender).map(tileKey => {
       const isVisited = visitedTilesSet.has(tileKey);
       const isBlacklisted = blacklistedTilesSet.has(tileKey);
@@ -434,8 +458,12 @@ export default function GlobalMapClient({
       const targetLevel = currentTargetsMap.get(tileKey);
       const isTargetVisible = showTargets && targetLevel !== undefined && activeTargetLevels.has(targetLevel!);
       const isFilling = showFilling && fillingTilesSet.has(tileKey) && targetMode === 'cluster';
+      
+      // Nouvelle condition : est-ce une tuile vide en mode pinceau ?
+      const isUnexploredInteractive = blacklistMode && !isVisited && !isBlacklisted;
 
-      if ((!isVisited || !showGrid) && !isTargetVisible && !isFilling && !isBlacklisted) return null;
+      // On bloque le rendu si ce n'est RIEN de tout ça
+      if ((!isVisited || !showGrid) && !isTargetVisible && !isFilling && !isBlacklisted && !isUnexploredInteractive) return null;
 
       const [x, y] = tileKey.split(',').map(Number);
       const bounds = getTileBounds(x, y, ZOOM);
@@ -447,6 +475,9 @@ export default function GlobalMapClient({
 
       if (isBlacklisted) {
           color = '#ff0055'; weight = 2; className = 'tile-blacklisted'; fillOpacity = 0.3; opacity = 0.8;
+      }
+      else if (isUnexploredInteractive) { // Style subtil pour les zones vides cliquables
+          color = '#ffffff'; weight = 1; className = 'tile-interactive-grid'; fillOpacity = 0.02; opacity = 0.15;
       }
       else if (isFilling) {
           color = '#f97316'; weight = 2; className = 'tile-glitch'; fillOpacity = 0.4; opacity = 1;
@@ -492,9 +523,40 @@ export default function GlobalMapClient({
         .tile-cluster { animation: breathe-purple 5s ease-in-out infinite; }
         .tile-target-urgent { animation: flash-red 1s infinite alternate; }
         .tile-glitch { animation: glitch-flash 0.5s infinite; }
+        .tile-interactive-grid { stroke-dasharray: 2 4; transition: all 0.2s; }
+        .tile-interactive-grid:hover { fill-opacity: 0.1 !important; stroke: #ff0055 !important; stroke-opacity: 0.8 !important; }
         .tile-core { stroke: #fff !important; stroke-width: 2px !important; fill: #fff !important; fill-opacity: 0.8 !important; z-index: 200 !important; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        /* --- CUSTOM LEAFLET POPUP --- */
+        .custom-dark-popup .leaflet-popup-content-wrapper {
+            background: #121217;
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 0.75rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            padding: 0;
+        }
+        .custom-dark-popup .leaflet-popup-content {
+            margin: 0;
+            padding: 1rem;
+        }
+        .custom-dark-popup .leaflet-popup-tip {
+            background: #121217;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            border-right: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.4);
+        }
+        .custom-dark-popup .leaflet-popup-close-button {
+            color: #9ca3af !important;
+            padding: 6px 8px 0 0 !important;
+            transition: color 0.2s;
+        }
+        .custom-dark-popup .leaflet-popup-close-button:hover {
+            color: #d04fd7 !important;
+            background: transparent !important;
+        }
 
         @keyframes pulse-gold { from { fill-opacity: 0.4; stroke-opacity: 0.8; } to { fill-opacity: 0.7; stroke-opacity: 1; } }
         @keyframes breathe-purple { 0%, 100% { fill-opacity: 0.2; } 50% { fill-opacity: 0.4; } }
@@ -652,24 +714,38 @@ export default function GlobalMapClient({
         {activeTilePopup && (
             <Popup 
                 position={[(activeTilePopup.bounds as any)[0][0], (activeTilePopup.bounds as any)[0][1]]} 
-                // On remplace onClose par eventHandlers pour respecter l'API React-Leaflet
-                eventHandlers={{
-                    remove: () => setActiveTilePopup(null)
-                }}
+                eventHandlers={{ remove: () => setActiveTilePopup(null) }}
+                className="custom-dark-popup"
             >
-                <div className="bg-[#121217] text-white p-2 rounded border border-white/10 text-xs">
-                    <p className="font-bold text-[#d04fd7] mb-1">Tuile : {activeTilePopup.key}</p>
+                <div className="flex flex-col gap-2 min-w-[140px]">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-1">
+                        <span className="font-black text-[10px] tracking-widest text-[#d04fd7] uppercase">Tuile</span>
+                        <span className="font-mono text-xs text-white/80 bg-white/5 px-1.5 py-0.5 rounded">{activeTilePopup.key}</span>
+                    </div>
+
                     {visitedTilesSet.has(activeTilePopup.key) ? (
-                        <p className="text-emerald-400">Statut : Explorée (Noyau: {coreTilesSet.has(activeTilePopup.key) ? 'Oui' : 'Non'})</p>
+                        <>
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs text-gray-400 font-medium">Statut</span>
+                                <span className="text-xs font-bold text-emerald-400">Explorée</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs text-gray-400 font-medium">Passages</span>
+                                <span className="text-sm font-black text-white">{tileVisitCounts.get(activeTilePopup.key) || 1}</span>
+                            </div>
+                        </>
                     ) : (
-                        <div className="flex flex-col gap-2 mt-2">
-                            <p className="text-gray-400">Zone Inconnue</p>
+                        <div className="flex flex-col gap-3 mt-1">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs text-gray-400 font-medium">Statut</span>
+                                <span className="text-xs font-bold text-gray-500">Inconnue</span>
+                            </div>
                             <button 
                                 onClick={(e) => { 
                                     toggleBlacklistTile(activeTilePopup.key, e); 
                                     setActiveTilePopup(null); 
                                 }} 
-                                className="bg-red-500/20 text-red-400 hover:bg-red-500/40 border border-red-500 px-2 py-1 rounded transition-colors"
+                                className="w-full bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border border-red-500/50 hover:border-red-500 py-1.5 rounded transition-all text-xs font-bold uppercase tracking-wide"
                             >
                                 {blacklistedTilesSet.has(activeTilePopup.key) ? 'Débloquer' : 'Blacklister'}
                             </button>
