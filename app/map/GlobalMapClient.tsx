@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { getTilesFromPolyline, getTileBounds, lon2tile, lat2tile, getTilesInBounds } from '../../lib/mapUtils';
-import { calculateMaxSquare, getSquareTiles, calculateTotalArea, findLargestCluster, getFutureTargets } from '../../lib/gridAlgo';
+import { calculateMaxSquare, getSquareTiles, calculateTotalArea, findTopClusters, getFutureTargets, getSquareAt } from '../../lib/gridAlgo';
 import { Layers, Maximize, Eye, Grid, Activity, Target, Map as MapIcon, CheckSquare, Calendar, Focus, Crosshair, ArrowRightLeft, MoveVertical, Scan, ArrowUpRight, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
 import { useMap, useMapEvents } from 'react-leaflet';
 import { LatLngBoundsExpression, LatLngTuple } from 'leaflet';
@@ -59,11 +59,13 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 
 
 // --- COMPOSANT : PINCEAU BLACKLIST SYNCHRONE + TACTILE ---
-const MapInteractionHandler = ({ blacklistMode, visitedTilesSet, blacklistedTilesSet, toggleBlacklistTile, handleBatchBlacklist }: any) => {
+// N'oublie pas d'ajouter les nouvelles props dans l'appel du composant plus bas !
+const MapInteractionHandler = ({ blacklistMode, customSquareMode, visitedTilesSet, blacklistedTilesSet, toggleBlacklistTile, handleBatchBlacklist, handleManualSquareSelection }: any) => {
     const paintedTilesRef = React.useRef<Set<string>>(new Set());
     const map = useMap();
 
     React.useEffect(() => {
+        // Bloquer le drag si on est en mode peinture (blacklist)
         if (blacklistMode) {
             map.dragging.disable();
             map.touchZoom.disable();
@@ -72,7 +74,6 @@ const MapInteractionHandler = ({ blacklistMode, visitedTilesSet, blacklistedTile
             map.touchZoom.enable();
         }
         
-        // Au relâchement du clic ou du doigt : on flush tout vers la BDD d'un coup
         const handleRelease = () => {
             if (paintedTilesRef.current.size > 0) {
                 const tilesToFlush = Array.from(paintedTilesRef.current);
@@ -91,6 +92,15 @@ const MapInteractionHandler = ({ blacklistMode, visitedTilesSet, blacklistedTile
 
     useMapEvents({
         click(e) {
+            // PRIORITÉ 1 : SÉLECTION MANUELLE DE CARRÉ
+            if (customSquareMode) {
+                const x = lon2tile(e.latlng.lng, 14);
+                const y = lat2tile(e.latlng.lat, 14);
+                handleManualSquareSelection(x, y);
+                return;
+            }
+
+            // PRIORITÉ 2 : BLACKLIST
             if (!blacklistMode) return;
             const x = lon2tile(e.latlng.lng, 14);
             const y = lat2tile(e.latlng.lat, 14);
@@ -98,8 +108,8 @@ const MapInteractionHandler = ({ blacklistMode, visitedTilesSet, blacklistedTile
             if (!visitedTilesSet.has(tileKey)) toggleBlacklistTile(tileKey);
         },
         mousemove(e) {
-            if (!blacklistMode) return;
-
+            if (!blacklistMode || customSquareMode) return; // On empêche la peinture si le mode custom est actif
+            
             const original = e.originalEvent as any;
             const isTouch = original.touches && original.touches.length > 0;
             const isMouse = original.buttons === 1;
@@ -109,11 +119,8 @@ const MapInteractionHandler = ({ blacklistMode, visitedTilesSet, blacklistedTile
                 const y = lat2tile(e.latlng.lat, 14);
                 const tileKey = `${x},${y}`;
                 
-                // On vérifie qu'on ne l'a pas déjà peinte localement pour économiser les re-renders
                 if (!visitedTilesSet.has(tileKey) && !blacklistedTilesSet.has(tileKey) && !paintedTilesRef.current.has(tileKey)) {
                     paintedTilesRef.current.add(tileKey); 
-                    
-                    // Retour visuel immédiat en modifiant l'état local synchrone
                     toggleBlacklistTile(tileKey, null, true);
                 }
             }
@@ -121,6 +128,9 @@ const MapInteractionHandler = ({ blacklistMode, visitedTilesSet, blacklistedTile
     });
     return null;
 };
+
+
+
 
 // --- COMPOSANT : TRACKER DE VUE (Score & Grille Globale) ---
 const ViewportTracker = ({ onBoundsChange }: { onBoundsChange: (bounds: any) => void }) => {
@@ -184,6 +194,9 @@ export default function GlobalMapClient({
   const [dimMap, setDimMap] = useState(true); 
   const [targetMode, setTargetMode] = useState<'square' | 'cluster'>('cluster'); 
   const [activeSquareRank, setActiveSquareRank] = useState<number>(0); 
+  const [activeClusterRank, setActiveClusterRank] = useState<number>(0); 
+  const [customSquareMode, setCustomSquareMode] = useState(false);
+  const [customTargetSquare, setCustomTargetSquare] = useState<{topLeft: any, maxSquare: number, tilesSet: Set<string>} | null>(null);
   
   // -- ETATS LAYERS --
   const [showHeatmap, setShowHeatmap] = useState(true);
@@ -272,7 +285,8 @@ export default function GlobalMapClient({
   const { 
       visitedTilesSet, boundsArea, topSquares, totalArea, clusterSet, 
       squareTargetsMap, clusterTargetsMap, fillingTilesSet, coreTilesSet,    
-      currentMaxSquareBounds, clusterBounds, tileVisitCounts // <-- AJOUT ICI
+      currentMaxSquareBounds, clusterBounds, tileVisitCounts,
+      topClusters, effectiveSquare // <-- AJOUT DES NOUVELLES VARIABLES ICI
   } = useMemo(() => {
     const tiles = new Set<string>();
     const tileCounts = new Map<string, number>(); // <-- AJOUT DE LA MAP DE COMPTAGE
@@ -320,23 +334,27 @@ export default function GlobalMapClient({
     }
 
     const activeSq = calculatedTopSquares[activeSquareRank] || calculatedTopSquares[0];
+    const effectiveSquare = customTargetSquare || activeSq; // LE CARRÉ CIBLE (Manuel ou Auto)
     const area = calculateTotalArea(tiles);
-    const biggestCluster = findLargestCluster(tiles, blacklistedTilesSet);
+    
+    // --- TOP CLUSTERS ---
+    const topClusters = findTopClusters(tiles, blacklistedTilesSet, 5);
+    const clusterSet = topClusters[activeClusterRank] || new Set<string>();
     
     // Bounds du carré ACTIF
     let msBounds: LatLngBoundsExpression | null = null;
-    if (activeSq && activeSq.maxSquare > 0 && activeSq.topLeft) {
-        const rawTL = activeSq.topLeft as any;
+    if (effectiveSquare && effectiveSquare.maxSquare > 0 && effectiveSquare.topLeft) {
+        const rawTL = effectiveSquare.topLeft as any;
         const msX = typeof rawTL === 'string' ? Number(rawTL.split(',')[0]) : rawTL.x;
         const msY = typeof rawTL === 'string' ? Number(rawTL.split(',')[1]) : rawTL.y;
-        msBounds = [getTileBounds(msX, msY, 14)[0], getTileBounds(msX + activeSq.maxSquare - 1, msY + activeSq.maxSquare - 1, 14)[1]];
+        msBounds = [getTileBounds(msX, msY, 14)[0], getTileBounds(msX + effectiveSquare.maxSquare - 1, msY + effectiveSquare.maxSquare - 1, 14)[1]];
     }
 
     // Bounds Cluster
     let clBounds: LatLngBoundsExpression | null = null;
     let cMinX = Infinity, cMinY = Infinity, cMaxX = -Infinity, cMaxY = -Infinity;
-    if (biggestCluster.size > 0) {
-        biggestCluster.forEach(k => {
+    if (clusterSet.size > 0) {
+        clusterSet.forEach(k => {
             const [x, y] = k.split(',').map(Number);
             if(x < cMinX) cMinX=x; if(x > cMaxX) cMaxX=x;
             if(y < cMinY) cMinY=y; if(y > cMaxY) cMaxY=y;
@@ -353,9 +371,9 @@ export default function GlobalMapClient({
         }
     });
 
-    // 3. FILLING (L'intégralité de l'algorithme)
+    // 3. FILLING (Basé sur le cluster actif)
     const fillingSet = new Set<string>();
-    if (biggestCluster.size > 0) {
+    if (clusterSet.size > 0) {
         const startX = cMinX - 1; const endX = cMaxX + 1;
         const startY = cMinY - 1; const endY = cMaxY + 1;
         const outsideSet = new Set<string>();
@@ -369,7 +387,7 @@ export default function GlobalMapClient({
             for (const [nx, ny] of neighbors) {
                 if (nx < startX || nx > endX || ny < startY || ny > endY) continue;
                 const nKey = `${nx},${ny}`;
-                if (!biggestCluster.has(nKey) && !outsideSet.has(nKey)) {
+                if (!clusterSet.has(nKey) && !outsideSet.has(nKey)) {
                     outsideSet.add(nKey);
                     queue.push(nKey);
                 }
@@ -378,7 +396,7 @@ export default function GlobalMapClient({
         for (let x = cMinX; x <= cMaxX; x++) {
             for (let y = cMinY; y <= cMaxY; y++) {
                 const key = `${x},${y}`;
-                if (!biggestCluster.has(key) && !outsideSet.has(key)) {
+                if (!clusterSet.has(key) && !outsideSet.has(key)) {
                     fillingSet.add(key);
                 }
             }
@@ -386,12 +404,12 @@ export default function GlobalMapClient({
     }
 
     // 4. CIBLES 
-    const sqTargets = activeSq && activeSq.topLeft 
-        ? getFutureTargets(tiles, blacklistedTilesSet, activeSq.topLeft, activeSq.maxSquare, 10) 
+    const sqTargets = effectiveSquare && effectiveSquare.topLeft 
+        ? getFutureTargets(tiles, blacklistedTilesSet, effectiveSquare.topLeft, effectiveSquare.maxSquare, 10) 
         : new Map();
 
     const clTargets = new Map<string, number>();
-    let currentLevelTiles = new Set<string>(biggestCluster);
+    let currentLevelTiles = new Set<string>(clusterSet);
     fillingSet.forEach(t => currentLevelTiles.add(t)); 
 
     let borderTiles = new Set<string>();
@@ -419,13 +437,13 @@ export default function GlobalMapClient({
     }
 
     return { 
-        visitedTilesSet: tiles, boundsArea: globalBounds, topSquares: calculatedTopSquares, 
-        totalArea: area, clusterSet: biggestCluster, squareTargetsMap: sqTargets, 
+        visitedTilesSet: tiles, boundsArea: globalBounds, topSquares: calculatedTopSquares, topClusters, // <-- Ajout de topClusters ici
+        totalArea: area, clusterSet: clusterSet, squareTargetsMap: sqTargets, 
         clusterTargetsMap: clTargets, fillingTilesSet: fillingSet, coreTilesSet: coreSet,
         currentMaxSquareBounds: msBounds, clusterBounds: clBounds,
-        tileVisitCounts: tileCounts // <-- NE PAS OUBLIER DE LE RETOURNER ICI
+        tileVisitCounts: tileCounts, effectiveSquare // <-- Ajout de effectiveSquare ici
     };
-  }, [filteredActivities, activeSquareRank, blacklistedTilesSet]);
+  }, [filteredActivities, activeSquareRank, activeClusterRank, customTargetSquare, blacklistedTilesSet]); // N'oublie pas d'ajouter les dépendances !
 
     const handleViewportChange = React.useCallback((bounds: any) => {
       const currentTiles = getTilesInBounds(bounds, 14);
@@ -456,6 +474,8 @@ export default function GlobalMapClient({
       }
   };
 
+
+  
   const toggleMaxSquare = () => {
       const newState = !showMaxSquare; setShowMaxSquare(newState);
       if (newState && currentMaxSquareBounds) triggerZoom(currentMaxSquareBounds);
@@ -507,6 +527,23 @@ export default function GlobalMapClient({
           toggleBlacklistTile(tileKey);
       } else {
           setActiveTilePopup({ key: tileKey, bounds });
+      }
+  };
+
+  const handleManualSquareSelection = (x: number, y: number) => {
+      const tileKey = `${x},${y}`;
+      if (visitedTilesSet.has(tileKey)) {
+          const sqSize = getSquareAt(visitedTilesSet, blacklistedTilesSet, x, y);
+          if (sqSize >= 2) {
+              const sqTiles = getSquareTiles({ x, y, key: tileKey }, sqSize);
+              setCustomTargetSquare({
+                  maxSquare: sqSize,
+                  topLeft: { x, y, key: tileKey },
+                  tilesSet: new Set(sqTiles)
+              });
+              setTargetMode('square');
+              setShowTargets(true);
+          }
       }
   };
 
@@ -725,24 +762,45 @@ export default function GlobalMapClient({
                 <div className="grid grid-cols-2 gap-2">
                     <StatBox label="Exploration" value={visitedTilesSet.size} potentialLabel={selectionStats.count > 0 ? `(+${selectionStats.count})` : null} color="cyan" icon={<CheckSquare size={12}/>} />
                     
-                    {/* Max Square */}
-                    <div onClick={() => currentMaxSquareBounds && triggerZoom(currentMaxSquareBounds)} className="bg-white/5 p-2.5 rounded-2xl border border-yellow-500/10 flex flex-col justify-between h-[55px] cursor-pointer hover:bg-white/10 transition-colors group relative">
+                    {/* Max Square avec Override Custom */}
+                    <div onClick={() => currentMaxSquareBounds && triggerZoom(currentMaxSquareBounds)} className={`p-2.5 rounded-2xl border flex flex-col justify-between h-[55px] cursor-pointer transition-colors group relative ${customTargetSquare ? 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20' : 'bg-white/5 border-yellow-500/10 hover:bg-white/10'}`}>
                         <div className="text-[15px] font-black tabular-nums leading-none tracking-tight text-white flex justify-between items-center">
                             <span className="flex items-center gap-1">
-                                {currentMaxSquare?.maxSquare || 0}x{currentMaxSquare?.maxSquare || 0}
-                                {targetMode === 'square' && selectionStats.count > 0 && <span className="text-[10px] text-gray-400 font-normal">({selectionStats.potentialMaxSqSize}²)</span>}
+                                {effectiveSquare?.maxSquare || 0}x{effectiveSquare?.maxSquare || 0}
+                                {targetMode === 'square' && selectionStats.count > 0 && <span className="text-[10px] text-gray-400 font-normal">({(effectiveSquare?.maxSquare || 0) + Math.max(0, ...Array.from(activeTargetLevels))}²)</span>}
                             </span>
-                            <div onClick={cycleSquareRank} className="flex gap-0.5 p-1 -m-1 cursor-alias hover:scale-110 transition-transform">
-                                {[0,1,2,3,4].map(i => <div key={i} className={`w-1.5 h-1.5 rounded-full ${activeSquareRank === i ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]' : 'bg-gray-600'}`} />)}
-                            </div>
+                            
+                            {customTargetSquare ? (
+                                <button onClick={(e) => { e.stopPropagation(); setCustomTargetSquare(null); }} className="p-1 -m-1 text-emerald-400 hover:text-white transition-colors" title="Annuler ciblage manuel"><Focus size={14} /></button>
+                            ) : (
+                                <div onClick={cycleSquareRank} className="flex gap-0.5 p-1 -m-1 cursor-alias hover:scale-110 transition-transform">
+                                    {[0,1,2,3,4].map(i => <div key={i} className={`w-1.5 h-1.5 rounded-full ${activeSquareRank === i ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]' : 'bg-gray-600'}`} />)}
+                                </div>
+                            )}
                         </div>
-                        <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-widest text-yellow-500/80">
-                            <div className="flex items-center gap-1.5"><Maximize size={10} /> MAX SQ</div>
-                            <span className="text-gray-500">#{activeSquareRank + 1}</span>
+                        <div className={`flex items-center justify-between text-[9px] font-bold uppercase tracking-widest ${customTargetSquare ? 'text-emerald-400' : 'text-yellow-500/80'}`}>
+                            <div className="flex items-center gap-1.5"><Maximize size={10} /> {customTargetSquare ? 'CARRÉ CIBLÉ' : 'MAX SQ'}</div>
+                            {!customTargetSquare && <span className="text-gray-500">#{activeSquareRank + 1}</span>}
                         </div>
                     </div>
                     
-                    <StatBox label="Cluster" value={clusterSet.size} potentialLabel={targetMode === 'cluster' && selectionStats.count > 0 ? `(+${selectionStats.count})` : null} color="purple" icon={<Activity size={12}/>} onClick={() => triggerZoom(clusterBounds)} isInteractive />
+                    {/* Cluster avec Pagination */}
+                    <div onClick={() => clusterBounds && triggerZoom(clusterBounds)} className="bg-white/5 p-2.5 rounded-2xl border border-[#d04fd7]/10 flex flex-col justify-between h-[55px] cursor-pointer hover:bg-white/10 transition-colors group relative">
+                        <div className="text-[15px] font-black tabular-nums leading-none tracking-tight text-white flex justify-between items-center">
+                            <span className="flex items-center gap-1">
+                                {clusterSet.size}
+                                {targetMode === 'cluster' && selectionStats.count > 0 && <span className="text-[10px] text-gray-400 font-normal">(+{selectionStats.count})</span>}
+                            </span>
+                            <div onClick={(e) => { e.stopPropagation(); setActiveClusterRank((activeClusterRank + 1) % topClusters.length); }} className="flex gap-0.5 p-1 -m-1 cursor-alias hover:scale-110 transition-transform">
+                                {topClusters.map((_, i) => <div key={i} className={`w-1.5 h-1.5 rounded-full ${activeClusterRank === i ? 'bg-[#d04fd7] shadow-[0_0_8px_rgba(208,79,215,0.6)]' : 'bg-gray-600'}`} />)}
+                            </div>
+                        </div>
+                        <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-widest text-[#d04fd7]/80">
+                            <div className="flex items-center gap-1.5"><Activity size={10} /> CLUSTER</div>
+                            <span className="text-gray-500">#{activeClusterRank + 1}</span>
+                        </div>
+                    </div>
+
                     <StatBox label="Zone (km²)" value={Number(totalArea).toFixed(0)} potentialLabel={selectionStats.count > 0 ? `(+${selectionStats.areaKm2.toFixed(1)})` : null} color="emerald" icon={<MapIcon size={12}/>} />
                 </div>
             </div>
@@ -757,15 +815,34 @@ export default function GlobalMapClient({
                     </select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
+               <div className="grid grid-cols-2 gap-2">
                     <ToggleButton isActive={showGrid} onClick={() => setShowGrid(!showGrid)} label="Grille" color="cyan" icon={Grid} />
-                    {/* NOUVEAU BOUTON GRILLE GLOBALE */}
                     <ToggleButton isActive={showGlobalGrid} onClick={() => setShowGlobalGrid(!showGlobalGrid)} label="Monde" color="white" icon={MapIcon} />
                     <ToggleButton isActive={showMaxSquare} onClick={toggleMaxSquare} label="Max Sq." color="yellow" icon={Maximize} />
                     <ToggleButton isActive={showCluster} onClick={toggleCluster} label="Cluster" color="purple" icon={Activity} />
                 </div>
 
+                {/* LES 4 BOUTONS RESTAURÉS ICI */}
+                <div className="grid grid-cols-2 gap-2">
+                    <ToggleButton isActive={showHeatmap} onClick={() => setShowHeatmap(!showHeatmap)} label="Tracés" color="fuchsia" icon={Layers} />
+                    <ToggleButton isActive={showFilling} onClick={toggleFilling} label="Remplissage" color="orange" icon={Crosshair} disabled={isFillingDisabled} />
+                    <ToggleButton isActive={showCore} onClick={() => setShowCore(!showCore)} label="Noyau" color="white" icon={Focus} />
+                    <ToggleButton isActive={dimMap} onClick={() => setDimMap(!dimMap)} label="Immersion" color="cyan" icon={Eye} />
+                </div>
+
                 <div className="bg-black/20 rounded-2xl p-2 border border-white/5 space-y-2">
+                    {/* TOGGLE SÉLECTION MANUELLE */}
+                    <button 
+                        onClick={() => { 
+                            setCustomSquareMode(!customSquareMode); 
+                            if (!customSquareMode) setBlacklistMode(false); // Exclusivité des modes
+                        }}
+                        className={`w-full py-2 mb-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border 
+                            ${customSquareMode ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'}
+                        `}>
+                        <CheckSquare size={14} /> {customSquareMode ? 'Mode Ciblage Manuel Actif' : 'Cibler un Carré Manuel'}
+                    </button>
+
                     <div className="flex bg-black/40 rounded-xl p-1 border border-white/5">
                         <button onClick={() => handleModeSwitch('square')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 ${targetMode === 'square' ? 'bg-yellow-500 text-black shadow-md' : 'text-gray-500 hover:text-white'}`}><Maximize size={12} /> Carré</button>
                         <button onClick={() => handleModeSwitch('cluster')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 ${targetMode === 'cluster' ? 'bg-[#d04fd7] text-white shadow-md' : 'text-gray-500 hover:text-white'}`}><Activity size={12} /> Cluster</button>
@@ -832,6 +909,8 @@ export default function GlobalMapClient({
             blacklistedTilesSet={blacklistedTilesSet}
             toggleBlacklistTile={toggleBlacklistTile} 
             handleBatchBlacklist={handleBatchBlacklist}
+            customSquareMode={customSquareMode}
+            handleManualSquareSelection={handleManualSquareSelection}
         />
 
         {boundsArea && (

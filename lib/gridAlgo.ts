@@ -63,22 +63,23 @@ export function calculateTotalArea(tiles: Set<string>, zoom: number = 14): strin
     return totalAreaKm2.toFixed(2);
 }
 
-// --- 3. CLUSTER ---
-export function findLargestCluster(tilesSet: Set<string>, blacklistSet?: Set<string>): Set<string> {
+// --- 3. CLUSTERS (Top 5) ---
+export function findTopClusters(tilesSet: Set<string>, blacklistSet?: Set<string>, count: number = 5): Set<string>[] {
     const visited = new Set<string>();
-    let maxCluster = new Set<string>();
+    const clusters: Set<string>[] = [];
+    
     const getNeighbors = (key: string) => {
         const [x, y] = key.split(',').map(Number);
         return [`${x + 1},${y}`, `${x - 1},${y}`, `${x},${y + 1}`, `${x},${y - 1}`];
     };
+
     tilesSet.forEach(startTile => {
-        // Optionnel : empêcher le cluster de passer sur une tuile blacklistée si on voulait être strict. 
-        // Mais techniquement, une tuile visitée NE PEUT PAS être blacklistée (règle métier).
         if (!visited.has(startTile)) {
             const currentCluster = new Set<string>();
             const queue = [startTile];
             visited.add(startTile);
             currentCluster.add(startTile);
+            
             while (queue.length > 0) {
                 const tile = queue.pop()!;
                 const neighbors = getNeighbors(tile);
@@ -90,10 +91,35 @@ export function findLargestCluster(tilesSet: Set<string>, blacklistSet?: Set<str
                     }
                 }
             }
-            if (currentCluster.size > maxCluster.size) maxCluster = currentCluster;
+            clusters.push(currentCluster);
         }
     });
-    return maxCluster;
+
+    // Trie par taille décroissante et renvoie le top X
+    return clusters.sort((a, b) => b.size - a.size).slice(0, count);
+}
+
+// --- 5. UTILITAIRE : CIBLAGE MANUEL DE CARRÉ ---
+export function getSquareAt(tilesSet: Set<string>, blacklistSet: Set<string> | undefined, startX: number, startY: number): number {
+    let size = 1;
+    const gridMap = new Map<string, boolean>();
+    tilesSet.forEach(t => gridMap.set(t, true));
+
+    // Si la tuile ciblée n'est pas explorée, impossible de démarrer un carré
+    if (!gridMap.has(`${startX},${startY}`)) return 0;
+
+    while (true) {
+        let allExists = true;
+        for (let i = 0; i <= size; i++) {
+            const key1 = `${startX + size},${startY + i}`;
+            const key2 = `${startX + i},${startY + size}`;
+
+            if (blacklistSet?.has(key1) || !gridMap.has(key1)) { allExists = false; break; }
+            if (blacklistSet?.has(key2) || !gridMap.has(key2)) { allExists = false; break; }
+        }
+        if (allExists) size++; else break;
+    }
+    return size;
 }
 
 // --- 4. SMART TARGETS ---
