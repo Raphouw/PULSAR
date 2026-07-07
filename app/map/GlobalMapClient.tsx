@@ -58,13 +58,12 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 }
 
 
-// --- COMPOSANT : PINCEAU BLACKLIST (Zéro RAM + Tactile) ---
-const MapInteractionHandler = ({ blacklistMode, visitedTilesSet, toggleBlacklistTile }: any) => {
+// --- COMPOSANT : PINCEAU BLACKLIST SYNCHRONE + TACTILE ---
+const MapInteractionHandler = ({ blacklistMode, visitedTilesSet, blacklistedTilesSet, toggleBlacklistTile, handleBatchBlacklist }: any) => {
     const paintedTilesRef = React.useRef<Set<string>>(new Set());
     const map = useMap();
 
     React.useEffect(() => {
-        // Bloque le drag de la carte pour permettre le swipe tactile
         if (blacklistMode) {
             map.dragging.disable();
             map.touchZoom.disable();
@@ -73,14 +72,22 @@ const MapInteractionHandler = ({ blacklistMode, visitedTilesSet, toggleBlacklist
             map.touchZoom.enable();
         }
         
-        const handleMouseUp = () => paintedTilesRef.current.clear();
-        window.addEventListener('mouseup', handleMouseUp);
-        window.addEventListener('touchend', handleMouseUp);
-        return () => {
-            window.removeEventListener('mouseup', handleMouseUp);
-            window.removeEventListener('touchend', handleMouseUp);
+        // Au relâchement du clic ou du doigt : on flush tout vers la BDD d'un coup
+        const handleRelease = () => {
+            if (paintedTilesRef.current.size > 0) {
+                const tilesToFlush = Array.from(paintedTilesRef.current);
+                handleBatchBlacklist(tilesToFlush, 'add');
+                paintedTilesRef.current.clear();
+            }
         };
-    }, [blacklistMode, map]);
+
+        window.addEventListener('mouseup', handleRelease);
+        window.addEventListener('touchend', handleRelease);
+        return () => {
+            window.removeEventListener('mouseup', handleRelease);
+            window.removeEventListener('touchend', handleRelease);
+        };
+    }, [blacklistMode, map, handleBatchBlacklist]);
 
     useMapEvents({
         click(e) {
@@ -92,23 +99,22 @@ const MapInteractionHandler = ({ blacklistMode, visitedTilesSet, toggleBlacklist
         },
         mousemove(e) {
             if (!blacklistMode) return;
-            
-            // Typage "vibe coding" pour esquiver l'erreur TS
+
             const original = e.originalEvent as any;
-            
-            // On vérifie de façon sécurisée si on a un clic souris ou un glissement tactile
             const isTouch = original.touches && original.touches.length > 0;
             const isMouse = original.buttons === 1;
-            const isPainting = isMouse || isTouch;
             
-            if (isPainting) {
+            if (isMouse || isTouch) {
                 const x = lon2tile(e.latlng.lng, 14);
                 const y = lat2tile(e.latlng.lat, 14);
                 const tileKey = `${x},${y}`;
                 
-                if (!visitedTilesSet.has(tileKey) && !paintedTilesRef.current.has(tileKey)) {
+                // On vérifie qu'on ne l'a pas déjà peinte localement pour économiser les re-renders
+                if (!visitedTilesSet.has(tileKey) && !blacklistedTilesSet.has(tileKey) && !paintedTilesRef.current.has(tileKey)) {
                     paintedTilesRef.current.add(tileKey); 
-                    toggleBlacklistTile(tileKey, null, true); 
+                    
+                    // Retour visuel immédiat en modifiant l'état local synchrone
+                    toggleBlacklistTile(tileKey, null, true);
                 }
             }
         }
@@ -213,24 +219,42 @@ export default function GlobalMapClient({
   };
 
   // --- ACTIONS BLACKLIST API ---
-  // --- ACTIONS BLACKLIST API ---
+  const handleBatchBlacklist = async (tileKeys: string[], action: 'add' | 'delete') => {
+    if (!tileKeys || tileKeys.length === 0) return;
+
+    // 1. Mise à jour d'état synchrone instantanée pour l'UI
+    setBlacklistedTilesSet(prev => {
+        const next = new Set(prev);
+        tileKeys.forEach(key => {
+            if (action === 'add') next.add(key);
+            else next.delete(key);
+        });
+        return next;
+    });
+
+    // 2. Envoi groupé en arrière-plan vers Supabase (Bulk)
+    try {
+        if (action === 'add') {
+            const inserts = tileKeys.map(key => ({ user_id: userId, tile_key: key }));
+            await supabase.from('blacklisted_tiles').insert(inserts);
+        } else {
+            await supabase.from('blacklisted_tiles').delete().eq('user_id', userId).in('tile_key', tileKeys);
+        }
+    } catch (err) {
+        console.error("❌ Erreur de synchronisation Blacklist:", err);
+    }
+  };
+
+  // --- VERSION UNITAIRE MISE À JOUR (POUR LE CLIC SOLO) ---
   const toggleBlacklistTile = async (tileKey: string, e?: any, forceAdd: boolean = false) => {
     if (e && e.stopPropagation) e.stopPropagation();
     
-    // Si on peint et que la tuile est déjà blacklistée, on ignore (évite les clignotements)
-    if (forceAdd && blacklistedTilesSet.has(tileKey)) return;
-
-    const newSet = new Set(blacklistedTilesSet);
-    const isBlacklisted = newSet.has(tileKey);
-
+    const isBlacklisted = blacklistedTilesSet.has(tileKey);
     if (isBlacklisted && !forceAdd) {
-        newSet.delete(tileKey);
-        await supabase.from('blacklisted_tiles').delete().match({ user_id: userId, tile_key: tileKey });
+        await handleBatchBlacklist([tileKey], 'delete');
     } else if (!isBlacklisted) {
-        newSet.add(tileKey);
-        await supabase.from('blacklisted_tiles').insert([{ user_id: userId, tile_key: tileKey }]);
+        await handleBatchBlacklist([tileKey], 'add');
     }
-    setBlacklistedTilesSet(newSet);
   };
 
   // --- PROCESSING ---
@@ -583,8 +607,10 @@ export default function GlobalMapClient({
           key={tileKey} 
           bounds={bounds} 
           pathOptions={{ color, weight, opacity, fillColor: color, fillOpacity, className }}
-          interactive={!isGlobalGridOnly} // On ignore les clics sur la grille vide
-          eventHandlers={{ click: () => handleTileInteraction(tileKey, isVisited, bounds) }}
+          interactive={true} // Rendu cliquable pour TOUTES les tuiles, même de fond
+          eventHandlers={{
+            click: () => handleTileInteraction(tileKey, isVisited, bounds)
+          }}
         />
       );
     });
@@ -803,7 +829,9 @@ export default function GlobalMapClient({
         <MapInteractionHandler 
             blacklistMode={blacklistMode} 
             visitedTilesSet={visitedTilesSet} 
+            blacklistedTilesSet={blacklistedTilesSet}
             toggleBlacklistTile={toggleBlacklistTile} 
+            handleBatchBlacklist={handleBatchBlacklist}
         />
 
         {boundsArea && (
@@ -847,10 +875,17 @@ export default function GlobalMapClient({
                         <div className="flex flex-col gap-3 mt-1">
                             <div className="flex items-center justify-between">
                                 <span className="text-xs text-gray-400">Statut</span>
-                                <span className="text-xs font-semibold text-gray-500">Non explorée</span>
+                                {blacklistedTilesSet.has(activeTilePopup.key) ? (
+                                    <span className="text-xs font-semibold text-red-400 bg-red-500/10 px-2.5 py-0.5 rounded-full">Bloquée</span>
+                                ) : (
+                                    <span className="text-xs font-semibold text-gray-500">Non explorée</span>
+                                )}
                             </div>
                             <button 
-                                onClick={(e) => { toggleBlacklistTile(activeTilePopup.key, e); setActiveTilePopup(null); }} 
+                                onClick={(e) => { 
+                                    toggleBlacklistTile(activeTilePopup.key, e); 
+                                    setActiveTilePopup(null); 
+                                }} 
                                 className={`w-full py-2 rounded-xl transition-all text-xs font-semibold tracking-wide ${
                                     blacklistedTilesSet.has(activeTilePopup.key) 
                                     ? 'bg-white/10 text-white hover:bg-white/20 border border-white/10' 
