@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { getTilesFromPolyline, getTileBounds, lon2tile, lat2tile, getTilesInBounds } from '../../lib/mapUtils';
-import { calculateMaxSquare, getSquareTiles, calculateTotalArea, findTopClusters, getFutureTargets, getSquareAt } from '../../lib/gridAlgo';
+import { calculateMaxSquare, getSquareTiles, calculateTotalArea, findTopClusters, getFutureTargets, getSquareAt, getValidDiagonalTargets } from '../../lib/gridAlgo';
 import { Layers, Maximize, Eye, Grid, Activity, Target, Map as MapIcon, CheckSquare, Calendar, Focus, Crosshair, ArrowRightLeft, MoveVertical, Scan, ArrowUpRight, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
 import { useMap, useMapEvents } from 'react-leaflet';
 import { LatLngBoundsExpression, LatLngTuple } from 'leaflet';
@@ -64,7 +64,7 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 const MapInteractionHandler = ({ 
     blacklistMode, manualSquareStep, manualStartTile, setManualSquareStep, setManualStartTile, 
     setCustomTargetSquare, setTargetMode, setShowTargets,
-    visitedTilesSet, blacklistedTilesSet, toggleBlacklistTile, handleBatchBlacklist 
+    visitedTilesSet, blacklistedTilesSet, toggleBlacklistTile, handleBatchBlacklist,setManualError
 }: any) => {
     const paintedTilesRef = React.useRef<Set<string>>(new Set());
     const map = useMap();
@@ -111,7 +111,6 @@ const MapInteractionHandler = ({
                 const dx = Math.abs(x - manualStartTile.x);
                 const dy = Math.abs(y - manualStartTile.y);
 
-                // Est-ce un carré parfait d'au moins 2x2 (dx > 0) ?
                 if (dx === dy && dx > 0) {
                     const topLeftX = Math.min(x, manualStartTile.x);
                     const topLeftY = Math.min(y, manualStartTile.y);
@@ -120,7 +119,6 @@ const MapInteractionHandler = ({
                     let isValid = true;
                     const sqTiles: string[] = [];
 
-                    // Scan d'intégrité
                     for (let i = 0; i < size; i++) {
                         for (let j = 0; j < size; j++) {
                             const checkKey = `${topLeftX + i},${topLeftY + j}`;
@@ -132,19 +130,20 @@ const MapInteractionHandler = ({
                     }
 
                     if (isValid) {
-                        setCustomTargetSquare({
-                            maxSquare: size,
-                            topLeft: { x: topLeftX, y: topLeftY, key: `${topLeftX},${topLeftY}` },
-                            tilesSet: new Set(sqTiles)
-                        });
+                        setCustomTargetSquare({ maxSquare: size, topLeft: { x: topLeftX, y: topLeftY, key: `${topLeftX},${topLeftY}` }, tilesSet: new Set(sqTiles) });
                         setTargetMode('square');
                         setShowTargets(true);
+                        setManualSquareStep('off');
+                        setManualStartTile(null);
+                        setManualError(null);
+                        return;
                     }
                 }
-                // Validation ou échec, on reset la mécanique de sélection
-                setManualSquareStep('off');
-                setManualStartTile(null);
-                return;
+                
+                // SI ON ARRIVE ICI, C'EST UN ECHEC (Pas un carré parfait, ou tuiles manquantes)
+                setManualError("Diagonale invalide ou zone incomplète.");
+                setTimeout(() => setManualError(null), 3000);
+                return; // On maintient l'état 'select-end' !
             }
 
             // PRIORITÉ 2 : BLACKLIST CLASSIQUE
@@ -255,6 +254,7 @@ export default function GlobalMapClient({
   const [manualStartTile, setManualStartTile] = useState<{x: number, y: number} | null>(null);
   const [customTargetSquare, setCustomTargetSquare] = useState<{topLeft: any, maxSquare: number, tilesSet: Set<string>} | null>(null);
   const [customSquareMode, setCustomSquareMode] = useState(false);
+  const [manualError, setManualError] = useState<string | null>(null); 
 
 
 
@@ -659,7 +659,13 @@ export default function GlobalMapClient({
       };
   }, [showFilling, showTargets, activeTargetLevels, fillingTilesSet, squareTargetsMap, clusterTargetsMap, targetMode, currentMaxSquare]);
 
-  // --- RENDU RECTANGLES ---
+  const validDiagonalTargetsSet = useMemo(() => {
+      if (manualSquareStep === 'select-end' && manualStartTile) {
+          const targets = getValidDiagonalTargets(visitedTilesSet, blacklistedTilesSet, manualStartTile.x, manualStartTile.y);
+          return new Set(targets.map(t => `${t.x},${t.y}`));
+      }
+      return new Set<string>();
+    }, [manualSquareStep, manualStartTile, visitedTilesSet, blacklistedTilesSet]);
   // --- RENDU RECTANGLES ---
   const gridRectangles = useMemo(() => {
     const ZOOM = 14;
@@ -689,7 +695,8 @@ export default function GlobalMapClient({
       const bounds = getTileBounds(x, y, ZOOM);
       
       const isMaxSquare = isVisited && showMaxSquare && effectiveSquare?.tilesSet.has(tileKey); // CORRECTION ICI
-      const isManualStart = manualSquareStep === 'select-end' && manualStartTile?.x === x && manualStartTile?.y === y; // NOUVEAU
+      const isManualStart = manualSquareStep === 'select-end' && manualStartTile?.x === x && manualStartTile?.y === y;
+      const isPossibleTarget = manualSquareStep === 'select-end' && validDiagonalTargetsSet.has(tileKey); // <-- NOUVEAU
       const isCluster = isVisited && showCluster && !isMaxSquare && clusterSet.has(tileKey);
       
       let color = '#00f3ff', weight = 1, className = 'tile-base', fillOpacity = 0.12, opacity = 0.4;
@@ -697,9 +704,11 @@ export default function GlobalMapClient({
       if (isBlacklisted) {
           color = '#000000'; weight = 1; className = 'tile-blacklisted'; fillOpacity = 0.6; opacity = 0.8;
       }
-      // NOUVEAU BLOC :
       else if (isManualStart) {
           color = '#39ff14'; weight = 2; className = 'tile-manual-start'; fillOpacity = 0.5; opacity = 1;
+      }
+      else if (isPossibleTarget) {
+          color = '#eab308'; weight = 2; className = 'tile-possible-target'; fillOpacity = 0.3; opacity = 1;
       }
       else if (isGlobalGridOnly) {
           // Style grille de fond
@@ -801,6 +810,11 @@ export default function GlobalMapClient({
             color: #d04fd7 !important;
             background: transparent !important;
         }
+
+        .tile-manual-start { stroke: #39ff14 !important; stroke-dasharray: 4 4; animation: flash-green 1s infinite alternate; z-index: 400 !important; }
+        .tile-possible-target { stroke: #eab308 !important; fill: #eab308 !important; stroke-dasharray: 4 4; fill-opacity: 0.3 !important; animation: pulse-yellow 1.5s infinite alternate; cursor: crosshair; }
+        @keyframes flash-green { from { fill-opacity: 0.3; stroke-opacity: 0.8; } to { fill-opacity: 0.6; stroke-opacity: 1; } }
+        @keyframes pulse-yellow { from { fill-opacity: 0.1; } to { fill-opacity: 0.4; } }
 
         @keyframes pulse-gold { from { fill-opacity: 0.4; stroke-opacity: 0.8; } to { fill-opacity: 0.7; stroke-opacity: 1; } }
         @keyframes breathe-purple { 0%, 100% { fill-opacity: 0.2; } 50% { fill-opacity: 0.4; } }
@@ -915,8 +929,8 @@ export default function GlobalMapClient({
                 <div className="bg-black/20 rounded-2xl p-2 border border-white/5 space-y-2">
                     {/* TOGGLE SÉLECTION MANUELLE */}
                     {manualSquareStep !== 'off' && (
-                        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[9px] uppercase font-bold p-1.5 rounded-lg mb-2 text-center animate-pulse tracking-wide">
-                            {manualSquareStep === 'select-start' ? "Sélectionnez un premier coin" : "Sélectionnez le coin opposé"}
+                        <div className={`text-[9px] uppercase font-bold p-1.5 rounded-lg mb-2 text-center animate-pulse tracking-wide border ${manualError ? 'bg-red-500/10 border-red-500/30 text-red-400' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
+                            {manualError ? manualError : (manualSquareStep === 'select-start' ? "Sélectionnez un premier coin" : "Sélectionnez une case jaune")}
                         </div>
                     )}
                     <button 
@@ -1008,6 +1022,7 @@ export default function GlobalMapClient({
             blacklistedTilesSet={blacklistedTilesSet}
             toggleBlacklistTile={toggleBlacklistTile} 
             handleBatchBlacklist={handleBatchBlacklist}
+            setManualError={setManualError}
         />
 
         {boundsArea && (
@@ -1029,6 +1044,7 @@ export default function GlobalMapClient({
                 position={[(activeTilePopup.bounds as any)[0][0], (activeTilePopup.bounds as any)[0][1]]} 
                 eventHandlers={{ remove: () => setActiveTilePopup(null) }}
                 className="custom-dark-popup"
+                autoPan={false}
             >
                 <div className="flex flex-col gap-3 min-w-[170px]">
                     <div className="flex items-center justify-between border-b border-white/10 pb-2">

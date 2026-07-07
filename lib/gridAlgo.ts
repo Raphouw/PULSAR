@@ -137,15 +137,56 @@ function getExpansionCost(tilesSet: Set<string>, blacklistSet: Set<string>, newT
     return missingCount;
 }
 
-function getMissingTilesForConfig(tilesSet: Set<string>, newTopLeftX: number, newTopLeftY: number, newSize: number): string[] {
-    const missing: string[] = [];
+function getMissingTilesForConfig(oldTLX: number, oldTLY: number, oldSize: number, newTLX: number, newTLY: number, newSize: number): string[] {
+    const added: string[] = [];
     for (let dx = 0; dx < newSize; dx++) {
         for (let dy = 0; dy < newSize; dy++) {
-            const key = `${newTopLeftX + dx},${newTopLeftY + dy}`;
-            if (!tilesSet.has(key)) missing.push(key);
+            const nx = newTLX + dx;
+            const ny = newTLY + dy;
+            // Si la tuile est en dehors de l'ancien carré, c'est une tuile d'extension
+            if (nx < oldTLX || nx >= oldTLX + oldSize || ny < oldTLY || ny >= oldTLY + oldSize) {
+                added.push(`${nx},${ny}`);
+            }
         }
     }
-    return missing;
+    return added;
+}
+
+
+
+
+export function getValidDiagonalTargets(
+    tilesSet: Set<string>, 
+    blacklistSet: Set<string> | undefined, 
+    startX: number, 
+    startY: number, 
+    maxSearchSize: number = 15
+): {x: number, y: number}[] {
+    const targets: {x: number, y: number}[] = [];
+    const directions = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+
+    for (let size = 2; size <= maxSearchSize; size++) {
+        for (const [dx, dy] of directions) {
+            const endX = startX + (size - 1) * dx;
+            const endY = startY + (size - 1) * dy;
+            const topLeftX = Math.min(startX, endX);
+            const topLeftY = Math.min(startY, endY);
+
+            let isValid = true;
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    const key = `${topLeftX + i},${topLeftY + j}`;
+                    if (!tilesSet.has(key) || blacklistSet?.has(key)) {
+                        isValid = false;
+                        break;
+                    }
+                }
+                if (!isValid) break;
+            }
+            if (isValid) targets.push({ x: endX, y: endY });
+        }
+    }
+    return targets;
 }
 
 export function getFutureTargets(tilesSet: Set<string>, blacklistSet: Set<string>, topLeft: TileCoord | null, currentSize: number, depth: number = 10): Map<string, number> {
@@ -165,22 +206,21 @@ export function getFutureTargets(tilesSet: Set<string>, blacklistSet: Set<string
         const costTL = getExpansionCost(tilesSet, blacklistSet, virtualTLX - 1, virtualTLY - 1, nextSize);
 
         const minCost = Math.min(costBR, costBL, costTR, costTL);
-        
-        // Si toutes les directions sont bloquées (Infinity), on arrête l'expansion
         if (minCost === Infinity) break;
 
         let bestMissingTiles: string[] = [];
 
+        // On passe les coordonnées de l'ANCIEN carré et du NOUVEAU carré pour déduire la différence exacte
         if (costBR === minCost) {
-            bestMissingTiles = getMissingTilesForConfig(tilesSet, virtualTLX, virtualTLY, nextSize);
+            bestMissingTiles = getMissingTilesForConfig(virtualTLX, virtualTLY, virtualSize, virtualTLX, virtualTLY, nextSize);
         } else if (costBL === minCost) {
-            bestMissingTiles = getMissingTilesForConfig(tilesSet, virtualTLX - 1, virtualTLY, nextSize);
+            bestMissingTiles = getMissingTilesForConfig(virtualTLX, virtualTLY, virtualSize, virtualTLX - 1, virtualTLY, nextSize);
             virtualTLX -= 1;
         } else if (costTR === minCost) {
-            bestMissingTiles = getMissingTilesForConfig(tilesSet, virtualTLX, virtualTLY - 1, nextSize);
+            bestMissingTiles = getMissingTilesForConfig(virtualTLX, virtualTLY, virtualSize, virtualTLX, virtualTLY - 1, nextSize);
             virtualTLY -= 1;
         } else {
-            bestMissingTiles = getMissingTilesForConfig(tilesSet, virtualTLX - 1, virtualTLY - 1, nextSize);
+            bestMissingTiles = getMissingTilesForConfig(virtualTLX, virtualTLY, virtualSize, virtualTLX - 1, virtualTLY - 1, nextSize);
             virtualTLX -= 1;
             virtualTLY -= 1;
         }
