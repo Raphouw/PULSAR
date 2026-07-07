@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { getTilesFromPolyline, getTileBounds, lon2tile, lat2tile } from '../../lib/mapUtils';
+import { getTilesFromPolyline, getTileBounds, lon2tile, lat2tile, getTilesInBounds } from '../../lib/mapUtils';
 import { calculateMaxSquare, getSquareTiles, calculateTotalArea, findLargestCluster, getFutureTargets } from '../../lib/gridAlgo';
 import { Layers, Maximize, Eye, Grid, Activity, Target, Map as MapIcon, CheckSquare, Calendar, Focus, Crosshair, ArrowRightLeft, MoveVertical, Scan, ArrowUpRight, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
 import { useMap, useMapEvents } from 'react-leaflet';
@@ -58,16 +58,29 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 }
 
 
-// --- COMPOSANT : PINCEAU BLACKLIST (Zéro RAM) ---
+// --- COMPOSANT : PINCEAU BLACKLIST (Zéro RAM + Tactile) ---
 const MapInteractionHandler = ({ blacklistMode, visitedTilesSet, toggleBlacklistTile }: any) => {
-    // Un ref local pour éviter de spammer Supabase quand on "peint" en glissant la souris
     const paintedTilesRef = React.useRef<Set<string>>(new Set());
+    const map = useMap();
 
     React.useEffect(() => {
+        // Bloque le drag de la carte pour permettre le swipe tactile
+        if (blacklistMode) {
+            map.dragging.disable();
+            map.touchZoom.disable();
+        } else {
+            map.dragging.enable();
+            map.touchZoom.enable();
+        }
+        
         const handleMouseUp = () => paintedTilesRef.current.clear();
         window.addEventListener('mouseup', handleMouseUp);
-        return () => window.removeEventListener('mouseup', handleMouseUp);
-    }, []);
+        window.addEventListener('touchend', handleMouseUp);
+        return () => {
+            window.removeEventListener('mouseup', handleMouseUp);
+            window.removeEventListener('touchend', handleMouseUp);
+        };
+    }, [blacklistMode, map]);
 
     useMapEvents({
         click(e) {
@@ -79,20 +92,41 @@ const MapInteractionHandler = ({ blacklistMode, visitedTilesSet, toggleBlacklist
         },
         mousemove(e) {
             if (!blacklistMode) return;
-            // originalEvent.buttons === 1 signifie que le clic gauche est maintenu (Effet Pinceau)
-            if (e.originalEvent.buttons === 1) {
+            
+            // Typage "vibe coding" pour esquiver l'erreur TS
+            const original = e.originalEvent as any;
+            
+            // On vérifie de façon sécurisée si on a un clic souris ou un glissement tactile
+            const isTouch = original.touches && original.touches.length > 0;
+            const isMouse = original.buttons === 1;
+            const isPainting = isMouse || isTouch;
+            
+            if (isPainting) {
                 const x = lon2tile(e.latlng.lng, 14);
                 const y = lat2tile(e.latlng.lat, 14);
                 const tileKey = `${x},${y}`;
                 
-                // On vérifie qu'on ne l'a pas déjà peinte dans ce coup de pinceau pour protéger la BDD
                 if (!visitedTilesSet.has(tileKey) && !paintedTilesRef.current.has(tileKey)) {
                     paintedTilesRef.current.add(tileKey); 
-                    toggleBlacklistTile(tileKey, null, true); // forceAdd = true
+                    toggleBlacklistTile(tileKey, null, true); 
                 }
             }
         }
     });
+    return null;
+};
+
+// --- COMPOSANT : TRACKER DE VUE (Score & Grille Globale) ---
+const ViewportTracker = ({ onBoundsChange }: { onBoundsChange: (bounds: any) => void }) => {
+    const map = useMapEvents({
+        moveend: () => onBoundsChange(map.getBounds()),
+        zoomend: () => onBoundsChange(map.getBounds()),
+    });
+    
+    React.useEffect(() => {
+        onBoundsChange(map.getBounds());
+    }, [map, onBoundsChange]);
+    
     return null;
 };
 
@@ -158,6 +192,14 @@ export default function GlobalMapClient({
   const [activeTargetLevels, setActiveTargetLevels] = useState<Set<number>>(new Set([1]));
   const [blacklistMode, setBlacklistMode] = useState(false);
   const [blacklistedTilesSet, setBlacklistedTilesSet] = useState<Set<string>>(new Set(initialBlacklist));
+
+    // -- ETAT GRILLE GLOBALE & SCORE --
+  const [showGlobalGrid, setShowGlobalGrid] = useState(false);
+  const [viewportTiles, setViewportTiles] = useState<string[]>([]);
+  const [viewportScore, setViewportScore] = useState<number>(0);
+
+  // -- CALCUL DYNAMIQUE DU SCORE (À placer juste avant le useMemo des "gridRectangles") --
+
 
   // -- ETAT ZOOM & POPUP --
   const [zoomTarget, setZoomTarget] = useState<{ bounds: LatLngBoundsExpression, id: number } | null>(null);
@@ -361,6 +403,22 @@ export default function GlobalMapClient({
     };
   }, [filteredActivities, activeSquareRank, blacklistedTilesSet]);
 
+    const handleViewportChange = React.useCallback((bounds: any) => {
+      const currentTiles = getTilesInBounds(bounds, 14);
+      setViewportTiles(currentTiles);
+      
+      if (currentTiles.length > 0) {
+          let exploredCount = 0;
+          currentTiles.forEach(t => {
+              if (visitedTilesSet.has(t)) exploredCount++;
+          });
+          setViewportScore((exploredCount / currentTiles.length) * 100);
+      } else {
+          setViewportScore(0);
+      }
+  }, [visitedTilesSet]);
+
+
   const currentMaxSquare = topSquares[activeSquareRank] || topSquares[0];
 
   // --- HANDLERS ---
@@ -464,6 +522,7 @@ export default function GlobalMapClient({
   }, [showFilling, showTargets, activeTargetLevels, fillingTilesSet, squareTargetsMap, clusterTargetsMap, targetMode, currentMaxSquare]);
 
   // --- RENDU RECTANGLES ---
+  // --- RENDU RECTANGLES ---
   const gridRectangles = useMemo(() => {
     const ZOOM = 14;
     const currentTargetsMap = targetMode === 'square' ? squareTargetsMap : clusterTargetsMap;
@@ -472,20 +531,21 @@ export default function GlobalMapClient({
         ...Array.from(visitedTilesSet), 
         ...Array.from(currentTargetsMap.keys()),
         ...(showFilling && targetMode === 'cluster' ? Array.from(fillingTilesSet) : []),
-        ...Array.from(blacklistedTilesSet)
+        ...Array.from(blacklistedTilesSet),
+        ...(showGlobalGrid ? viewportTiles : []) // Ajout des tuiles globales
     ]);
 
     return Array.from(allKeysToRender).map(tileKey => {
       const isVisited = visitedTilesSet.has(tileKey);
       const isBlacklisted = blacklistedTilesSet.has(tileKey);
       const isCore = showCore && coreTilesSet.has(tileKey);
-      
       const targetLevel = currentTargetsMap.get(tileKey);
       const isTargetVisible = showTargets && targetLevel !== undefined && activeTargetLevels.has(targetLevel!);
       const isFilling = showFilling && fillingTilesSet.has(tileKey) && targetMode === 'cluster';
+      const isGlobalGridOnly = showGlobalGrid && !isVisited && !isTargetVisible && !isFilling && !isBlacklisted;
 
       // On bloque l'affichage si ce n'est rien de tout ça
-      if ((!isVisited || !showGrid) && !isTargetVisible && !isFilling && !isBlacklisted) return null;
+      if ((!isVisited || !showGrid) && !isTargetVisible && !isFilling && !isBlacklisted && !isGlobalGridOnly) return null;
 
       const [x, y] = tileKey.split(',').map(Number);
       const bounds = getTileBounds(x, y, ZOOM);
@@ -496,7 +556,12 @@ export default function GlobalMapClient({
       let color = '#00f3ff', weight = 1, className = 'tile-base', fillOpacity = 0.12, opacity = 0.4;
 
       if (isBlacklisted) {
-          color = '#ff0055'; weight = 2; className = 'tile-blacklisted'; fillOpacity = 0.3; opacity = 0.8;
+          // Nouveau style discret
+          color = '#000000'; weight = 1; className = 'tile-blacklisted'; fillOpacity = 0.6; opacity = 0.8;
+      }
+      else if (isGlobalGridOnly) {
+          // Style grille de fond
+          color = '#ffffff'; weight = 1; className = 'tile-global-grid'; fillOpacity = 0.02; opacity = 0.15;
       }
       else if (isFilling) {
           color = '#f97316'; weight = 2; className = 'tile-glitch'; fillOpacity = 0.4; opacity = 1;
@@ -518,14 +583,12 @@ export default function GlobalMapClient({
           key={tileKey} 
           bounds={bounds} 
           pathOptions={{ color, weight, opacity, fillColor: color, fillOpacity, className }}
-          eventHandlers={{
-            // On garde juste le clic pour le popup
-            click: () => handleTileInteraction(tileKey, isVisited, bounds)
-          }}
+          interactive={!isGlobalGridOnly} // On ignore les clics sur la grille vide
+          eventHandlers={{ click: () => handleTileInteraction(tileKey, isVisited, bounds) }}
         />
       );
     });
-  }, [visitedTilesSet, blacklistedTilesSet, squareTargetsMap, clusterTargetsMap, fillingTilesSet, coreTilesSet, showGrid, showMaxSquare, showCluster, showFilling, showCore, showTargets, activeTargetLevels, targetMode, currentMaxSquare, blacklistMode]);
+  }, [visitedTilesSet, blacklistedTilesSet, squareTargetsMap, clusterTargetsMap, fillingTilesSet, coreTilesSet, showGrid, showMaxSquare, showCluster, showFilling, showCore, showTargets, activeTargetLevels, targetMode, currentMaxSquare, blacklistMode, showGlobalGrid, viewportTiles]);
 
   if (!isMounted) return <div className="h-screen bg-[#050505] flex items-center justify-center text-[#d04fd7] animate-pulse font-sans tracking-widest text-xl">Chargement de la map ..</div>;
 
@@ -538,7 +601,23 @@ export default function GlobalMapClient({
         .dimmed-mode .leaflet-tile-pane { filter: brightness(0.6) contrast(1.2) grayscale(0.8) invert(1) hue-rotate(180deg); }
         .tile-base { transition: all 0.2s; }
         .tile-base:hover { fill-opacity: 0.5 !important; stroke: #fff !important; stroke-width: 2px !important; }
-        .tile-blacklisted { animation: hatch-red 2s linear infinite; stroke-dasharray: 4; }
+        /* Remplacement du rouge par un noir translucide propre */
+        .tile-blacklisted { stroke: rgba(255, 60, 60, 0.4) !important; stroke-width: 1px !important; fill: #000 !important; stroke-dasharray: none; }
+        .tile-global-grid { stroke: rgba(255, 255, 255, 0.15) !important; stroke-width: 1px !important; fill: #fff !important; pointer-events: none; }
+        
+        /* Glassmorphism Popup */
+        .custom-dark-popup .leaflet-popup-content-wrapper {
+            background: rgba(18, 18, 23, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 1rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+            padding: 0;
+        }
+        .custom-dark-popup .leaflet-popup-content { margin: 0; padding: 1.25rem; font-family: ui-sans-serif, system-ui, sans-serif; }
+        .custom-dark-popup .leaflet-popup-tip { background: rgba(18, 18, 23, 0.85); border-bottom: 1px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.08); backdrop-filter: blur(16px); }
         .tile-max-square { animation: pulse-gold 3s infinite alternate; z-index: 50; }
         .tile-cluster { animation: breathe-purple 5s ease-in-out infinite; }
         .tile-target-urgent { animation: flash-red 1s infinite alternate; }
@@ -585,57 +664,68 @@ export default function GlobalMapClient({
         @keyframes hatch-red { 0% { fill-opacity: 0.3; stroke-opacity: 0.6; } 50% { fill-opacity: 0.5; stroke-opacity: 1; } 100% { fill-opacity: 0.3; stroke-opacity: 0.6; } }
       `}</style>
 
-      {/* --- HUD RESPONSIVE --- */}
-      <div className={`absolute z-[1000] flex flex-col gap-2 transition-all duration-300 ease-in-out 
-          md:top-4 md:left-4 md:w-[280px] md:bottom-auto md:translate-y-0
-          left-2 right-2 bottom-4 w-auto ${hudOpen ? 'translate-y-0' : 'translate-y-[85%] md:translate-y-0'}
-          max-h-[calc(100vh-2rem)] pointer-events-none`}>
+      {/* --- HUD RESPONSIVE : FLOATING ISLANDS & BOTTOM DRAWER --- */}
+      <div className={`absolute z-[1000] flex flex-col gap-4 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]
+          md:top-6 md:left-6 md:w-[320px] md:bottom-auto md:translate-y-0
+          left-0 right-0 bottom-0 w-full ${hudOpen ? 'translate-y-0' : 'translate-y-[calc(100%-40px)] md:translate-y-0'}
+          max-h-[calc(100vh-2rem)] md:pointer-events-none`}>
         
-        {/* Mobile Toggle Button */}
-        <button onClick={() => setHudOpen(!hudOpen)} className="md:hidden mx-auto bg-[#121217] text-white p-1 rounded-t-xl border-t border-x border-white/10 shadow-lg pointer-events-auto">
-            {hudOpen ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
-        </button>
+        {/* Mobile Swipe Handle */}
+        <div 
+            onClick={() => setHudOpen(!hudOpen)} 
+            className="md:hidden w-full flex justify-center pb-3 pt-5 bg-gradient-to-t from-[#121217]/90 to-transparent pointer-events-auto cursor-pointer"
+        >
+            <div className="w-12 h-1.5 bg-white/30 rounded-full shadow-lg"></div>
+        </div>
 
-        <div className="overflow-y-auto no-scrollbar pointer-events-none space-y-2 pb-4">
-            {/* PANEL 1 : STATS */}
-            <div className="bg-[#121217]/90 backdrop-blur-xl border border-white/10 p-3 rounded-2xl shadow-2xl pointer-events-auto transition-all">
-                <div className="flex items-center gap-3 mb-2">
-                    <div className="p-1.5 rounded-lg bg-[#d04fd7]/10 border border-[#d04fd7]/30 text-[#d04fd7]">
-                        <Grid size={16} />
+        <div className="overflow-y-auto no-scrollbar pointer-events-none space-y-4 px-4 md:px-0 pb-6 md:pb-0">
+            
+            {/* PANEL 1 : STATS & SCORE */}
+            <div className="bg-[#121217]/70 backdrop-blur-2xl border border-white/10 p-4 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto transition-all">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 rounded-xl bg-[#d04fd7]/10 border border-[#d04fd7]/20 text-[#d04fd7]">
+                            <Grid size={18} />
+                        </div>
+                        <h2 className="text-sm font-semibold text-white tracking-wide">PULSAR STATS</h2>
                     </div>
-                    <div><h2 className="text-sm font-bold text-white tracking-wide leading-none">HEATMAP</h2></div>
+                    {/* LE SCORE DE LA ZONE ICI */}
+                    <div className="flex flex-col items-end">
+                        <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Score Zone</span>
+                        <span className="text-sm font-black text-[#00f3ff]">{viewportScore.toFixed(1)}%</span>
+                    </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
-                    <StatBox label="Carrés" value={visitedTilesSet.size} potentialLabel={selectionStats.count > 0 ? `(+${selectionStats.count})` : null} color="cyan" icon={<CheckSquare size={12}/>} />
+                    <StatBox label="Exploration" value={visitedTilesSet.size} potentialLabel={selectionStats.count > 0 ? `(+${selectionStats.count})` : null} color="cyan" icon={<CheckSquare size={12}/>} />
                     
                     {/* Max Square */}
-                    <div onClick={() => currentMaxSquareBounds && triggerZoom(currentMaxSquareBounds)} className="bg-[#1a1a20] p-2 rounded-xl border border-yellow-500/10 flex flex-col justify-between h-[50px] cursor-pointer hover:bg-[#202028] transition-colors group relative">
-                        <div className="text-base font-bold tabular-nums leading-none tracking-tight text-white flex justify-between items-center">
+                    <div onClick={() => currentMaxSquareBounds && triggerZoom(currentMaxSquareBounds)} className="bg-white/5 p-2.5 rounded-2xl border border-yellow-500/10 flex flex-col justify-between h-[55px] cursor-pointer hover:bg-white/10 transition-colors group relative">
+                        <div className="text-[15px] font-black tabular-nums leading-none tracking-tight text-white flex justify-between items-center">
                             <span className="flex items-center gap-1">
                                 {currentMaxSquare?.maxSquare || 0}x{currentMaxSquare?.maxSquare || 0}
-                                {targetMode === 'square' && selectionStats.count > 0 && <span className="text-[10px] text-gray-400 font-normal">({selectionStats.potentialMaxSqSize}x{selectionStats.potentialMaxSqSize})</span>}
+                                {targetMode === 'square' && selectionStats.count > 0 && <span className="text-[10px] text-gray-400 font-normal">({selectionStats.potentialMaxSqSize}²)</span>}
                             </span>
-                            <div onClick={cycleSquareRank} className="flex gap-0.5 p-1 -m-1 cursor-alias hover:scale-110 transition-transform" title="Changer de carré (1, 2, 3, 4, 5)">
-                                {[0,1,2,3,4].map(i => <div key={i} className={`w-1.5 h-1.5 rounded-full ${activeSquareRank === i ? 'bg-yellow-500' : 'bg-gray-700'}`} />)}
+                            <div onClick={cycleSquareRank} className="flex gap-0.5 p-1 -m-1 cursor-alias hover:scale-110 transition-transform">
+                                {[0,1,2,3,4].map(i => <div key={i} className={`w-1.5 h-1.5 rounded-full ${activeSquareRank === i ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]' : 'bg-gray-600'}`} />)}
                             </div>
                         </div>
-                        <div className="flex items-center justify-between text-[8px] font-bold uppercase tracking-wide text-yellow-400">
-                            <div className="flex items-center gap-1.5"><Maximize size={12} /> MAX SQ.</div>
+                        <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-widest text-yellow-500/80">
+                            <div className="flex items-center gap-1.5"><Maximize size={10} /> MAX SQ</div>
                             <span className="text-gray-500">#{activeSquareRank + 1}</span>
                         </div>
                     </div>
                     
-                    <StatBox label="Max Cluster" value={clusterSet.size} potentialLabel={targetMode === 'cluster' && selectionStats.count > 0 ? `(+${selectionStats.count})` : null} color="purple" icon={<Activity size={12}/>} onClick={() => triggerZoom(clusterBounds)} isInteractive />
+                    <StatBox label="Cluster" value={clusterSet.size} potentialLabel={targetMode === 'cluster' && selectionStats.count > 0 ? `(+${selectionStats.count})` : null} color="purple" icon={<Activity size={12}/>} onClick={() => triggerZoom(clusterBounds)} isInteractive />
                     <StatBox label="Zone (km²)" value={Number(totalArea).toFixed(0)} potentialLabel={selectionStats.count > 0 ? `(+${selectionStats.areaKm2.toFixed(1)})` : null} color="emerald" icon={<MapIcon size={12}/>} />
                 </div>
             </div>
 
-            {/* PANEL 2 : CONTRÔLES */}
-            <div className="bg-[#121217]/90 backdrop-blur-xl border border-white/10 p-3 rounded-2xl shadow-2xl pointer-events-auto space-y-2">
+            {/* PANEL 2 : CONTRÔLES TACTIQUES */}
+            <div className="bg-[#121217]/70 backdrop-blur-2xl border border-white/10 p-4 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto space-y-3">
                 <div className="relative">
-                    <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none"><Calendar size={14} className="text-[#00f3ff]" /></div>
-                    <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="w-full bg-[#1a1a20] border border-white/10 rounded-xl py-1.5 pl-9 pr-4 text-xs font-semibold text-white outline-none focus:border-[#00f3ff] transition-all appearance-none cursor-pointer hover:bg-[#25252b]">
+                    <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none"><Calendar size={14} className="text-[#00f3ff]" /></div>
+                    <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl py-2 pl-10 pr-4 text-xs font-medium text-white outline-none focus:border-[#00f3ff]/50 transition-all appearance-none cursor-pointer hover:bg-white/10">
                       <option value="all">HISTORIQUE COMPLET</option>
                       {years.map(y => <option key={y} value={y}>ANNÉE {y}</option>)}
                     </select>
@@ -643,35 +733,31 @@ export default function GlobalMapClient({
 
                 <div className="grid grid-cols-2 gap-2">
                     <ToggleButton isActive={showGrid} onClick={() => setShowGrid(!showGrid)} label="Grille" color="cyan" icon={Grid} />
+                    {/* NOUVEAU BOUTON GRILLE GLOBALE */}
+                    <ToggleButton isActive={showGlobalGrid} onClick={() => setShowGlobalGrid(!showGlobalGrid)} label="Monde" color="white" icon={MapIcon} />
                     <ToggleButton isActive={showMaxSquare} onClick={toggleMaxSquare} label="Max Sq." color="yellow" icon={Maximize} />
                     <ToggleButton isActive={showCluster} onClick={toggleCluster} label="Cluster" color="purple" icon={Activity} />
-                    <ToggleButton isActive={showHeatmap} onClick={() => setShowHeatmap(!showHeatmap)} label="Tracés" color="fuchsia" icon={Layers} />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                    <ToggleButton isActive={showFilling} onClick={toggleFilling} label="Remplissage" color="orange" icon={Crosshair} disabled={isFillingDisabled} />
-                    <ToggleButton isActive={showCore} onClick={() => setShowCore(!showCore)} label="Noyau" color="white" icon={Focus} />
-                </div>
-
-                <div className="bg-[#1a1a20] rounded-xl p-2 border border-white/5 space-y-2">
-                    <div className="flex bg-black/40 rounded-lg p-1 border border-white/5">
-                        <button onClick={() => handleModeSwitch('square')} className={`flex-1 py-1.5 text-[9px] font-bold uppercase rounded-md transition-all flex items-center justify-center gap-1.5 ${targetMode === 'square' ? 'bg-yellow-500 text-black shadow-md' : 'text-gray-500 hover:text-white'}`}><Maximize size={10} /> Carré</button>
-                        <button onClick={() => handleModeSwitch('cluster')} className={`flex-1 py-1.5 text-[9px] font-bold uppercase rounded-md transition-all flex items-center justify-center gap-1.5 ${targetMode === 'cluster' ? 'bg-[#d04fd7] text-white shadow-md' : 'text-gray-500 hover:text-white'}`}><Activity size={10} /> Cluster</button>
+                <div className="bg-black/20 rounded-2xl p-2 border border-white/5 space-y-2">
+                    <div className="flex bg-black/40 rounded-xl p-1 border border-white/5">
+                        <button onClick={() => handleModeSwitch('square')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 ${targetMode === 'square' ? 'bg-yellow-500 text-black shadow-md' : 'text-gray-500 hover:text-white'}`}><Maximize size={12} /> Carré</button>
+                        <button onClick={() => handleModeSwitch('cluster')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 ${targetMode === 'cluster' ? 'bg-[#d04fd7] text-white shadow-md' : 'text-gray-500 hover:text-white'}`}><Activity size={12} /> Cluster</button>
                     </div>
 
                     <div className="flex items-center gap-2">
-                        <button onClick={() => setShowTargets(!showTargets)} className={`flex-1 py-1.5 rounded-lg text-[9px] font-bold uppercase border transition-all flex items-center justify-center gap-2 ${showTargets ? 'bg-blue-500/20 border-blue-500 text-blue-400 shadow-[0_0_10px_rgba(59,130,246,0.3)]' : 'bg-transparent border-white/10 text-gray-500 hover:border-white/20 hover:text-white'}`}>
-                            <Target size={12} /> {showTargets ? 'Extension ACTIVE' : 'Extension OFF'}
+                        <button onClick={() => setShowTargets(!showTargets)} className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider border transition-all flex items-center justify-center gap-2 ${showTargets ? 'bg-blue-500/20 border-blue-500/50 text-blue-400' : 'bg-transparent border-white/10 text-gray-500 hover:bg-white/5 hover:text-white'}`}>
+                            <Target size={14} /> {showTargets ? 'Extension ACTIVE' : 'Activer Cibles'}
                         </button>
                     </div>
                     
                     {showTargets && (
-                        <div className="grid grid-cols-5 gap-1.5 animate-in fade-in slide-in-from-top-2 duration-300">
+                        <div className="grid grid-cols-5 gap-1.5 animate-in fade-in duration-300">
                             {Array.from({length: 10}).map((_, i) => {
                                 const level = i + 1; const isActive = activeTargetLevels.has(level); const color = TARGET_COLORS[i];
                                 return (
-                                    <button key={level} onClick={() => handleTargetRange(level)} className={`h-6 rounded text-[9px] font-bold transition-all duration-200 border flex items-center justify-center relative overflow-hidden ${isActive ? 'text-black scale-100 shadow-md' : 'bg-transparent text-gray-500 border-white/5 hover:border-white/20 hover:text-white'}`} style={{ backgroundColor: isActive ? color : 'transparent', borderColor: isActive ? color : undefined }}>
-                                        <span className="relative z-10">N+{level}</span>
+                                    <button key={level} onClick={() => handleTargetRange(level)} className={`h-7 rounded-lg text-[10px] font-bold transition-all duration-200 border flex items-center justify-center ${isActive ? 'text-black shadow-[0_0_10px_rgba(255,255,255,0.2)]' : 'bg-transparent text-gray-500 border-white/5 hover:bg-white/5 hover:text-white'}`} style={{ backgroundColor: isActive ? color : 'transparent', borderColor: isActive ? color : undefined }}>
+                                        N+{level}
                                     </button>
                                 )
                             })}
@@ -679,17 +765,12 @@ export default function GlobalMapClient({
                     )}
                 </div>
 
-                {/* BLACKLIST BUTTON */}
                 <button 
                     onClick={() => setBlacklistMode(!blacklistMode)}
-                    className={`w-full py-1.5 rounded-xl text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-2 border 
-                        ${blacklistMode ? 'bg-red-500/20 border-red-500 text-red-400 shadow-[0_0_10px_rgba(255,0,85,0.3)] animate-pulse' : 'bg-transparent border-white/10 text-gray-500 hover:border-white/20 hover:text-white'}
+                    className={`w-full py-2.5 rounded-2xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border 
+                        ${blacklistMode ? 'bg-red-500/20 border-red-500/50 text-red-400 shadow-[0_0_15px_rgba(255,0,85,0.2)]' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'}
                     `}>
-                    <ShieldAlert size={12} /> {blacklistMode ? 'Pinceau Blacklist Actif' : 'Activer Blacklist'}
-                </button>
-
-                <button onClick={() => setDimMap(!dimMap)} className="w-full py-2 rounded-xl border border-white/10 text-[9px] font-bold text-gray-400 hover:text-white hover:bg-white/5 transition-all flex items-center justify-center gap-2 uppercase tracking-wide">
-                     <Eye size={12} /> {dimMap ? 'Immersion' : 'Standard'}
+                    <ShieldAlert size={14} /> {blacklistMode ? 'Mode Peinture (Tactile ON)' : 'Pinceau Blacklist'}
                 </button>
             </div>
 
@@ -715,6 +796,7 @@ export default function GlobalMapClient({
       {/* --- CARTE LEAFLET --- */}
       <MapContainer center={[46.603354, 1.888334]} zoom={6} className="w-full h-full z-0 bg-[#050505]" zoomControl={false} preferCanvas={true} attributionControl={false}>
         <TileLayer url="https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png" />
+        <ViewportTracker onBoundsChange={handleViewportChange} />
         <MapAutoZoom targetBounds={zoomTarget} />
         
         {/* L'ÉCOUTEUR DE CLICS INVISIBLE EST ICI */}
@@ -744,35 +826,36 @@ export default function GlobalMapClient({
                 eventHandlers={{ remove: () => setActiveTilePopup(null) }}
                 className="custom-dark-popup"
             >
-                <div className="flex flex-col gap-2 min-w-[140px]">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-1">
-                        <span className="font-black text-[10px] tracking-widest text-[#d04fd7] uppercase">Tuile</span>
-                        <span className="font-mono text-xs text-white/80 bg-white/5 px-1.5 py-0.5 rounded">{activeTilePopup.key}</span>
+                <div className="flex flex-col gap-3 min-w-[170px]">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                        <span className="font-semibold text-xs tracking-wide text-white/70 uppercase">Tuile</span>
+                        <span className="font-medium text-[10px] text-white/50 bg-white/5 px-2 py-0.5 rounded-full">{activeTilePopup.key}</span>
                     </div>
 
                     {visitedTilesSet.has(activeTilePopup.key) ? (
-                        <>
+                        <div className="space-y-1.5 mt-1">
                             <div className="flex items-center justify-between">
-                                <span className="text-xs text-gray-400 font-medium">Statut</span>
-                                <span className="text-xs font-bold text-emerald-400">Explorée</span>
+                                <span className="text-xs text-gray-400">Statut</span>
+                                <span className="text-xs font-semibold text-[#00f3ff]">Explorée</span>
                             </div>
                             <div className="flex items-center justify-between">
-                                <span className="text-xs text-gray-400 font-medium">Passages</span>
+                                <span className="text-xs text-gray-400">Passages</span>
                                 <span className="text-sm font-black text-white">{tileVisitCounts.get(activeTilePopup.key) || 1}</span>
                             </div>
-                        </>
+                        </div>
                     ) : (
                         <div className="flex flex-col gap-3 mt-1">
                             <div className="flex items-center justify-between">
-                                <span className="text-xs text-gray-400 font-medium">Statut</span>
-                                <span className="text-xs font-bold text-gray-500">Inconnue</span>
+                                <span className="text-xs text-gray-400">Statut</span>
+                                <span className="text-xs font-semibold text-gray-500">Non explorée</span>
                             </div>
                             <button 
-                                onClick={(e) => { 
-                                    toggleBlacklistTile(activeTilePopup.key, e); 
-                                    setActiveTilePopup(null); 
-                                }} 
-                                className="w-full bg-red-500/10 text-red-400 hover:bg-red-500/20 hover:text-red-300 border border-red-500/50 hover:border-red-500 py-1.5 rounded transition-all text-xs font-bold uppercase tracking-wide"
+                                onClick={(e) => { toggleBlacklistTile(activeTilePopup.key, e); setActiveTilePopup(null); }} 
+                                className={`w-full py-2 rounded-xl transition-all text-xs font-semibold tracking-wide ${
+                                    blacklistedTilesSet.has(activeTilePopup.key) 
+                                    ? 'bg-white/10 text-white hover:bg-white/20 border border-white/10' 
+                                    : 'bg-red-500/10 text-red-400 hover:bg-red-500/20 border border-red-500/30'
+                                }`}
                             >
                                 {blacklistedTilesSet.has(activeTilePopup.key) ? 'Débloquer' : 'Blacklister'}
                             </button>

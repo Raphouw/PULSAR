@@ -81,6 +81,29 @@ export function getDistanceFromLatLonInMeters(lat1: number, lon1: number, lat2: 
   return R * c;
 }
 
+
+export const getTilesInBounds = (bounds: any, zoom: number): string[] => {
+  if (!bounds) return [];
+  const northWest = bounds.getNorthWest();
+  const southEast = bounds.getSouthEast();
+
+  const minX = lon2tile(northWest.lng, zoom);
+  const maxX = lon2tile(southEast.lng, zoom);
+  const minY = lat2tile(northWest.lat, zoom);
+  const maxY = lat2tile(southEast.lat, zoom);
+
+  const tiles: string[] = [];
+  // Sécurité pour éviter de faire crasher le navigateur si on dézoome sur toute l'Europe
+  if ((maxX - minX) * (maxY - minY) > 4000) return [];
+
+  for (let x = minX; x <= maxX; x++) {
+    for (let y = minY; y <= maxY; y++) {
+      tiles.push(`${x},${y}`);
+    }
+  }
+  return tiles;
+};
+
 /**
  * 🔥 FIX : Interpolation pour ne rater aucune tuile sur l'Arbre-Monde
  * Décode une polyline et remplit les trous si la vitesse était trop élevée (points espacés)
