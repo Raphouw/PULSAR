@@ -16,6 +16,7 @@ const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLaye
 const Polyline = dynamic(() => import('react-leaflet').then(mod => mod.Polyline), { ssr: false });
 const Rectangle = dynamic(() => import('react-leaflet').then(mod => mod.Rectangle), { ssr: false });
 const Popup = dynamic(() => import('react-leaflet').then(mod => mod.Popup), { ssr: false });
+const CircleMarker = dynamic(() => import('react-leaflet').then(mod => mod.CircleMarker), { ssr: false });
 
 // --- TYPES ---
 type MapActivity = {
@@ -60,12 +61,15 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 
 // --- COMPOSANT : PINCEAU BLACKLIST SYNCHRONE + TACTILE ---
 // N'oublie pas d'ajouter les nouvelles props dans l'appel du composant plus bas !
-const MapInteractionHandler = ({ blacklistMode, customSquareMode, visitedTilesSet, blacklistedTilesSet, toggleBlacklistTile, handleBatchBlacklist, handleManualSquareSelection }: any) => {
+const MapInteractionHandler = ({ 
+    blacklistMode, manualSquareStep, manualStartTile, setManualSquareStep, setManualStartTile, 
+    setCustomTargetSquare, setTargetMode, setShowTargets,
+    visitedTilesSet, blacklistedTilesSet, toggleBlacklistTile, handleBatchBlacklist 
+}: any) => {
     const paintedTilesRef = React.useRef<Set<string>>(new Set());
     const map = useMap();
 
     React.useEffect(() => {
-        // Bloquer le drag si on est en mode peinture (blacklist)
         if (blacklistMode) {
             map.dragging.disable();
             map.touchZoom.disable();
@@ -84,31 +88,71 @@ const MapInteractionHandler = ({ blacklistMode, customSquareMode, visitedTilesSe
 
         window.addEventListener('mouseup', handleRelease);
         window.addEventListener('touchend', handleRelease);
-        return () => {
-            window.removeEventListener('mouseup', handleRelease);
-            window.removeEventListener('touchend', handleRelease);
-        };
+        return () => { window.removeEventListener('mouseup', handleRelease); window.removeEventListener('touchend', handleRelease); };
     }, [blacklistMode, map, handleBatchBlacklist]);
 
     useMapEvents({
         click(e) {
-            // PRIORITÉ 1 : SÉLECTION MANUELLE DE CARRÉ
-            if (customSquareMode) {
-                const x = lon2tile(e.latlng.lng, 14);
-                const y = lat2tile(e.latlng.lat, 14);
-                handleManualSquareSelection(x, y);
-                return;
-            }
-
-            // PRIORITÉ 2 : BLACKLIST
-            if (!blacklistMode) return;
             const x = lon2tile(e.latlng.lng, 14);
             const y = lat2tile(e.latlng.lat, 14);
             const tileKey = `${x},${y}`;
+
+            // ETAPE 1 : CHOISIR LE PREMIER COIN
+            if (manualSquareStep === 'select-start') {
+                if (visitedTilesSet.has(tileKey)) {
+                    setManualStartTile({ x, y });
+                    setManualSquareStep('select-end');
+                }
+                return;
+            }
+
+            // ETAPE 2 : CHOISIR LE SECOND COIN & VALIDER
+            if (manualSquareStep === 'select-end' && manualStartTile) {
+                const dx = Math.abs(x - manualStartTile.x);
+                const dy = Math.abs(y - manualStartTile.y);
+
+                // Est-ce un carré parfait d'au moins 2x2 (dx > 0) ?
+                if (dx === dy && dx > 0) {
+                    const topLeftX = Math.min(x, manualStartTile.x);
+                    const topLeftY = Math.min(y, manualStartTile.y);
+                    const size = dx + 1;
+
+                    let isValid = true;
+                    const sqTiles: string[] = [];
+
+                    // Scan d'intégrité
+                    for (let i = 0; i < size; i++) {
+                        for (let j = 0; j < size; j++) {
+                            const checkKey = `${topLeftX + i},${topLeftY + j}`;
+                            if (!visitedTilesSet.has(checkKey) || blacklistedTilesSet.has(checkKey)) {
+                                isValid = false;
+                            }
+                            sqTiles.push(checkKey);
+                        }
+                    }
+
+                    if (isValid) {
+                        setCustomTargetSquare({
+                            maxSquare: size,
+                            topLeft: { x: topLeftX, y: topLeftY, key: `${topLeftX},${topLeftY}` },
+                            tilesSet: new Set(sqTiles)
+                        });
+                        setTargetMode('square');
+                        setShowTargets(true);
+                    }
+                }
+                // Validation ou échec, on reset la mécanique de sélection
+                setManualSquareStep('off');
+                setManualStartTile(null);
+                return;
+            }
+
+            // PRIORITÉ 2 : BLACKLIST CLASSIQUE
+            if (!blacklistMode) return;
             if (!visitedTilesSet.has(tileKey)) toggleBlacklistTile(tileKey);
         },
         mousemove(e) {
-            if (!blacklistMode || customSquareMode) return; // On empêche la peinture si le mode custom est actif
+            if (!blacklistMode || manualSquareStep !== 'off') return; 
             
             const original = e.originalEvent as any;
             const isTouch = original.touches && original.touches.length > 0;
@@ -173,6 +217,19 @@ const MapAutoZoom = ({ targetBounds }: { targetBounds: { bounds: LatLngBoundsExp
     return null;
 };
 
+// --- COMPOSANT : GEOLOCALISATION EN DIRECT ---
+const LocationMarker = () => {
+    const [position, setPosition] = useState<LatLngTuple | null>(null);
+    const map = useMapEvents({
+        locationfound(e) { setPosition([e.latlng.lat, e.latlng.lng]); }
+    });
+    useEffect(() => { map.locate({ watch: true }); }, [map]);
+
+    return position === null ? null : (
+        <CircleMarker center={position} radius={6} pathOptions={{ fillColor: '#00f3ff', fillOpacity: 0.8, weight: 0 }} />
+    );
+};
+
 // ==========================================
 // COMPOSANT PRINCIPAL
 // ==========================================
@@ -188,16 +245,19 @@ export default function GlobalMapClient({
   const [isMounted, setIsMounted] = useState(false);
   const supabase = createBrowserSupabaseClient();
   
-  // -- ETATS UI RESPONSIVE --
   const [hudOpen, setHudOpen] = useState(true);
   const [selectedYear, setSelectedYear] = useState<string>('all');
   const [dimMap, setDimMap] = useState(true); 
   const [targetMode, setTargetMode] = useState<'square' | 'cluster'>('cluster'); 
   const [activeSquareRank, setActiveSquareRank] = useState<number>(0); 
-  const [activeClusterRank, setActiveClusterRank] = useState<number>(0); 
-  const [customSquareMode, setCustomSquareMode] = useState(false);
+  const [activeClusterRank, setActiveClusterRank] = useState<number>(0);
+  const [manualSquareStep, setManualSquareStep] = useState<'off' | 'select-start' | 'select-end'>('off');
+  const [manualStartTile, setManualStartTile] = useState<{x: number, y: number} | null>(null);
   const [customTargetSquare, setCustomTargetSquare] = useState<{topLeft: any, maxSquare: number, tilesSet: Set<string>} | null>(null);
-  
+  const [customSquareMode, setCustomSquareMode] = useState(false);
+
+
+
   // -- ETATS LAYERS --
   const [showHeatmap, setShowHeatmap] = useState(true);
   const [showGrid, setShowGrid] = useState(true);
@@ -289,7 +349,7 @@ export default function GlobalMapClient({
       topClusters, effectiveSquare // <-- AJOUT DES NOUVELLES VARIABLES ICI
   } = useMemo(() => {
     const tiles = new Set<string>();
-    const tileCounts = new Map<string, number>(); // <-- AJOUT DE LA MAP DE COMPTAGE
+    const tileCounts = new Map<string, number>(); // <-- AJOUT DE LA MAP DE COMPTAGES
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
     filteredActivities.forEach(act => {
@@ -463,8 +523,16 @@ export default function GlobalMapClient({
 
   const currentMaxSquare = topSquares[activeSquareRank] || topSquares[0];
 
+  // --- HELPERS DE SECURITE ---
+  const cancelManualMode = () => {
+      setManualSquareStep('off');
+      setManualStartTile(null);
+      setCustomTargetSquare(null);
+  };
+
   // --- HANDLERS ---
   const handleModeSwitch = (mode: 'square' | 'cluster') => {
+      cancelManualMode();
       setTargetMode(mode);
       if (mode === 'square') {
           setShowTargets(true); setShowFilling(false); setActiveTargetLevels(new Set([1])); 
@@ -477,11 +545,13 @@ export default function GlobalMapClient({
 
   
   const toggleMaxSquare = () => {
+      cancelManualMode();
       const newState = !showMaxSquare; setShowMaxSquare(newState);
       if (newState && currentMaxSquareBounds) triggerZoom(currentMaxSquareBounds);
   };
 
   const toggleCluster = () => {
+      cancelManualMode();
       const newState = !showCluster; setShowCluster(newState);
       if (newState && clusterBounds) triggerZoom(clusterBounds);
   };
@@ -497,6 +567,7 @@ export default function GlobalMapClient({
 
   const cycleSquareRank = (e: React.MouseEvent) => {
       e.stopPropagation(); 
+      cancelManualMode();
       setActiveSquareRank((activeSquareRank + 1) % Math.min(topSquares.length, 5));
       if (targetMode !== 'square') { setTargetMode('square'); setShowTargets(true); setShowFilling(false); }
   };
@@ -504,6 +575,12 @@ export default function GlobalMapClient({
   useEffect(() => {
       if (targetMode === 'square' && showMaxSquare && currentMaxSquareBounds) triggerZoom(currentMaxSquareBounds);
   }, [activeSquareRank]);
+
+  useEffect(() => {
+      if (targetMode === 'cluster' && showCluster && clusterBounds) {
+          triggerZoom(clusterBounds);
+      }
+  }, [activeClusterRank, targetMode, showCluster, clusterBounds]);
 
   const handleTargetRange = (level: number) => {
       const newSet = new Set<number>();
@@ -611,14 +688,18 @@ export default function GlobalMapClient({
       const [x, y] = tileKey.split(',').map(Number);
       const bounds = getTileBounds(x, y, ZOOM);
       
-      const isMaxSquare = isVisited && showMaxSquare && currentMaxSquare?.tilesSet.has(tileKey);
+      const isMaxSquare = isVisited && showMaxSquare && effectiveSquare?.tilesSet.has(tileKey); // CORRECTION ICI
+      const isManualStart = manualSquareStep === 'select-end' && manualStartTile?.x === x && manualStartTile?.y === y; // NOUVEAU
       const isCluster = isVisited && showCluster && !isMaxSquare && clusterSet.has(tileKey);
       
       let color = '#00f3ff', weight = 1, className = 'tile-base', fillOpacity = 0.12, opacity = 0.4;
 
       if (isBlacklisted) {
-          // Nouveau style discret
           color = '#000000'; weight = 1; className = 'tile-blacklisted'; fillOpacity = 0.6; opacity = 0.8;
+      }
+      // NOUVEAU BLOC :
+      else if (isManualStart) {
+          color = '#39ff14'; weight = 2; className = 'tile-manual-start'; fillOpacity = 0.5; opacity = 1;
       }
       else if (isGlobalGridOnly) {
           // Style grille de fond
@@ -690,7 +771,8 @@ export default function GlobalMapClient({
         .tile-core { stroke: #fff !important; stroke-width: 2px !important; fill: #fff !important; fill-opacity: 0.8 !important; z-index: 200 !important; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
+        .tile-manual-start { stroke-dasharray: 4 4; animation: flash-green 1s infinite alternate; z-index: 100; }
+        @keyframes flash-green { from { fill-opacity: 0.3; stroke-opacity: 0.8; } to { fill-opacity: 0.6; stroke-opacity: 1; } }
         /* --- CUSTOM LEAFLET POPUP --- */
         .custom-dark-popup .leaflet-popup-content-wrapper {
             background: #121217;
@@ -832,15 +914,24 @@ export default function GlobalMapClient({
 
                 <div className="bg-black/20 rounded-2xl p-2 border border-white/5 space-y-2">
                     {/* TOGGLE SÉLECTION MANUELLE */}
+                    {manualSquareStep !== 'off' && (
+                        <div className="bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-[9px] uppercase font-bold p-1.5 rounded-lg mb-2 text-center animate-pulse tracking-wide">
+                            {manualSquareStep === 'select-start' ? "Sélectionnez un premier coin" : "Sélectionnez le coin opposé"}
+                        </div>
+                    )}
                     <button 
                         onClick={() => { 
-                            setCustomSquareMode(!customSquareMode); 
-                            if (!customSquareMode) setBlacklistMode(false); // Exclusivité des modes
+                            if (manualSquareStep === 'off') {
+                                setManualSquareStep('select-start'); 
+                                setBlacklistMode(false); 
+                            } else {
+                                cancelManualMode();
+                            }
                         }}
                         className={`w-full py-2 mb-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border 
-                            ${customSquareMode ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'}
+                            ${manualSquareStep !== 'off' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'}
                         `}>
-                        <CheckSquare size={14} /> {customSquareMode ? 'Mode Ciblage Manuel Actif' : 'Cibler un Carré Manuel'}
+                        <CheckSquare size={14} /> {manualSquareStep !== 'off' ? 'Annuler Ciblage' : 'Ciblage Multidirectionnel'}
                     </button>
 
                     <div className="flex bg-black/40 rounded-xl p-1 border border-white/5">
@@ -897,20 +988,26 @@ export default function GlobalMapClient({
       </div>
 
       {/* --- CARTE LEAFLET --- */}
+      {/* --- CARTE LEAFLET --- */}
       <MapContainer center={[46.603354, 1.888334]} zoom={6} className="w-full h-full z-0 bg-[#050505]" zoomControl={false} preferCanvas={true} attributionControl={false}>
         <TileLayer url="https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png" />
         <ViewportTracker onBoundsChange={handleViewportChange} />
         <MapAutoZoom targetBounds={zoomTarget} />
+        <LocationMarker />
         
-        {/* L'ÉCOUTEUR DE CLICS INVISIBLE EST ICI */}
         <MapInteractionHandler 
             blacklistMode={blacklistMode} 
+            manualSquareStep={manualSquareStep}
+            manualStartTile={manualStartTile}
+            setManualSquareStep={setManualSquareStep}
+            setManualStartTile={setManualStartTile}
+            setCustomTargetSquare={setCustomTargetSquare}
+            setTargetMode={setTargetMode}
+            setShowTargets={setShowTargets}
             visitedTilesSet={visitedTilesSet} 
             blacklistedTilesSet={blacklistedTilesSet}
             toggleBlacklistTile={toggleBlacklistTile} 
             handleBatchBlacklist={handleBatchBlacklist}
-            customSquareMode={customSquareMode}
-            handleManualSquareSelection={handleManualSquareSelection}
         />
 
         {boundsArea && (
