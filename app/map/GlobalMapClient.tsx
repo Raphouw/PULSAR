@@ -279,7 +279,9 @@ const MemoizedRectangle = React.memo(({ bounds, color, weight, opacity, fillOpac
 }, (prevProps, nextProps) => {
     return prevProps.color === nextProps.color && 
            prevProps.className === nextProps.className &&
-           prevProps.weight === nextProps.weight;
+           prevProps.weight === nextProps.weight &&
+           prevProps.fillOpacity === nextProps.fillOpacity &&
+           prevProps.opacity === nextProps.opacity;
 });
 
 
@@ -757,6 +759,7 @@ export default function GlobalMapClient({
   }, [manualSquareStep, visitedTilesSet, blacklistedTilesSet]);
 
   // --- RENDU RECTANGLES ---
+  // --- RENDU RECTANGLES ---
   const gridRectangles = useMemo(() => {
     const ZOOM = 14;
     const currentTargetsMap = targetMode === 'square' ? squareTargetsMap : clusterTargetsMap;
@@ -768,7 +771,8 @@ export default function GlobalMapClient({
         ...Array.from(blacklistedTilesSet),
         ...(showGlobalGrid ? viewportTiles : []),
         ...(shiftStartTile ? [`${shiftStartTile.x},${shiftStartTile.y}`] : []),
-        ...Array.from(validStartTilesSet) 
+        ...Array.from(validStartTilesSet),
+        ...Array.from(validDiagonalTargetsSet) // <-- AJOUT : On force le rendu des diagonales
     ]);
 
     return Array.from(allKeysToRender).map(tileKey => {
@@ -784,17 +788,21 @@ export default function GlobalMapClient({
       if (draftBlacklist.remove.has(tileKey)) isBlacklisted = false;
 
       const isGlobalGridOnly = showGlobalGrid && !isVisited && !isTargetVisible && !isFilling && !isBlacklisted;
-      if ((!isVisited || !showGrid) && !isTargetVisible && !isFilling && !isBlacklisted && !isGlobalGridOnly) return null;
-
+      
       const [x, y] = tileKey.split(',').map(Number);
       const bounds = getTileBounds(x, y, ZOOM);
       const isShiftStart = blacklistMode && shiftStartTile && shiftStartTile.x === x && shiftStartTile.y === y; 
       
+      // --- RESTAURATION DU CIBLAGE MANUEL ---
       const isMaxSquare = isVisited && showMaxSquare && effectiveSquare?.tilesSet.has(tileKey);
       const isManualStart = manualSquareStep === 'select-end' && manualStartTile?.x === x && manualStartTile?.y === y;
       const isPossibleTarget = manualSquareStep === 'select-end' && validDiagonalTargetsSet.has(tileKey); 
+      const isManualStartOption = manualSquareStep === 'select-start' && validStartTilesSet.has(tileKey);
       const isCluster = isVisited && showCluster && !isMaxSquare && clusterSet.has(tileKey);
-      
+
+      // CORRECTION DU FILTRE : On laisse passer les tuiles de ciblage manuel !
+      if ((!isVisited || !showGrid) && !isTargetVisible && !isFilling && !isBlacklisted && !isGlobalGridOnly && !isManualStartOption && !isPossibleTarget && !isManualStart) return null;
+
       let color = '#00f3ff', weight = 1, className = 'tile-base', fillOpacity = 0.12, opacity = 0.4;
 
       if (isBlacklisted) {
@@ -804,8 +812,13 @@ export default function GlobalMapClient({
           color = shiftStartTile.action === 'delete' ? '#ffffff' : '#ff0055'; 
           weight = 3; className = 'tile-shift-start'; fillOpacity = 0.5; opacity = 1;
       }
-      else if (isManualStart) { color = '#39ff14'; weight = 2; className = 'tile-manual-start'; fillOpacity = 0.5; opacity = 1; }
-      else if (isPossibleTarget) { color = '#39ff14'; weight = 3; className = 'tile-possible-target'; fillOpacity = 0.5; opacity = 1; }
+      // RESTAURATION DES COULEURS VERTES
+      else if (isManualStartOption || isPossibleTarget) { 
+          color = '#39ff14'; weight = 3; className = 'tile-possible-target'; fillOpacity = 0.5; opacity = 1; 
+      }
+      else if (isManualStart) { 
+          color = '#39ff14'; weight = 2; className = 'tile-manual-start'; fillOpacity = 0.8; opacity = 1; 
+      }
       else if (isGlobalGridOnly) { color = '#ffffff'; weight = 1; className = 'tile-global-grid'; fillOpacity = 0.02; opacity = 0.15; }
       else if (isFilling) { color = '#f97316'; weight = 2; className = 'tile-glitch'; fillOpacity = 0.4; opacity = 1; }
       else if (isTargetVisible && targetLevel) { color = TARGET_COLORS[Math.min(Math.max(targetLevel - 1, 0), 9)]; weight = targetLevel === 1 ? 2 : 1; className = targetLevel === 1 ? 'tile-target-urgent' : 'tile-neon'; fillOpacity = 0.4; opacity = 0.9; }
@@ -831,7 +844,7 @@ export default function GlobalMapClient({
         />
       );
     });
-  }, [visitedTilesSet, blacklistedTilesSet, draftBlacklist, squareTargetsMap, clusterTargetsMap, fillingTilesSet, coreTilesSet, showGrid, showMaxSquare, showCluster, showFilling, showCore, showTargets, activeTargetLevels, targetMode, currentMaxSquare, blacklistMode, showGlobalGrid, viewportTiles, shiftStartTile, manualSquareStep, manualStartTile, validDiagonalTargetsSet, effectiveSquare, handleTileInteraction]);
+  }, [visitedTilesSet, blacklistedTilesSet, draftBlacklist, squareTargetsMap, clusterTargetsMap, fillingTilesSet, coreTilesSet, showGrid, showMaxSquare, showCluster, showFilling, showCore, showTargets, activeTargetLevels, targetMode, currentMaxSquare, blacklistMode, showGlobalGrid, viewportTiles, shiftStartTile, manualSquareStep, manualStartTile, validDiagonalTargetsSet, validStartTilesSet, effectiveSquare, handleTileInteraction]);
   if (!isMounted) return <div className="h-screen bg-[#050505] flex items-center justify-center text-[#d04fd7] animate-pulse font-sans tracking-widest text-xl">Chargement de la map ..</div>;
 
   const isFillingDisabled = !showCluster || targetMode === 'square';
