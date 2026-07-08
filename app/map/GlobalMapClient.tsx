@@ -347,7 +347,7 @@ export default function GlobalMapClient({
   const [shiftStartTile, setShiftStartTile] = useState<{x: number, y: number, action: 'add' | 'delete'} | null>(null);
   const [manualError, setManualError] = useState<string | null>(null);
   const [draftBlacklist, setDraftBlacklist] = useState<{add: Set<string>, remove: Set<string>}>({ add: new Set(), remove: new Set() });
-
+  const [showTimeHeatmap, setShowTimeHeatmap] = useState(false);
 
   // -- ETATS LAYERS --
   const [showHeatmap, setShowHeatmap] = useState(true);
@@ -802,9 +802,28 @@ export default function GlobalMapClient({
 
   // --- RENDU RECTANGLES ---
   // --- RENDU RECTANGLES ---
+  // --- RENDU RECTANGLES ---
   const gridRectangles = useMemo(() => {
     const ZOOM = 14;
     const currentTargetsMap = targetMode === 'square' ? squareTargetsMap : clusterTargetsMap;
+
+    // --- CALCUL DE L'ÉCHELLE TEMPORELLE DYNAMIQUE ---
+    let minTime = Infinity;
+    let maxTime = -Infinity;
+
+    if (showTimeHeatmap) {
+        // On cherche les dates extrêmes uniquement dans ce qu'on voit à l'écran
+        viewportTiles.forEach(t => {
+            if (visitedTilesSet.has(t) && tileLastVisit.has(t)) {
+                const time = new Date(tileLastVisit.get(t)!).getTime();
+                if (time < minTime) minTime = time;
+                if (time > maxTime) maxTime = time;
+            }
+        });
+        // Sécurité si tout est vide ou si toutes les tuiles ont la même date
+        if (minTime === Infinity) { minTime = 0; maxTime = 1; }
+        if (minTime === maxTime) { minTime -= 1000; maxTime += 1000; }
+    }
 
     const allKeysToRender = new Set([
         ...Array.from(visitedTilesSet), 
@@ -814,7 +833,7 @@ export default function GlobalMapClient({
         ...(showGlobalGrid ? viewportTiles : []),
         ...(shiftStartTile ? [`${shiftStartTile.x},${shiftStartTile.y}`] : []),
         ...Array.from(validStartTilesSet),
-        ...Array.from(validDiagonalTargetsSet) // <-- AJOUT : On force le rendu des diagonales
+        ...Array.from(validDiagonalTargetsSet) 
     ]);
 
     return Array.from(allKeysToRender).map(tileKey => {
@@ -824,7 +843,6 @@ export default function GlobalMapClient({
       const isTargetVisible = showTargets && targetLevel !== undefined && activeTargetLevels.has(targetLevel!);
       const isFilling = showFilling && fillingTilesSet.has(tileKey) && targetMode === 'cluster';
 
-      // ON VÉRIFIE LE BROUILLON VISUEL ICI !
       let isBlacklisted = blacklistedTilesSet.has(tileKey);
       if (draftBlacklist.add.has(tileKey)) isBlacklisted = true;
       if (draftBlacklist.remove.has(tileKey)) isBlacklisted = false;
@@ -835,7 +853,6 @@ export default function GlobalMapClient({
       const bounds = getTileBounds(x, y, ZOOM);
       const isShiftStart = blacklistMode && shiftStartTile && shiftStartTile.x === x && shiftStartTile.y === y; 
       
-      // --- RESTAURATION DU CIBLAGE MANUEL ---
       const isCustomSquare = customTargetSquare?.tilesSet.has(tileKey);
       const isMaxSquare = !isCustomSquare && isVisited && showMaxSquare && effectiveSquare?.tilesSet.has(tileKey);
       const isManualStart = manualSquareStep === 'select-end' && manualStartTile?.x === x && manualStartTile?.y === y;
@@ -843,29 +860,34 @@ export default function GlobalMapClient({
       const isManualStartOption = manualSquareStep === 'select-start' && validStartTilesSet.has(tileKey);
       const isCluster = isVisited && showCluster && !isMaxSquare && clusterSet.has(tileKey);
 
-      // CORRECTION DU FILTRE : On laisse passer les tuiles de ciblage manuel !
       if ((!isVisited || !showGrid) && !isTargetVisible && !isFilling && !isBlacklisted && !isGlobalGridOnly && !isManualStartOption && !isPossibleTarget && !isManualStart) return null;
 
       let color = '#00f3ff', weight = 1, className = 'tile-base', fillOpacity = 0.12, opacity = 0.4;
 
-      if (isBlacklisted) {
-          color = '#000000'; weight = 1; className = 'tile-blacklisted'; fillOpacity = 0.6; opacity = 0.8;
-      }
-      else if (isShiftStart) { 
-          color = shiftStartTile.action === 'delete' ? '#ffffff' : '#ff0055'; 
-          weight = 3; className = 'tile-shift-start'; fillOpacity = 0.5; opacity = 1;
-      }
-      else if (isCustomSquare) { 
-          color = '#39ff14'; weight = 3; className = 'tile-custom-square'; fillOpacity = 0.4; opacity = 1;
-      }
-      // RESTAURATION DES COULEURS VERTES
-      else if (isManualStartOption || isPossibleTarget) { 
-          color = '#39ff14'; weight = 3; className = 'tile-possible-target'; fillOpacity = 0.5; opacity = 1; 
-      }
-      else if (isManualStart) { 
-          color = '#39ff14'; weight = 2; className = 'tile-manual-start'; fillOpacity = 0.8; opacity = 1; 
-      }
+      // --- OVERRIDE TEMPOREL ---
+      if (showTimeHeatmap && isVisited) {
+          const time = new Date(tileLastVisit.get(tileKey)!).getTime();
+          let ratio = (time - minTime) / (maxTime - minTime);
+          ratio = Math.max(0, Math.min(1, ratio)); // Clamp entre 0 et 1 pour les tuiles hors écran
 
+          // Dégradé Cyberpunk :
+          // Ratio 0 (Vieux) = Violet foncé (Teinte 280, Luminosité 25%)
+          // Ratio 1 (Récent) = Cyan/Vert clair (Teinte 160, Luminosité 70%)
+          const hue = 280 - (ratio * 120); 
+          const lightness = 25 + (ratio * 45);
+          
+          color = `hsl(${hue}, 100%, ${lightness}%)`;
+          weight = 1;
+          className = 'tile-time';
+          fillOpacity = 0.75; // Très opaque pour bien voir la chaleur
+          opacity = 0.8;
+      } 
+      // --- STYLES NORMAUX ---
+      else if (isBlacklisted) { color = '#000000'; weight = 1; className = 'tile-blacklisted'; fillOpacity = 0.6; opacity = 0.8; }
+      else if (isShiftStart) { color = shiftStartTile.action === 'delete' ? '#ffffff' : '#ff0055'; weight = 3; className = 'tile-shift-start'; fillOpacity = 0.5; opacity = 1; }
+      else if (isCustomSquare) { color = '#39ff14'; weight = 3; className = 'tile-custom-square'; fillOpacity = 0.4; opacity = 1; }
+      else if (isManualStartOption || isPossibleTarget) { color = '#39ff14'; weight = 3; className = 'tile-possible-target'; fillOpacity = 0.5; opacity = 1; }
+      else if (isManualStart) { color = '#39ff14'; weight = 2; className = 'tile-manual-start'; fillOpacity = 0.8; opacity = 1; }
       else if (isGlobalGridOnly) { color = '#ffffff'; weight = 1; className = 'tile-global-grid'; fillOpacity = 0.02; opacity = 0.15; }
       else if (isFilling) { color = '#f97316'; weight = 2; className = 'tile-glitch'; fillOpacity = 0.4; opacity = 1; }
       else if (isTargetVisible && targetLevel) { color = TARGET_COLORS[Math.min(Math.max(targetLevel - 1, 0), 9)]; weight = targetLevel === 1 ? 2 : 1; className = targetLevel === 1 ? 'tile-target-urgent' : 'tile-neon'; fillOpacity = 0.4; opacity = 0.9; }
@@ -875,23 +897,22 @@ export default function GlobalMapClient({
           else if (isCluster) { color = '#d04fd7'; weight = 1; className = 'tile-cluster'; fillOpacity = 0.25; opacity = 0.6; } 
       }
 
-      // APPEL DU NOUVEAU COMPOSANT
       return (
         <MemoizedRectangle 
-          key={tileKey} 
-          tileKey={tileKey}
-          bounds={bounds} 
-          color={color}
-          weight={weight}
-          opacity={opacity}
-          fillOpacity={fillOpacity}
-          className={className}
-          isVisited={isVisited}
+          key={tileKey} tileKey={tileKey} bounds={bounds} color={color} weight={weight}
+          opacity={opacity} fillOpacity={fillOpacity} className={className} isVisited={isVisited}
           onInteract={handleTileInteraction}
         />
       );
     });
-  }, [visitedTilesSet, blacklistedTilesSet, draftBlacklist, squareTargetsMap, clusterTargetsMap, fillingTilesSet, coreTilesSet, showGrid, showMaxSquare, showCluster, showFilling, showCore, showTargets, activeTargetLevels, targetMode, currentMaxSquare, blacklistMode, showGlobalGrid, viewportTiles, shiftStartTile, manualSquareStep, manualStartTile, validDiagonalTargetsSet, validStartTilesSet, effectiveSquare, handleTileInteraction]);
+  }, [
+      visitedTilesSet, blacklistedTilesSet, draftBlacklist, squareTargetsMap, clusterTargetsMap, 
+      fillingTilesSet, coreTilesSet, showGrid, showMaxSquare, showCluster, showFilling, showCore, 
+      showTargets, activeTargetLevels, targetMode, currentMaxSquare, blacklistMode, showGlobalGrid, 
+      viewportTiles, shiftStartTile, manualSquareStep, manualStartTile, validDiagonalTargetsSet, 
+      validStartTilesSet, effectiveSquare, handleTileInteraction, 
+      showTimeHeatmap, tileLastVisit // <-- N'OUBLIE PAS CES DEUX NOUVELLES DEPENDANCES
+  ]);
   if (!isMounted) return <div className="h-screen bg-[#050505] flex items-center justify-center text-[#d04fd7] animate-pulse font-sans tracking-widest text-xl">Chargement de la map ..</div>;
 
   const isFillingDisabled = !showCluster || targetMode === 'square';
@@ -1086,6 +1107,7 @@ export default function GlobalMapClient({
                 {/* LES 4 BOUTONS RESTAURÉS ICI */}
                 <div className="grid grid-cols-2 gap-2">
                     <ToggleButton isActive={showHeatmap} onClick={() => setShowHeatmap(!showHeatmap)} label="Tracés" color="fuchsia" icon={Layers} />
+                    <ToggleButton isActive={showTimeHeatmap} onClick={() => { setShowTimeHeatmap(!showTimeHeatmap); if(!showTimeHeatmap) setDimMap(true); }} label="Usure (Temps)" color="emerald" icon={Calendar} />
                     <ToggleButton isActive={showFilling} onClick={toggleFilling} label="Remplissage" color="orange" icon={Crosshair} disabled={isFillingDisabled} />
                     <ToggleButton isActive={showCore} onClick={() => setShowCore(!showCore)} label="Noyau" color="white" icon={Focus} />
                     <ToggleButton isActive={dimMap} onClick={() => setDimMap(!dimMap)} label="Immersion" color="cyan" icon={Eye} />
