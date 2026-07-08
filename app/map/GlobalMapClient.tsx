@@ -802,12 +802,19 @@ export default function GlobalMapClient({
 
 
 const timeBounds = useMemo(() => {
-      if (!showTimeHeatmap || viewportTiles.length === 0) return { min: 0, max: 0, diff: 1 };
+      if (!showTimeHeatmap) return { min: 0, max: 0, diff: 1 };
       
       let min = Infinity;
       let max = -Infinity;
       
-      viewportTiles.forEach(t => {
+      // LA MAGIE EST ICI : Si on est trop dézoomé, on prend TOUT l'historique
+      const tilesToEvaluate = viewportTiles.length > 0 
+          ? viewportTiles 
+          : Array.from(visitedTilesSet);
+      
+      if (tilesToEvaluate.length === 0) return { min: 0, max: 0, diff: 1 };
+
+      tilesToEvaluate.forEach(t => {
           if (visitedTilesSet.has(t) && tileLastVisit.has(t)) {
               const time = new Date(tileLastVisit.get(t)!).getTime();
               if (time < min) min = time;
@@ -816,8 +823,6 @@ const timeBounds = useMemo(() => {
       });
       
       if (min === Infinity) return { min: 0, max: 0, diff: 1 };
-      
-      // Si toutes les tuiles ont la même date, diff = 1 pour éviter la division par zéro
       return { min, max, diff: min === max ? 1 : max - min };
   }, [showTimeHeatmap, viewportTiles, visitedTilesSet, tileLastVisit]);
 
@@ -1051,7 +1056,9 @@ const timeBounds = useMemo(() => {
                     {/* LE SCORE DE LA ZONE ICI */}
                     <div className="flex flex-col items-end">
                         <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Score Zone</span>
-                        <span className="text-sm font-black text-[#00f3ff]">{viewportScore.toFixed(1)}%</span>
+                        <span className="text-sm font-black text-[#00f3ff]">
+                            {viewportTiles.length > 0 ? `${viewportScore.toFixed(1)}%` : 'ZOOMEZ +'}
+                        </span>
                     </div>
                 </div>
 

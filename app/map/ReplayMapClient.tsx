@@ -5,10 +5,9 @@ import dynamic from 'next/dynamic';
 import { getTilesFromPolyline, getTileBounds } from '../../lib/mapUtils';
 import { Play, Pause, FastForward, Rewind, Activity } from 'lucide-react';
 import { useMap } from 'react-leaflet';
-import { LatLngBoundsExpression } from 'leaflet'; // Indispensable pour TypeScript
+import { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
-// IMPORTS DYNAMIQUES
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
 const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLayer), { ssr: false });
 const Rectangle = dynamic(() => import('react-leaflet').then(mod => mod.Rectangle), { ssr: false });
@@ -18,7 +17,8 @@ const CameraController = ({ bounds }: { bounds: LatLngBoundsExpression | null })
     const map = useMap();
     useEffect(() => {
         if (bounds) {
-            map.flyToBounds(bounds, { padding: [100, 100], duration: 2, easeLinearity: 0.1 });
+            // maxZoom empêche d'être trop près du sol (11 ou 12 est idéal pour voir les tuiles)
+            map.flyToBounds(bounds, { padding: [50, 50], duration: 1.5, maxZoom: 11, easeLinearity: 0.25 });
         }
     }, [bounds, map]);
     return null;
@@ -26,7 +26,8 @@ const CameraController = ({ bounds }: { bounds: LatLngBoundsExpression | null })
 
 // --- COMPOSANT PRINCIPAL ---
 export default function ReplayMapClient({ activities }: { activities: any[] }) {
-    // 1. PRÉPARATION DES DONNÉES (Tri Chronologique)
+    
+    // 1. PRÉPARATION DES DONNÉES
     const sortedActivities = useMemo(() => {
         return [...activities]
             .map(act => ({
@@ -47,7 +48,7 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
     const animationRef = useRef<number | null>(null);
     const lastTickRef = useRef<number>(0);
 
-    // 3. MOTEUR DE LECTURE (60 fps)
+    // 3. MOTEUR DE LECTURE
     useEffect(() => {
         if (!isPlaying) {
             if (animationRef.current) cancelAnimationFrame(animationRef.current);
@@ -79,38 +80,50 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
         return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); };
     }, [isPlaying, playbackSpeed, globalEndTime]);
 
-    // 4. CALCUL DE L'ÉTAT DE LA CARTE À L'INSTANT T
-    const { activeTilesMap, currentBounds, stats } = useMemo(() => {
+    // 4. CALCUL DE L'ÉTAT ET DE LA CAMÉRA
+    const { activeTilesMap, stats, lastActivityId, lastActivityTiles } = useMemo(() => {
         const tileData = new Map<string, { firstVisit: number, count: number }>();
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let currentActId = null;
+        let currentActTiles: string[] = [];
         
         for (const act of sortedActivities) {
             if (act.time > currentTime) break; 
+            
+            // On garde en mémoire uniquement la toute dernière activité jouée
+            currentActId = act.id;
+            currentActTiles = act.tiles;
 
             act.tiles.forEach((t: string) => {
                 const existing = tileData.get(t);
                 if (!existing) {
                     tileData.set(t, { firstVisit: act.time, count: 1 });
-                    const [x, y] = t.split(',').map(Number);
-                    if (x < minX) minX = x; if (x > maxX) maxX = x;
-                    if (y < minY) minY = y; if (y > maxY) maxY = y;
                 } else {
                     existing.count += 1;
                 }
             });
         }
 
-        let bounds: LatLngBoundsExpression | null = null;
-        if (tileData.size > 0) {
-            bounds = [getTileBounds(minX, minY, 14)[0], getTileBounds(maxX, maxY, 14)[1]];
-        }
-
         return { 
             activeTilesMap: tileData, 
-            currentBounds: bounds,
-            stats: { count: tileData.size, area: (tileData.size * 0.36).toFixed(1) }
+            stats: { count: tileData.size, area: (tileData.size * 0.36).toFixed(1) },
+            lastActivityId: currentActId,
+            lastActivityTiles: currentActTiles
         };
     }, [currentTime, sortedActivities]);
+
+    // Calcul de la Bounding Box centré UNIQUEMENT sur la dernière activité
+    const currentBounds = useMemo(() => {
+        if (!lastActivityTiles || lastActivityTiles.length === 0) return null;
+        
+        let fMinX = Infinity, fMinY = Infinity, fMaxX = -Infinity, fMaxY = -Infinity;
+        lastActivityTiles.forEach(t => {
+            const [x, y] = t.split(',').map(Number);
+            if (x < fMinX) fMinX = x; if (x > fMaxX) fMaxX = x;
+            if (y < fMinY) fMinY = y; if (y > fMaxY) fMaxY = y;
+        });
+        
+        return [getTileBounds(fMinX, fMinY, 14)[0], getTileBounds(fMaxX, fMaxY, 14)[1]] as LatLngBoundsExpression;
+    }, [lastActivityId]); // Recalcule uniquement quand l'ID de la dernière activité change
 
     // 5. RENDU DES TUILES
     const gridRectangles = useMemo(() => {
@@ -153,12 +166,9 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
     }, [activeTilesMap, currentTime]);
 
     return (
-        <div className="w-full h-full relative dimmed-mode">
-            <style jsx global>{`
-                .dimmed-mode .leaflet-tile-pane { filter: brightness(0.4) contrast(1.2) grayscale(0.8) invert(1) hue-rotate(180deg); }
-            `}</style>
+        <div className="w-full h-full relative bg-[#050505]">
+            {/* Suppression du filtre "dimmed-mode" qui blanchissait la carte CartoDB */}
 
-            {/* --- HUD DES STATISTIQUES EN DIRECT --- */}
             <div className="absolute top-24 left-6 z-[1000] bg-[#121217]/90 backdrop-blur-xl border border-white/10 p-5 rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] pointer-events-none w-[280px]">
                 <div className="flex items-center gap-2 mb-4">
                     <Activity size={18} className="text-[#00f3ff]" />
@@ -177,7 +187,6 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
                 </div>
             </div>
 
-            {/* --- BARRE DE CONTRÔLE (TIMELINE) --- */}
             <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl z-[1000] bg-[#121217]/90 backdrop-blur-xl p-4 rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
                 <div className="text-center mb-3">
                     <span className="text-lg font-black text-white tracking-widest uppercase drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">

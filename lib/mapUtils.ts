@@ -94,7 +94,7 @@ export const getTilesInBounds = (bounds: any, zoom: number): string[] => {
 
   const tiles: string[] = [];
   // Sécurité pour éviter de faire crasher le navigateur si on dézoome sur toute l'Europe
-  if ((maxX - minX) * (maxY - minY) > 4000) return [];
+  if ((maxX - minX) * (maxY - minY) > 9000) return [];
 
   for (let x = minX; x <= maxX; x++) {
     for (let y = minY; y <= maxY; y++) {
