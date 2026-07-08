@@ -62,51 +62,15 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 // --- COMPOSANT : PINCEAU SYNCHRONE + MACHINE A ETATS MANUELLE + SHIFT CLIC ---
 const MapInteractionHandler = ({ 
     blacklistMode, manualSquareStep, manualStartTile, setManualSquareStep, setManualStartTile, 
-    setCustomTargetSquare, setTargetMode, setShowTargets,
-    visitedTilesSet, blacklistedTilesSet, setBlacklistedTilesSet, handleBatchBlacklist,
-    setManualError, shiftStartTile, setShiftStartTile, setActiveTilePopup
+    setCustomTargetSquare, setTargetMode, setShowTargets, visitedTilesSet, blacklistedTilesSet, 
+    setBlacklistedTilesSet, handleBatchBlacklist, setManualError, shiftStartTile, setShiftStartTile, 
+    setActiveTilePopup, setDraftBlacklist
 }: any) => {
     const map = useMap();
-    const isPaintingRef = React.useRef<boolean>(false);
-    const isErasingRef = React.useRef<boolean>(false);
-    
-    // Buffers de performance
-    const uiBufferRef = React.useRef<{add: Set<string>, remove: Set<string>}>({ add: new Set(), remove: new Set() });
-    const dbSyncBufferRef = React.useRef<{add: Set<string>, remove: Set<string>}>({ add: new Set(), remove: new Set() });
-    const lastUiFlushRef = React.useRef<number>(0);
-
-    // Synchronisation locale fluide (UI)
-    const flushUiBuffer = React.useCallback(() => {
-        const addArr = Array.from(uiBufferRef.current.add);
-        const rmArr = Array.from(uiBufferRef.current.remove);
-        
-        if (addArr.length > 0 || rmArr.length > 0) {
-            setBlacklistedTilesSet((prev: Set<string>) => {
-                const next = new Set(prev);
-                addArr.forEach(t => next.add(t));
-                rmArr.forEach(t => next.delete(t));
-                return next;
-            });
-            
-            addArr.forEach(t => dbSyncBufferRef.current.add.add(t));
-            rmArr.forEach(t => dbSyncBufferRef.current.remove.add(t));
-            
-            uiBufferRef.current.add.clear();
-            uiBufferRef.current.remove.clear();
-        }
-    }, [setBlacklistedTilesSet]);
-
-    // Synchronisation distante (Supabase)
-    const flushDbBuffer = React.useCallback(() => {
-        const addArr = Array.from(dbSyncBufferRef.current.add);
-        const rmArr = Array.from(dbSyncBufferRef.current.remove);
-        
-        if (addArr.length > 0) handleBatchBlacklist(addArr, 'add', true);
-        if (rmArr.length > 0) handleBatchBlacklist(rmArr, 'delete', true);
-        
-        dbSyncBufferRef.current.add.clear();
-        dbSyncBufferRef.current.remove.clear();
-    }, [handleBatchBlacklist]);
+    const isDraggingRef = React.useRef(false);
+    const dragActionRef = React.useRef<'add'|'delete'>('add');
+    const dragBufferRef = React.useRef<{add: Set<string>, remove: Set<string>}>({ add: new Set(), remove: new Set() });
+    const lastUiUpdateRef = React.useRef<number>(0);
 
     React.useEffect(() => {
         if (blacklistMode) { 
@@ -115,94 +79,55 @@ const MapInteractionHandler = ({
         } else { 
             map.dragging.enable(); map.touchZoom.enable(); 
             if (map.boxZoom) map.boxZoom.enable(); 
-            flushDbBuffer(); // On sauvegarde tout quand on quitte le mode pinceau !
             setShiftStartTile(null); 
         }
         
-        const handleRelease = () => {
-            if (isPaintingRef.current) {
-                isPaintingRef.current = false;
-                flushUiBuffer(); // Affiche la fin du coup de pinceau immédiatement
+        const stopDrag = () => {
+            if (isDraggingRef.current) {
+                isDraggingRef.current = false;
+                const added = Array.from(dragBufferRef.current.add);
+                const removed = Array.from(dragBufferRef.current.remove);
+                
+                if (added.length > 0 || removed.length > 0) {
+                    // 1. Déclenche les calculs mathématiques lourds UNIQUEMENT à la fin du pinceau !
+                    setBlacklistedTilesSet((prev: Set<string>) => {
+                        const next = new Set(prev);
+                        added.forEach(t => next.add(t)); removed.forEach(t => next.delete(t));
+                        return next;
+                    });
+                    // 2. Envoie en BDD
+                    if (added.length > 0) handleBatchBlacklist(added, 'add', true);
+                    if (removed.length > 0) handleBatchBlacklist(removed, 'delete', true);
+                }
+                // 3. Reset du brouillon visuel
+                dragBufferRef.current = { add: new Set(), remove: new Set() };
+                setDraftBlacklist({ add: new Set(), remove: new Set() });
             }
         };
 
-        window.addEventListener('mouseup', handleRelease);
-        window.addEventListener('touchend', handleRelease);
-        return () => { window.removeEventListener('mouseup', handleRelease); window.removeEventListener('touchend', handleRelease); };
-    }, [blacklistMode, map, flushUiBuffer, flushDbBuffer, setShiftStartTile]);
-
-    // Auto-save en arrière-plan toutes les 3 secondes pour ne rien perdre
-    React.useEffect(() => {
-        const interval = setInterval(() => {
-            if (dbSyncBufferRef.current.add.size > 0 || dbSyncBufferRef.current.remove.size > 0) flushDbBuffer();
-        }, 3000);
-        return () => clearInterval(interval);
-    }, [flushDbBuffer]);
+        window.addEventListener('mouseup', stopDrag); window.addEventListener('touchend', stopDrag);
+        return () => { window.removeEventListener('mouseup', stopDrag); window.removeEventListener('touchend', stopDrag); };
+    }, [blacklistMode, map, handleBatchBlacklist, setShiftStartTile, setBlacklistedTilesSet, setDraftBlacklist]);
 
     useMapEvents({
         click(e) {
-            const original = e.originalEvent as MouseEvent;
-            const x = lon2tile(e.latlng.lng, 14);
-            const y = lat2tile(e.latlng.lat, 14);
+            if (blacklistMode) return; // Si Pinceau activé, le clic normal est désactivé
+            
+            const x = lon2tile(e.latlng.lng, 14); const y = lat2tile(e.latlng.lat, 14);
             const tileKey = `${x},${y}`;
 
-            if (blacklistMode) {
-                // Option A : Sélection de zone au Shift depuis le pivot
-                if (original.shiftKey && shiftStartTile) {
-                    const minX = Math.min(shiftStartTile.x, x);
-                    const maxX = Math.max(shiftStartTile.x, x);
-                    const minY = Math.min(shiftStartTile.y, y);
-                    const maxY = Math.max(shiftStartTile.y, y);
-                    const action = shiftStartTile.action;
-
-                    for (let i = minX; i <= maxX; i++) {
-                        for (let j = minY; j <= maxY; j++) {
-                            const tk = `${i},${j}`;
-                            if (!visitedTilesSet.has(tk)) {
-                                if (action === 'add') { uiBufferRef.current.add.add(tk); uiBufferRef.current.remove.delete(tk); } 
-                                else { uiBufferRef.current.remove.add(tk); uiBufferRef.current.add.delete(tk); }
-                            }
-                        }
-                    }
-                    flushUiBuffer();
-                    return;
-                }
-
-                // Option B : Clic normal -> Applique l'action inverse et devient le nouveau pivot
-                if (!visitedTilesSet.has(tileKey)) {
-                    const action = blacklistedTilesSet.has(tileKey) ? 'delete' : 'add';
-                    if (action === 'add') uiBufferRef.current.add.add(tileKey);
-                    else uiBufferRef.current.remove.add(tileKey);
-                    flushUiBuffer();
-                    setShiftStartTile({ x, y, action });
-                }
-                return;
-            }
-
-            // PRIORITÉ 2 : CHOISIR LE PREMIER COIN (Ciblage Manuel)
             if (manualSquareStep === 'select-start') {
                 const sqSize = getSquareAt(visitedTilesSet, blacklistedTilesSet, x, y);
-                if (sqSize >= 2) {
-                    setManualStartTile({ x, y });
-                    setManualSquareStep('select-end');
-                } else if (setManualError) {
-                    setManualError("Départ invalide (minimum 2x2 requis).");
-                    setTimeout(() => setManualError(null), 3000);
-                }
+                if (sqSize >= 2) { setManualStartTile({ x, y }); setManualSquareStep('select-end'); } 
+                else if (setManualError) { setManualError("Départ invalide."); setTimeout(() => setManualError(null), 3000); }
                 return;
             }
 
-            // PRIORITÉ 3 : CHOISIR LE SECOND COIN & VALIDER
             if (manualSquareStep === 'select-end' && manualStartTile) {
-                const dx = Math.abs(x - manualStartTile.x);
-                const dy = Math.abs(y - manualStartTile.y);
+                const dx = Math.abs(x - manualStartTile.x); const dy = Math.abs(y - manualStartTile.y);
                 if (dx === dy && dx > 0) {
-                    const topLeftX = Math.min(x, manualStartTile.x);
-                    const topLeftY = Math.min(y, manualStartTile.y);
-                    const size = dx + 1;
-                    let isValid = true;
-                    const sqTiles: string[] = [];
-
+                    const topLeftX = Math.min(x, manualStartTile.x); const topLeftY = Math.min(y, manualStartTile.y); const size = dx + 1;
+                    let isValid = true; const sqTiles: string[] = [];
                     for (let i = 0; i < size; i++) {
                         for (let j = 0; j < size; j++) {
                             const checkKey = `${topLeftX + i},${topLeftY + j}`;
@@ -212,68 +137,78 @@ const MapInteractionHandler = ({
                     }
                     if (isValid) {
                         setCustomTargetSquare({ maxSquare: size, topLeft: { x: topLeftX, y: topLeftY, key: `${topLeftX},${topLeftY}` }, tilesSet: new Set(sqTiles) });
-                        setTargetMode('square');
-                        setShowTargets(true);
-                        setManualSquareStep('off');
-                        setManualStartTile(null);
-                        if (setManualError) setManualError(null);
-                        return;
+                        setTargetMode('square'); setShowTargets(true); setManualSquareStep('off'); setManualStartTile(null);
+                        if (setManualError) setManualError(null); return;
                     }
                 }
-                if (setManualError) {
-                    setManualError("Diagonale invalide ou zone incomplète.");
-                    setTimeout(() => setManualError(null), 3000);
-                }
+                if (setManualError) { setManualError("Diagonale invalide."); setTimeout(() => setManualError(null), 3000); }
                 return; 
-            }
-
-            // PRIORITÉ 4 : OUVERTURE POPUP
-            if (!blacklistMode && manualSquareStep === 'off') {
-                const bounds = getTileBounds(x, y, 14);
-                const center = getTileCenter(x, y, 14);
-                setActiveTilePopup({ key: tileKey, bounds, position: center as LatLngTuple });
             }
         },
         mousedown(e) {
-            const x = lon2tile(e.latlng.lng, 14);
-            const y = lat2tile(e.latlng.lat, 14);
-            const tileKey = `${x},${y}`;
+            if (!blacklistMode || manualSquareStep !== 'off') return;
+            const original = e.originalEvent as MouseEvent;
+            const x = lon2tile(e.latlng.lng, 14); const y = lat2tile(e.latlng.lat, 14); const tileKey = `${x},${y}`;
 
-            if (blacklistMode && !e.originalEvent.shiftKey && manualSquareStep === 'off' && !visitedTilesSet.has(tileKey)) {
-                isPaintingRef.current = true;
-                isErasingRef.current = blacklistedTilesSet.has(tileKey);
+            // SHIFT CLIC
+            if (original.shiftKey || shiftStartTile) {
+                if (!shiftStartTile) {
+                    const action = blacklistedTilesSet.has(tileKey) ? 'delete' : 'add';
+                    setShiftStartTile({ x, y, action });
+                } else {
+                    const minX = Math.min(shiftStartTile.x, x); const maxX = Math.max(shiftStartTile.x, x);
+                    const minY = Math.min(shiftStartTile.y, y); const maxY = Math.max(shiftStartTile.y, y);
+                    const tilesToAdd: string[] = [];
+                    for (let i = minX; i <= maxX; i++) {
+                        for (let j = minY; j <= maxY; j++) {
+                            const tk = `${i},${j}`;
+                            if (!visitedTilesSet.has(tk)) tilesToAdd.push(tk);
+                        }
+                    }
+                    if (tilesToAdd.length > 0) {
+                        setBlacklistedTilesSet((prev: Set<string>) => {
+                            const next = new Set(prev);
+                            tilesToAdd.forEach(t => shiftStartTile.action === 'add' ? next.add(t) : next.delete(t));
+                            return next;
+                        });
+                        handleBatchBlacklist(tilesToAdd, shiftStartTile.action, true);
+                    }
+                    setShiftStartTile(null); 
+                }
+                return;
+            }
+
+            // DÉBUT PINCEAU NORMAL
+            if (!visitedTilesSet.has(tileKey)) {
+                isDraggingRef.current = true;
+                dragActionRef.current = blacklistedTilesSet.has(tileKey) ? 'delete' : 'add';
                 
-                if (isErasingRef.current) uiBufferRef.current.remove.add(tileKey);
-                else uiBufferRef.current.add.add(tileKey);
-                flushUiBuffer(); 
-                
-                // Le clic initial lance l'action et devient le pivot du futur Shift-Clic
-                setShiftStartTile({ x, y, action: isErasingRef.current ? 'delete' : 'add' });
+                if (dragActionRef.current === 'add') dragBufferRef.current.add.add(tileKey);
+                else dragBufferRef.current.remove.add(tileKey);
+
+                setDraftBlacklist({ add: new Set(dragBufferRef.current.add), remove: new Set(dragBufferRef.current.remove) });
+                lastUiUpdateRef.current = Date.now();
             }
         },
         mousemove(e) {
-            if (!blacklistMode || manualSquareStep !== 'off' || !isPaintingRef.current) return; 
+            if (!blacklistMode || !isDraggingRef.current) return; 
+            const x = lon2tile(e.latlng.lng, 14); const y = lat2tile(e.latlng.lat, 14); const tileKey = `${x},${y}`;
             
-            const x = lon2tile(e.latlng.lng, 14);
-            const y = lat2tile(e.latlng.lat, 14);
-            const tileKey = `${x},${y}`;
-            
-            if (!visitedTilesSet.has(tileKey)) {
-                if (isErasingRef.current) uiBufferRef.current.remove.add(tileKey);
-                else uiBufferRef.current.add.add(tileKey);
-
+            if (!visitedTilesSet.has(tileKey) && !dragBufferRef.current.add.has(tileKey) && !dragBufferRef.current.remove.has(tileKey)) {
+                if (dragActionRef.current === 'add') dragBufferRef.current.add.add(tileKey);
+                else dragBufferRef.current.remove.add(tileKey);
+                
                 const now = Date.now();
-                // BATCH : met à jour visuellement les tuiles toutes les 150ms pour garder Leaflet rapide !
-                if (now - lastUiFlushRef.current > 150) { 
-                    flushUiBuffer();
-                    lastUiFlushRef.current = now;
+                // BATCH VISUEL UNIQUEMENT (Ne déclenche pas le God-useMemo)
+                if (now - lastUiUpdateRef.current > 50) { 
+                    setDraftBlacklist({ add: new Set(dragBufferRef.current.add), remove: new Set(dragBufferRef.current.remove) });
+                    lastUiUpdateRef.current = now;
                 }
             }
         }
     });
     return null;
 };
-
 
 
 // --- COMPOSANT : TRACKER DE VUE (Score & Grille Globale) ---
@@ -329,6 +264,24 @@ const LocationMarker = () => {
         <CircleMarker center={position} radius={6} pathOptions={{ fillColor: '#00f3ff', fillOpacity: 0.8, weight: 0 }} />
     );
 };
+// --- COMPOSANT : TUILE MEMOÏSÉE (Performance 60fps) ---
+const MemoizedRectangle = React.memo(({ bounds, color, weight, opacity, fillOpacity, className, tileKey, isVisited, onInteract }: any) => {
+    return (
+        <Rectangle 
+            bounds={bounds} 
+            pathOptions={{ color, weight, opacity, fillColor: color, fillOpacity, className }}
+            interactive={true}
+            eventHandlers={{
+                click: () => onInteract(tileKey, isVisited, bounds)
+            }}
+        />
+    );
+}, (prevProps, nextProps) => {
+    return prevProps.color === nextProps.color && 
+           prevProps.className === nextProps.className &&
+           prevProps.weight === nextProps.weight;
+});
+
 
 // ==========================================
 // COMPOSANT PRINCIPAL
@@ -343,7 +296,7 @@ export default function GlobalMapClient({
     userId: number;
 }) {
   const [isMounted, setIsMounted] = useState(false);
-  const supabase = createBrowserSupabaseClient();
+  const supabase = useMemo(() => createBrowserSupabaseClient(), []);
   
   const [hudOpen, setHudOpen] = useState(true);
   const [selectedYear, setSelectedYear] = useState<string>('all');
@@ -357,7 +310,7 @@ export default function GlobalMapClient({
   const [customSquareMode, setCustomSquareMode] = useState(false);
   const [shiftStartTile, setShiftStartTile] = useState<{x: number, y: number, action: 'add' | 'delete'} | null>(null);
   const [manualError, setManualError] = useState<string | null>(null);
-
+  const [draftBlacklist, setDraftBlacklist] = useState<{add: Set<string>, remove: Set<string>}>({ add: new Set(), remove: new Set() });
 
 
   // -- ETATS LAYERS --
@@ -411,12 +364,13 @@ export default function GlobalMapClient({
     try {
         if (action === 'add') {
             const inserts = tileKeys.map(key => ({ user_id: userId, tile_key: key }));
-            await supabase.from('blacklisted_tiles').insert(inserts);
+            // L'UPSERT EMPÊCHE L'ERREUR 409 SI LA TUILE EXISTE DÉJÀ :
+            await supabase.from('blacklisted_tiles').upsert(inserts, { onConflict: 'user_id, tile_key' });
         } else {
             await supabase.from('blacklisted_tiles').delete().eq('user_id', userId).in('tile_key', tileKeys);
         }
     } catch (err) {
-        console.error("❌ Erreur de synchronisation Blacklist:", err);
+        console.error("Erreur Supabase:", err);
     }
   };
 
@@ -709,7 +663,8 @@ export default function GlobalMapClient({
 
       const tilesToZoom = new Set<string>();
       if (targetMode === 'square') {
-          currentMaxSquare.tilesSet.forEach(t => tilesToZoom.add(t));
+          // UTILISE effectiveSquare AU LIEU DE currentMaxSquare :
+          if (effectiveSquare) effectiveSquare.tilesSet.forEach((t: string) => tilesToZoom.add(t));
           squareTargetsMap.forEach((lvl, key) => { if (lvl <= level) tilesToZoom.add(key); });
       } else {
           clusterSet.forEach(t => tilesToZoom.add(t));
@@ -719,17 +674,16 @@ export default function GlobalMapClient({
       if (bounds) triggerZoom(bounds);
   };
 
-  const handleTileInteraction = (tileKey: string, isVisited: boolean, bounds: LatLngBoundsExpression) => {
-      if (manualSquareStep !== 'off') return; // Bloque la popup si un ciblage manuel est en cours
-
+  const handleTileInteraction = React.useCallback((tileKey: string, isVisited: boolean, bounds: LatLngBoundsExpression) => {
+      if (manualSquareStep !== 'off') return; 
       if (blacklistMode && !isVisited) {
-          toggleBlacklistTile(tileKey);
+          // Rien ici, c'est mousedown qui gère maintenant
       } else {
           const [x, y] = tileKey.split(',').map(Number);
           const center = getTileCenter(x, y, 14);
           setActiveTilePopup({ key: tileKey, bounds, position: center as LatLngTuple });
       }
-  };
+  }, [manualSquareStep, blacklistMode, setActiveTilePopup]);
 
   const handleManualSquareSelection = (x: number, y: number) => {
       const tileKey = `${x},${y}`;
@@ -819,74 +773,65 @@ export default function GlobalMapClient({
 
     return Array.from(allKeysToRender).map(tileKey => {
       const isVisited = visitedTilesSet.has(tileKey);
-      const isBlacklisted = blacklistedTilesSet.has(tileKey);
       const isCore = showCore && coreTilesSet.has(tileKey);
       const targetLevel = currentTargetsMap.get(tileKey);
       const isTargetVisible = showTargets && targetLevel !== undefined && activeTargetLevels.has(targetLevel!);
       const isFilling = showFilling && fillingTilesSet.has(tileKey) && targetMode === 'cluster';
+
+      // ON VÉRIFIE LE BROUILLON VISUEL ICI !
+      let isBlacklisted = blacklistedTilesSet.has(tileKey);
+      if (draftBlacklist.add.has(tileKey)) isBlacklisted = true;
+      if (draftBlacklist.remove.has(tileKey)) isBlacklisted = false;
+
       const isGlobalGridOnly = showGlobalGrid && !isVisited && !isTargetVisible && !isFilling && !isBlacklisted;
-
-
-      // On bloque l'affichage si ce n'est rien de tout ça
       if ((!isVisited || !showGrid) && !isTargetVisible && !isFilling && !isBlacklisted && !isGlobalGridOnly) return null;
 
       const [x, y] = tileKey.split(',').map(Number);
-      const isShiftStart = blacklistMode && shiftStartTile && shiftStartTile.x === x && shiftStartTile.y === y;
       const bounds = getTileBounds(x, y, ZOOM);
+      const isShiftStart = blacklistMode && shiftStartTile && shiftStartTile.x === x && shiftStartTile.y === y; 
       
-      const isCustomSquare = customTargetSquare?.tilesSet.has(tileKey);
-      const isMaxSquare = !isCustomSquare && isVisited && showMaxSquare && effectiveSquare?.tilesSet.has(tileKey);
-      const isManualStartOption = manualSquareStep === 'select-start' && validStartTilesSet.has(tileKey);
-      const isPossibleTarget = manualSquareStep === 'select-end' && validDiagonalTargetsSet.has(tileKey);
+      const isMaxSquare = isVisited && showMaxSquare && effectiveSquare?.tilesSet.has(tileKey);
       const isManualStart = manualSquareStep === 'select-end' && manualStartTile?.x === x && manualStartTile?.y === y;
-      const isCluster = isVisited && showCluster && !isMaxSquare && clusterSet.has(tileKey); // <-- RESTAURÉ ICI
+      const isPossibleTarget = manualSquareStep === 'select-end' && validDiagonalTargetsSet.has(tileKey); 
+      const isCluster = isVisited && showCluster && !isMaxSquare && clusterSet.has(tileKey);
       
       let color = '#00f3ff', weight = 1, className = 'tile-base', fillOpacity = 0.12, opacity = 0.4;
 
       if (isBlacklisted) {
           color = '#000000'; weight = 1; className = 'tile-blacklisted'; fillOpacity = 0.6; opacity = 0.8;
       }
-      else if (isShiftStart) { // Modifie cette condition
-          color = shiftStartTile?.action === 'delete' ? '#ffffff' : '#ff0055'; 
+      else if (isShiftStart) { 
+          color = shiftStartTile.action === 'delete' ? '#ffffff' : '#ff0055'; 
           weight = 3; className = 'tile-shift-start'; fillOpacity = 0.5; opacity = 1;
       }
-      else if (isCustomSquare) { // Carré manuel validé
-          color = '#39ff14'; weight = 3; className = 'tile-custom-square'; fillOpacity = 0.4; opacity = 1;
-      }
-      else if (isManualStartOption || isPossibleTarget) { // Suggestions vertes
-          color = '#39ff14'; weight = 2; className = 'tile-possible-target'; fillOpacity = 0.4; opacity = 1;
-      }
-      else if (isManualStart) { // Point de départ clignotant
-          color = '#39ff14'; weight = 3; className = 'tile-manual-start'; fillOpacity = 0.8; opacity = 1;
-      }
-      else if (isGlobalGridOnly) {
-          color = '#ffffff'; weight = 1; className = 'tile-global-grid'; fillOpacity = 0.02; opacity = 0.15;
-      }
-      else if (isFilling) {
-          color = '#f97316'; weight = 2; className = 'tile-glitch'; fillOpacity = 0.4; opacity = 1;
-      }
-      else if (isTargetVisible && targetLevel) {
-          color = TARGET_COLORS[Math.min(Math.max(targetLevel - 1, 0), 9)];
-          weight = targetLevel === 1 ? 2 : 1; className = targetLevel === 1 ? 'tile-target-urgent' : 'tile-neon'; fillOpacity = 0.4; opacity = 0.9;
-      }
-      else if (isMaxSquare) {
-          color = '#ffd700'; weight = 3; className = 'tile-max-square'; fillOpacity = 0.5; opacity = 1;
-      } 
+      else if (isManualStart) { color = '#39ff14'; weight = 2; className = 'tile-manual-start'; fillOpacity = 0.5; opacity = 1; }
+      else if (isPossibleTarget) { color = '#39ff14'; weight = 3; className = 'tile-possible-target'; fillOpacity = 0.5; opacity = 1; }
+      else if (isGlobalGridOnly) { color = '#ffffff'; weight = 1; className = 'tile-global-grid'; fillOpacity = 0.02; opacity = 0.15; }
+      else if (isFilling) { color = '#f97316'; weight = 2; className = 'tile-glitch'; fillOpacity = 0.4; opacity = 1; }
+      else if (isTargetVisible && targetLevel) { color = TARGET_COLORS[Math.min(Math.max(targetLevel - 1, 0), 9)]; weight = targetLevel === 1 ? 2 : 1; className = targetLevel === 1 ? 'tile-target-urgent' : 'tile-neon'; fillOpacity = 0.4; opacity = 0.9; }
+      else if (isMaxSquare) { color = '#ffd700'; weight = 3; className = 'tile-max-square'; fillOpacity = 0.5; opacity = 1; } 
       else if (isVisited) {
           if (isCore) { color = '#ffffff'; fillOpacity = 0.8; opacity = 1; weight = 2; className = 'tile-core'; } 
           else if (isCluster) { color = '#d04fd7'; weight = 1; className = 'tile-cluster'; fillOpacity = 0.25; opacity = 0.6; } 
       }
 
+      // APPEL DU NOUVEAU COMPOSANT
       return (
-        <Rectangle 
+        <MemoizedRectangle 
           key={tileKey} 
+          tileKey={tileKey}
           bounds={bounds} 
-          pathOptions={{ color, weight, opacity, fillColor: color, fillOpacity, className }}
+          color={color}
+          weight={weight}
+          opacity={opacity}
+          fillOpacity={fillOpacity}
+          className={className}
+          isVisited={isVisited}
+          onInteract={handleTileInteraction}
         />
       );
     });
-  }, [visitedTilesSet, blacklistedTilesSet, squareTargetsMap, clusterTargetsMap, fillingTilesSet, coreTilesSet, showGrid, showMaxSquare, showCluster, showFilling, showCore, showTargets, activeTargetLevels, targetMode, currentMaxSquare, blacklistMode, showGlobalGrid, viewportTiles, shiftStartTile, manualSquareStep, manualStartTile, customTargetSquare, validStartTilesSet, validDiagonalTargetsSet, effectiveSquare]);
-
+  }, [visitedTilesSet, blacklistedTilesSet, draftBlacklist, squareTargetsMap, clusterTargetsMap, fillingTilesSet, coreTilesSet, showGrid, showMaxSquare, showCluster, showFilling, showCore, showTargets, activeTargetLevels, targetMode, currentMaxSquare, blacklistMode, showGlobalGrid, viewportTiles, shiftStartTile, manualSquareStep, manualStartTile, validDiagonalTargetsSet, effectiveSquare, handleTileInteraction]);
   if (!isMounted) return <div className="h-screen bg-[#050505] flex items-center justify-center text-[#d04fd7] animate-pulse font-sans tracking-widest text-xl">Chargement de la map ..</div>;
 
   const isFillingDisabled = !showCluster || targetMode === 'square';
@@ -1187,6 +1132,7 @@ export default function GlobalMapClient({
             shiftStartTile={shiftStartTile}
             setShiftStartTile={setShiftStartTile}
             setActiveTilePopup={setActiveTilePopup} 
+            setDraftBlacklist={setDraftBlacklist}
         />
 
         {boundsArea && (
