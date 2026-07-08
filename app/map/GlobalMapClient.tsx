@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
-import { getTilesFromPolyline, getTileBounds, lon2tile, lat2tile, getTilesInBounds } from '../../lib/mapUtils';
+import { getTilesFromPolyline, getTileBounds, lon2tile, lat2tile, getTilesInBounds, getTileCenter } from '../../lib/mapUtils';
 import { calculateMaxSquare, getSquareTiles, calculateTotalArea, findTopClusters, getFutureTargets, getSquareAt, getValidDiagonalTargets } from '../../lib/gridAlgo';
 import { Layers, Maximize, Eye, Grid, Activity, Target, Map as MapIcon, CheckSquare, Calendar, Focus, Crosshair, ArrowRightLeft, MoveVertical, Scan, ArrowUpRight, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
 import { useMap, useMapEvents } from 'react-leaflet';
@@ -59,24 +59,20 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 }
 
 
-// --- COMPOSANT : PINCEAU BLACKLIST SYNCHRONE + TACTILE ---
-// N'oublie pas d'ajouter les nouvelles props dans l'appel du composant plus bas !
+// --- COMPOSANT : PINCEAU SYNCHRONE + MACHINE A ETATS MANUELLE + SHIFT CLIC ---
 const MapInteractionHandler = ({ 
     blacklistMode, manualSquareStep, manualStartTile, setManualSquareStep, setManualStartTile, 
     setCustomTargetSquare, setTargetMode, setShowTargets,
-    visitedTilesSet, blacklistedTilesSet, toggleBlacklistTile, handleBatchBlacklist,setManualError
+    visitedTilesSet, blacklistedTilesSet, setBlacklistedTilesSet, toggleBlacklistTile, handleBatchBlacklist,
+    setManualError 
 }: any) => {
     const paintedTilesRef = React.useRef<Set<string>>(new Set());
+    const [shiftStartTile, setShiftStartTile] = React.useState<{x: number, y: number} | null>(null);
     const map = useMap();
 
     React.useEffect(() => {
-        if (blacklistMode) {
-            map.dragging.disable();
-            map.touchZoom.disable();
-        } else {
-            map.dragging.enable();
-            map.touchZoom.enable();
-        }
+        if (blacklistMode) { map.dragging.disable(); map.touchZoom.disable(); } 
+        else { map.dragging.enable(); map.touchZoom.enable(); }
         
         const handleRelease = () => {
             if (paintedTilesRef.current.size > 0) {
@@ -97,7 +93,37 @@ const MapInteractionHandler = ({
             const y = lat2tile(e.latlng.lat, 14);
             const tileKey = `${x},${y}`;
 
-            // ETAPE 1 : CHOISIR LE PREMIER COIN
+            // PRIORITÉ 1 : SÉLECTION DE ZONE SHIFT + CLIC (Si Blacklist active)
+            if (blacklistMode && e.originalEvent.shiftKey) {
+                if (!shiftStartTile) {
+                    setShiftStartTile({ x, y });
+                    if (setManualError) {
+                        setManualError("Départ Shift enregistré. Cliquez sur la destination.");
+                        setTimeout(() => setManualError(null), 3000);
+                    }
+                } else {
+                    const minX = Math.min(shiftStartTile.x, x);
+                    const maxX = Math.max(shiftStartTile.x, x);
+                    const minY = Math.min(shiftStartTile.y, y);
+                    const maxY = Math.max(shiftStartTile.y, y);
+                    const tilesToAdd: string[] = [];
+                    
+                    for (let i = minX; i <= maxX; i++) {
+                        for (let j = minY; j <= maxY; j++) {
+                            const tk = `${i},${j}`;
+                            if (!visitedTilesSet.has(tk) && !blacklistedTilesSet.has(tk)) {
+                                tilesToAdd.push(tk);
+                            }
+                        }
+                    }
+                    if (tilesToAdd.length > 0) handleBatchBlacklist(tilesToAdd, 'add');
+                    setShiftStartTile(null);
+                    if (setManualError) setManualError(null);
+                }
+                return;
+            }
+
+            // PRIORITÉ 2 : CHOISIR LE PREMIER COIN (Ciblage Manuel)
             if (manualSquareStep === 'select-start') {
                 if (visitedTilesSet.has(tileKey)) {
                     setManualStartTile({ x, y });
@@ -106,7 +132,7 @@ const MapInteractionHandler = ({
                 return;
             }
 
-            // ETAPE 2 : CHOISIR LE SECOND COIN & VALIDER
+            // PRIORITÉ 3 : CHOISIR LE SECOND COIN & VALIDER
             if (manualSquareStep === 'select-end' && manualStartTile) {
                 const dx = Math.abs(x - manualStartTile.x);
                 const dy = Math.abs(y - manualStartTile.y);
@@ -115,38 +141,34 @@ const MapInteractionHandler = ({
                     const topLeftX = Math.min(x, manualStartTile.x);
                     const topLeftY = Math.min(y, manualStartTile.y);
                     const size = dx + 1;
-
                     let isValid = true;
                     const sqTiles: string[] = [];
 
                     for (let i = 0; i < size; i++) {
                         for (let j = 0; j < size; j++) {
                             const checkKey = `${topLeftX + i},${topLeftY + j}`;
-                            if (!visitedTilesSet.has(checkKey) || blacklistedTilesSet.has(checkKey)) {
-                                isValid = false;
-                            }
+                            if (!visitedTilesSet.has(checkKey) || blacklistedTilesSet.has(checkKey)) isValid = false;
                             sqTiles.push(checkKey);
                         }
                     }
-
                     if (isValid) {
                         setCustomTargetSquare({ maxSquare: size, topLeft: { x: topLeftX, y: topLeftY, key: `${topLeftX},${topLeftY}` }, tilesSet: new Set(sqTiles) });
                         setTargetMode('square');
                         setShowTargets(true);
                         setManualSquareStep('off');
                         setManualStartTile(null);
-                        setManualError(null);
+                        if (setManualError) setManualError(null);
                         return;
                     }
                 }
-                
-                // SI ON ARRIVE ICI, C'EST UN ECHEC (Pas un carré parfait, ou tuiles manquantes)
-                setManualError("Diagonale invalide ou zone incomplète.");
-                setTimeout(() => setManualError(null), 3000);
-                return; // On maintient l'état 'select-end' !
+                if (setManualError) {
+                    setManualError("Diagonale invalide ou zone incomplète.");
+                    setTimeout(() => setManualError(null), 3000);
+                }
+                return; 
             }
 
-            // PRIORITÉ 2 : BLACKLIST CLASSIQUE
+            // PRIORITÉ 4 : BLACKLIST CLASSIQUE
             if (!blacklistMode) return;
             if (!visitedTilesSet.has(tileKey)) toggleBlacklistTile(tileKey);
         },
@@ -164,7 +186,8 @@ const MapInteractionHandler = ({
                 
                 if (!visitedTilesSet.has(tileKey) && !blacklistedTilesSet.has(tileKey) && !paintedTilesRef.current.has(tileKey)) {
                     paintedTilesRef.current.add(tileKey); 
-                    toggleBlacklistTile(tileKey, null, true);
+                    // ZÉRO LATENCE : Mise à jour de l'état local synchrone sans requête
+                    setBlacklistedTilesSet((prev: Set<string>) => new Set(prev).add(tileKey));
                 }
             }
         }
@@ -282,7 +305,7 @@ export default function GlobalMapClient({
 
   // -- ETAT ZOOM & POPUP --
   const [zoomTarget, setZoomTarget] = useState<{ bounds: LatLngBoundsExpression, id: number } | null>(null);
-  const [activeTilePopup, setActiveTilePopup] = useState<{ key: string, bounds: LatLngBoundsExpression } | null>(null);
+  const [activeTilePopup, setActiveTilePopup] = useState<{ key: string, bounds: LatLngBoundsExpression, position: LatLngTuple } | null>(null);
 
   useEffect(() => { setIsMounted(true); }, []);
 
@@ -565,10 +588,10 @@ export default function GlobalMapClient({
       }
   };
 
-  const cycleSquareRank = (e: React.MouseEvent) => {
+  const cycleSquareRank = (e: React.MouseEvent, index?: number) => {
       e.stopPropagation(); 
-      cancelManualMode();
-      setActiveSquareRank((activeSquareRank + 1) % Math.min(topSquares.length, 5));
+      cancelManualMode(); // Réinitialise le ciblage manuel
+      setActiveSquareRank(index !== undefined ? index : (activeSquareRank + 1) % Math.min(topSquares.length, 5));
       if (targetMode !== 'square') { setTargetMode('square'); setShowTargets(true); setShowFilling(false); }
   };
 
@@ -600,10 +623,14 @@ export default function GlobalMapClient({
   };
 
   const handleTileInteraction = (tileKey: string, isVisited: boolean, bounds: LatLngBoundsExpression) => {
+      if (manualSquareStep !== 'off') return; // Bloque la popup si un ciblage manuel est en cours
+
       if (blacklistMode && !isVisited) {
           toggleBlacklistTile(tileKey);
       } else {
-          setActiveTilePopup({ key: tileKey, bounds });
+          const [x, y] = tileKey.split(',').map(Number);
+          const center = getTileCenter(x, y, 14);
+          setActiveTilePopup({ key: tileKey, bounds, position: center as LatLngTuple });
       }
   };
 
@@ -708,7 +735,7 @@ export default function GlobalMapClient({
           color = '#39ff14'; weight = 2; className = 'tile-manual-start'; fillOpacity = 0.5; opacity = 1;
       }
       else if (isPossibleTarget) {
-          color = '#eab308'; weight = 2; className = 'tile-possible-target'; fillOpacity = 0.3; opacity = 1;
+          color = '#39ff14'; weight = 3; className = 'tile-possible-target'; fillOpacity = 0.5; opacity = 1;
       }
       else if (isGlobalGridOnly) {
           // Style grille de fond
@@ -812,7 +839,8 @@ export default function GlobalMapClient({
         }
 
         .tile-manual-start { stroke: #39ff14 !important; stroke-dasharray: 4 4; animation: flash-green 1s infinite alternate; z-index: 400 !important; }
-        .tile-possible-target { stroke: #eab308 !important; fill: #eab308 !important; stroke-dasharray: 4 4; fill-opacity: 0.3 !important; animation: pulse-yellow 1.5s infinite alternate; cursor: crosshair; }
+        .tile-possible-target { stroke: #39ff14 !important; fill: #39ff14 !important; stroke-dasharray: 4 4; fill-opacity: 0.5 !important; animation: pulse-green 1.5s infinite alternate; cursor: crosshair; z-index: 300 !important; }
+        @keyframes pulse-green { from { fill-opacity: 0.2; } to { fill-opacity: 0.5; } }
         @keyframes flash-green { from { fill-opacity: 0.3; stroke-opacity: 0.8; } to { fill-opacity: 0.6; stroke-opacity: 1; } }
         @keyframes pulse-yellow { from { fill-opacity: 0.1; } to { fill-opacity: 0.4; } }
 
@@ -869,8 +897,8 @@ export default function GlobalMapClient({
                             {customTargetSquare ? (
                                 <button onClick={(e) => { e.stopPropagation(); setCustomTargetSquare(null); }} className="p-1 -m-1 text-emerald-400 hover:text-white transition-colors" title="Annuler ciblage manuel"><Focus size={14} /></button>
                             ) : (
-                                <div onClick={cycleSquareRank} className="flex gap-0.5 p-1 -m-1 cursor-alias hover:scale-110 transition-transform">
-                                    {[0,1,2,3,4].map(i => <div key={i} className={`w-1.5 h-1.5 rounded-full ${activeSquareRank === i ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]' : 'bg-gray-600'}`} />)}
+                                <div className="flex gap-0.5 p-1 -m-1 cursor-alias hover:scale-110 transition-transform">
+                                    {[0,1,2,3,4].map(i => <div key={i} onClick={(e) => cycleSquareRank(e, i)} className={`w-1.5 h-1.5 rounded-full ${activeSquareRank === i ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]' : 'bg-gray-600'}`} />)}
                                 </div>
                             )}
                         </div>
@@ -1041,7 +1069,7 @@ export default function GlobalMapClient({
 
         {activeTilePopup && (
             <Popup 
-                position={[(activeTilePopup.bounds as any)[0][0], (activeTilePopup.bounds as any)[0][1]]} 
+                position={activeTilePopup.position}
                 eventHandlers={{ remove: () => setActiveTilePopup(null) }}
                 className="custom-dark-popup"
                 autoPan={false}

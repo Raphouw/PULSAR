@@ -225,9 +225,14 @@ export function getFutureTargets(tilesSet: Set<string>, blacklistSet: Set<string
             virtualTLY -= 1;
         }
 
-        bestMissingTiles.forEach(tileKey => {
-            if (!targets.has(tileKey)) targets.set(tileKey, k);
-        });
+        if (minCost === 0) {
+            // L'expansion est gratuite (zone déjà explorée), on ne consomme pas de rang
+            k--; 
+        } else {
+            bestMissingTiles.forEach(tileKey => {
+                if (!targets.has(tileKey)) targets.set(tileKey, k);
+            });
+        }
 
         virtualSize = nextSize;
     }
