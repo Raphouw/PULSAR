@@ -4,6 +4,7 @@ import { authOptions } from "../../lib/auth";
 import { supabaseAdmin } from "../../lib/supabaseAdminClient"; 
 import { redirect } from "next/navigation";
 import GlobalMapClient from './GlobalMapClient';
+import MapTabsWrapper from './MapTabsWrapper';
 
 export const metadata = {
   title: 'Carte Globale | PULSAR',
@@ -83,7 +84,7 @@ export default async function MapPage() {
 
   return (
     <div className="w-full h-screen bg-[#050505] overflow-hidden">
-      <GlobalMapClient activities={cleanActivities as any} initialBlacklist={initialBlacklist} userId={dbUserId} />
+      <MapTabsWrapper activities={cleanActivities} initialBlacklist={initialBlacklist} userId={dbUserId} />
     </div>
   );
 }
