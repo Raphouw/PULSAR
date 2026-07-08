@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { getTilesFromPolyline, getTileBounds, lon2tile, lat2tile, getTilesInBounds, getTileCenter } from '../../lib/mapUtils';
 import { calculateMaxSquare, getSquareTiles, calculateTotalArea, findTopClusters, getFutureTargets, getSquareAt, getValidDiagonalTargets } from '../../lib/gridAlgo';
-import { Layers, Maximize, Eye, Grid, Activity, Target, Map as MapIcon, CheckSquare, Calendar, Focus, Crosshair, ArrowRightLeft, MoveVertical, Scan, ArrowUpRight, ShieldAlert, ChevronDown, ChevronUp } from 'lucide-react';
+import { Layers, Maximize, Eye, Grid, Activity, Target, Map as MapIcon, CheckSquare, Calendar, Focus, Crosshair, ArrowRightLeft, MoveVertical, Scan, ArrowUpRight, ShieldAlert, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { useMap, useMapEvents } from 'react-leaflet';
 import { LatLngBoundsExpression, LatLngTuple } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -145,13 +145,16 @@ const MapInteractionHandler = ({
 
             // PRIORITÉ 2 : CHOISIR LE PREMIER COIN (Ciblage Manuel)
             if (manualSquareStep === 'select-start') {
-                if (visitedTilesSet.has(tileKey)) {
+                const sqSize = getSquareAt(visitedTilesSet, blacklistedTilesSet, x, y);
+                if (sqSize >= 2) {
                     setManualStartTile({ x, y });
                     setManualSquareStep('select-end');
+                } else if (setManualError) {
+                    setManualError("Départ invalide (minimum 2x2 requis).");
+                    setTimeout(() => setManualError(null), 3000);
                 }
                 return;
             }
-
             // PRIORITÉ 3 : CHOISIR LE SECOND COIN & VALIDER
             if (manualSquareStep === 'select-end' && manualStartTile) {
                 const dx = Math.abs(x - manualStartTile.x);
@@ -630,22 +633,40 @@ export default function GlobalMapClient({
       }
   };
 
-  const cycleSquareRank = (e: React.MouseEvent, index?: number) => {
+  const cycleSquareRank = (e: React.MouseEvent, action: 'prev' | 'next' | number) => {
       e.stopPropagation(); 
-      cancelManualMode(); // Réinitialise le ciblage manuel
-      setActiveSquareRank(index !== undefined ? index : (activeSquareRank + 1) % Math.min(topSquares.length, 5));
+      cancelManualMode();
+      let nextRank = activeSquareRank;
+      const maxLen = Math.min(topSquares.length, 5);
+      if (action === 'prev') nextRank = (activeSquareRank - 1 + maxLen) % maxLen;
+      else if (action === 'next') nextRank = (activeSquareRank + 1) % maxLen;
+      else nextRank = action as number;
+      setActiveSquareRank(nextRank);
       if (targetMode !== 'square') { setTargetMode('square'); setShowTargets(true); setShowFilling(false); }
+  };
+
+  const cycleClusterRank = (e: React.MouseEvent, action: 'prev' | 'next' | number) => {
+      e.stopPropagation(); 
+      cancelManualMode();
+      let nextRank = activeClusterRank;
+      const maxLen = topClusters.length;
+      if (action === 'prev') nextRank = (activeClusterRank - 1 + maxLen) % maxLen;
+      else if (action === 'next') nextRank = (activeClusterRank + 1) % maxLen;
+      else nextRank = action as number;
+      setActiveClusterRank(nextRank);
+      if (targetMode !== 'cluster') { setTargetMode('cluster'); setShowTargets(false); setShowFilling(true); }
   };
 
   useEffect(() => {
       if (targetMode === 'square' && showMaxSquare && currentMaxSquareBounds) triggerZoom(currentMaxSquareBounds);
   }, [activeSquareRank]);
 
+  // FIX ZOOM CLUSTER : Ne se déclenche QUE quand le rang change explicitement
   useEffect(() => {
       if (targetMode === 'cluster' && showCluster && clusterBounds) {
           triggerZoom(clusterBounds);
       }
-  }, [activeClusterRank, targetMode, showCluster, clusterBounds]);
+  }, [activeClusterRank]);
 
   const handleTargetRange = (level: number) => {
       const newSet = new Set<number>();
@@ -734,7 +755,19 @@ export default function GlobalMapClient({
           return new Set(targets.map(t => `${t.x},${t.y}`));
       }
       return new Set<string>();
-    }, [manualSquareStep, manualStartTile, visitedTilesSet, blacklistedTilesSet]);
+  }, [manualSquareStep, manualStartTile, visitedTilesSet, blacklistedTilesSet]);
+
+  const validStartTilesSet = useMemo(() => {
+      if (manualSquareStep !== 'select-start') return new Set<string>();
+      const valid = new Set<string>();
+      visitedTilesSet.forEach(t => {
+          const [x, y] = t.split(',').map(Number);
+          const sqSize = getSquareAt(visitedTilesSet, blacklistedTilesSet, x, y);
+          if (sqSize >= 2) valid.add(t); // Ne s'allume en vert que si un carré 2x2 minimum est possible
+      });
+      return valid;
+  }, [manualSquareStep, visitedTilesSet, blacklistedTilesSet]);
+
   // --- RENDU RECTANGLES ---
   const gridRectangles = useMemo(() => {
     const ZOOM = 14;
@@ -746,7 +779,8 @@ export default function GlobalMapClient({
         ...(showFilling && targetMode === 'cluster' ? Array.from(fillingTilesSet) : []),
         ...Array.from(blacklistedTilesSet),
         ...(showGlobalGrid ? viewportTiles : []),
-        ...(shiftStartTile ? [`${shiftStartTile.x},${shiftStartTile.y}`] : []) // <-- AJOUT ICI
+        ...(shiftStartTile ? [`${shiftStartTile.x},${shiftStartTile.y}`] : []),
+        ...Array.from(validStartTilesSet) 
     ]);
 
     return Array.from(allKeysToRender).map(tileKey => {
@@ -763,30 +797,34 @@ export default function GlobalMapClient({
       if ((!isVisited || !showGrid) && !isTargetVisible && !isFilling && !isBlacklisted && !isGlobalGridOnly) return null;
 
       const [x, y] = tileKey.split(',').map(Number);
-      const isShiftStart = shiftStartTile && shiftStartTile.x === x && shiftStartTile.y === y; // <-- AJOUT ICI
+      const isShiftStart = shiftStartTile && shiftStartTile.x === x && shiftStartTile.y === y; 
       const bounds = getTileBounds(x, y, ZOOM);
       
-      const isMaxSquare = isVisited && showMaxSquare && effectiveSquare?.tilesSet.has(tileKey); // CORRECTION ICI
+      const isCustomSquare = customTargetSquare?.tilesSet.has(tileKey);
+      const isMaxSquare = !isCustomSquare && isVisited && showMaxSquare && effectiveSquare?.tilesSet.has(tileKey);
+      const isManualStartOption = manualSquareStep === 'select-start' && validStartTilesSet.has(tileKey);
+      const isPossibleTarget = manualSquareStep === 'select-end' && validDiagonalTargetsSet.has(tileKey);
       const isManualStart = manualSquareStep === 'select-end' && manualStartTile?.x === x && manualStartTile?.y === y;
-      const isPossibleTarget = manualSquareStep === 'select-end' && validDiagonalTargetsSet.has(tileKey); // <-- NOUVEAU
-      const isCluster = isVisited && showCluster && !isMaxSquare && clusterSet.has(tileKey);
+      const isCluster = isVisited && showCluster && !isMaxSquare && clusterSet.has(tileKey); // <-- RESTAURÉ ICI
       
       let color = '#00f3ff', weight = 1, className = 'tile-base', fillOpacity = 0.12, opacity = 0.4;
 
       if (isBlacklisted) {
           color = '#000000'; weight = 1; className = 'tile-blacklisted'; fillOpacity = 0.6; opacity = 0.8;
       }
-      else if (isShiftStart) { // <-- NOUVEAU BLOC
+      else if (isShiftStart) { 
           color = '#ff0055'; weight = 3; className = 'tile-shift-start'; fillOpacity = 0.5; opacity = 1;
       }
-      else if (isManualStart) {
-          color = '#39ff14'; weight = 2; className = 'tile-manual-start'; fillOpacity = 0.5; opacity = 1;
+      else if (isCustomSquare) { // Carré manuel validé
+          color = '#39ff14'; weight = 3; className = 'tile-custom-square'; fillOpacity = 0.4; opacity = 1;
       }
-      else if (isPossibleTarget) {
-          color = '#39ff14'; weight = 3; className = 'tile-possible-target'; fillOpacity = 0.5; opacity = 1;
+      else if (isManualStartOption || isPossibleTarget) { // Suggestions vertes
+          color = '#39ff14'; weight = 2; className = 'tile-possible-target'; fillOpacity = 0.4; opacity = 1;
+      }
+      else if (isManualStart) { // Point de départ clignotant
+          color = '#39ff14'; weight = 3; className = 'tile-manual-start'; fillOpacity = 0.8; opacity = 1;
       }
       else if (isGlobalGridOnly) {
-          // Style grille de fond
           color = '#ffffff'; weight = 1; className = 'tile-global-grid'; fillOpacity = 0.02; opacity = 0.15;
       }
       else if (isFilling) {
@@ -852,6 +890,7 @@ export default function GlobalMapClient({
         .tile-shift-start { stroke: #ff0055 !important; stroke-dasharray: 4 4; animation: flash-red 1s infinite alternate; z-index: 400 !important; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .tile-custom-square { stroke: #39ff14 !important; animation: pulse-green 3s infinite alternate; z-index: 50; }
         .tile-manual-start { stroke-dasharray: 4 4; animation: flash-green 1s infinite alternate; z-index: 100; }
         @keyframes flash-green { from { fill-opacity: 0.3; stroke-opacity: 0.8; } to { fill-opacity: 0.6; stroke-opacity: 1; } }
         /* --- CUSTOM LEAFLET POPUP --- */
@@ -936,20 +975,28 @@ export default function GlobalMapClient({
                         <div className="text-[15px] font-black tabular-nums leading-none tracking-tight text-white flex justify-between items-center">
                             <span className="flex items-center gap-1">
                                 {effectiveSquare?.maxSquare || 0}x{effectiveSquare?.maxSquare || 0}
-                                {targetMode === 'square' && selectionStats.count > 0 && <span className="text-[10px] text-gray-400 font-normal">({(effectiveSquare?.maxSquare || 0) + Math.max(0, ...Array.from(activeTargetLevels))}²)</span>}
+                                {targetMode === 'square' && selectionStats.count > 0 && (
+                                    <span className="text-[10px] text-gray-400 font-normal ml-1">
+                                        ({(effectiveSquare?.maxSquare || 0) + Math.max(0, ...Array.from(activeTargetLevels))}x{(effectiveSquare?.maxSquare || 0) + Math.max(0, ...Array.from(activeTargetLevels))})
+                                    </span>
+                                )}
                             </span>
                             
-                            {customTargetSquare ? (
-                                <button onClick={(e) => { e.stopPropagation(); setCustomTargetSquare(null); }} className="p-1 -m-1 text-emerald-400 hover:text-white transition-colors" title="Annuler ciblage manuel"><Focus size={14} /></button>
+                            {manualSquareStep !== 'off' || customTargetSquare ? (
+                                <button onClick={(e) => { e.stopPropagation(); cancelManualMode(); }} className="p-1 -m-1 text-emerald-400 hover:text-white transition-colors z-10" title="Annuler ciblage manuel"><X size={16} /></button>
                             ) : (
-                                <div className="flex gap-0.5 p-1 -m-1 cursor-alias hover:scale-110 transition-transform">
-                                    {[0,1,2,3,4].map(i => <div key={i} onClick={(e) => cycleSquareRank(e, i)} className={`w-1.5 h-1.5 rounded-full ${activeSquareRank === i ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]' : 'bg-gray-600'}`} />)}
+                                <div className="flex gap-1.5 p-1 -m-1 items-center z-10">
+                                    <button onClick={(e) => cycleSquareRank(e, 'prev')} className="hover:text-white text-gray-500 transition-colors"><ChevronLeft size={14}/></button>
+                                    <div className="flex gap-0.5 cursor-alias hover:scale-110 transition-transform">
+                                        {[0,1,2,3,4].map(i => <div key={i} onClick={(e) => cycleSquareRank(e, i)} className={`w-1.5 h-1.5 rounded-full ${activeSquareRank === i ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]' : 'bg-gray-600'}`} />)}
+                                    </div>
+                                    <button onClick={(e) => cycleSquareRank(e, 'next')} className="hover:text-white text-gray-500 transition-colors"><ChevronRight size={14}/></button>
                                 </div>
                             )}
                         </div>
                         <div className={`flex items-center justify-between text-[9px] font-bold uppercase tracking-widest ${customTargetSquare ? 'text-emerald-400' : 'text-yellow-500/80'}`}>
-                            <div className="flex items-center gap-1.5"><Maximize size={10} /> {customTargetSquare ? 'CARRÉ CIBLÉ' : 'MAX SQ'}</div>
-                            {!customTargetSquare && <span className="text-gray-500">#{activeSquareRank + 1}</span>}
+                            <div className="flex items-center gap-1.5"><Maximize size={10} /> {customTargetSquare ? 'CARRÉ CIBLÉ' : (manualSquareStep !== 'off' ? 'CIBLAGE...' : 'MAX SQ')}</div>
+                            {!customTargetSquare && manualSquareStep === 'off' && <span className="text-gray-500">#{activeSquareRank + 1}</span>}
                         </div>
                     </div>
                     
@@ -958,10 +1005,14 @@ export default function GlobalMapClient({
                         <div className="text-[15px] font-black tabular-nums leading-none tracking-tight text-white flex justify-between items-center">
                             <span className="flex items-center gap-1">
                                 {clusterSet.size}
-                                {targetMode === 'cluster' && selectionStats.count > 0 && <span className="text-[10px] text-gray-400 font-normal">(+{selectionStats.count})</span>}
+                                {targetMode === 'cluster' && selectionStats.count > 0 && <span className="text-[10px] text-gray-400 font-normal ml-1">(+{selectionStats.count})</span>}
                             </span>
-                            <div onClick={(e) => { e.stopPropagation(); setActiveClusterRank((activeClusterRank + 1) % topClusters.length); }} className="flex gap-0.5 p-1 -m-1 cursor-alias hover:scale-110 transition-transform">
-                                {topClusters.map((_, i) => <div key={i} className={`w-1.5 h-1.5 rounded-full ${activeClusterRank === i ? 'bg-[#d04fd7] shadow-[0_0_8px_rgba(208,79,215,0.6)]' : 'bg-gray-600'}`} />)}
+                            <div className="flex gap-1.5 p-1 -m-1 items-center z-10">
+                                <button onClick={(e) => cycleClusterRank(e, 'prev')} className="hover:text-white text-gray-500 transition-colors"><ChevronLeft size={14}/></button>
+                                <div className="flex gap-0.5 cursor-alias hover:scale-110 transition-transform">
+                                    {topClusters.map((_, i) => <div key={i} onClick={(e) => cycleClusterRank(e, i)} className={`w-1.5 h-1.5 rounded-full ${activeClusterRank === i ? 'bg-[#d04fd7] shadow-[0_0_8px_rgba(208,79,215,0.6)]' : 'bg-gray-600'}`} />)}
+                                </div>
+                                <button onClick={(e) => cycleClusterRank(e, 'next')} className="hover:text-white text-gray-500 transition-colors"><ChevronRight size={14}/></button>
                             </div>
                         </div>
                         <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-widest text-[#d04fd7]/80">
@@ -970,6 +1021,7 @@ export default function GlobalMapClient({
                         </div>
                     </div>
 
+                    {/* LA STATBOX MANQUANTE ET LES DIV DE FERMETURE ONT ÉTÉ REMISES ICI */}
                     <StatBox label="Zone (km²)" value={Number(totalArea).toFixed(0)} potentialLabel={selectionStats.count > 0 ? `(+${selectionStats.areaKm2.toFixed(1)})` : null} color="emerald" icon={<MapIcon size={12}/>} />
                 </div>
             </div>
