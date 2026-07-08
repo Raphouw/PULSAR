@@ -185,61 +185,71 @@ export function getValidDiagonalTargets(
     return targets;
 }
 
-export function getFutureTargets(tilesSet: Set<string>, blacklistSet: Set<string>, topLeft: TileCoord | null, currentSize: number, depth: number = 10, isCustom: boolean = false): Map<string, number> {
+export function getFutureTargets(
+    tilesSet: Set<string>, 
+    blacklistSet: Set<string>, 
+    topLeft: TileCoord | null, 
+    currentSize: number, 
+    depth: number = 10, 
+    isCustom: boolean = false
+): Map<string, number> {
     if (!topLeft || currentSize <= 0) return new Map();
     const targets = new Map<string, number>();
     
-    let virtualTLX = topLeft.x;
-    let virtualTLY = topLeft.y;
-    let virtualSize = currentSize;
-
+    // Pour chaque niveau de profondeur (N+1, N+2, etc.)
     for (let k = 1; k <= depth; k++) {
-        const nextSize = virtualSize + 1;
-        
-        const costBR = getExpansionCost(tilesSet, blacklistSet, virtualTLX, virtualTLY, nextSize);
-        const costBL = getExpansionCost(tilesSet, blacklistSet, virtualTLX - 1, virtualTLY, nextSize);
-        const costTR = getExpansionCost(tilesSet, blacklistSet, virtualTLX, virtualTLY - 1, nextSize);
-        const costTL = getExpansionCost(tilesSet, blacklistSet, virtualTLX - 1, virtualTLY - 1, nextSize);
+        const targetSize = currentSize + k;
+        let bestCost = Infinity;
+        let bestMissingTiles = new Set<string>();
 
-        const costs = [costBR, costBL, costTR, costTL];
-        let minCost = Infinity;
+        // On évalue tous les carrés de taille (targetSize) qui ENGLOBENT le carré initial
+        // dx et dy représentent le décalage du coin supérieur gauche
+        for (let dx = 0; dx <= k; dx++) {
+            for (let dy = 0; dy <= k; dy++) {
+                const cx = topLeft.x - dx;
+                const cy = topLeft.y - dy;
+                
+                let cost = 0;
+                let isValid = true;
+                const missing: string[] = [];
 
-        if (isCustom) {
-            const nonZeroCosts = costs.filter(c => c > 0);
-            if (nonZeroCosts.length > 0) minCost = Math.min(...nonZeroCosts);
-            else minCost = Math.min(...costs);
-        } else {
-            minCost = Math.min(...costs);
+                // On scanne la surface du nouveau carré testé
+                for (let ix = 0; ix < targetSize; ix++) {
+                    for (let iy = 0; iy < targetSize; iy++) {
+                        const tileKey = `${cx + ix},${cy + iy}`;
+                        
+                        if (blacklistSet?.has(tileKey)) {
+                            isValid = false;
+                            break;
+                        }
+                        if (!tilesSet.has(tileKey)) {
+                            missing.push(tileKey);
+                            cost++;
+                        }
+                    }
+                    if (!isValid) break;
+                }
+
+                if (isValid) {
+                    if (cost < bestCost) {
+                        bestCost = cost;
+                        bestMissingTiles = new Set(missing);
+                    } else if (cost === bestCost) {
+                        // En cas d'égalité (plusieurs chemins optimaux), on fusionne les tuiles
+                        // Cela crée de belles extensions symétriques pour le joueur
+                        missing.forEach(t => bestMissingTiles.add(t));
+                    }
+                }
+            }
         }
 
-        if (minCost === Infinity) break;
-
-        let bestMissingTiles: string[] = [];
-
-        if (costBR === minCost) {
-            bestMissingTiles = getMissingTilesForConfig(tilesSet, virtualTLX, virtualTLY, nextSize);
-        } else if (costBL === minCost) {
-            bestMissingTiles = getMissingTilesForConfig(tilesSet, virtualTLX - 1, virtualTLY, nextSize);
-            virtualTLX -= 1;
-        } else if (costTR === minCost) {
-            bestMissingTiles = getMissingTilesForConfig(tilesSet, virtualTLX, virtualTLY - 1, nextSize);
-            virtualTLY -= 1;
-        } else {
-            bestMissingTiles = getMissingTilesForConfig(tilesSet, virtualTLX - 1, virtualTLY - 1, nextSize);
-            virtualTLX -= 1;
-            virtualTLY -= 1;
-        }
-
-        if (minCost === 0) {
-            // L'expansion est gratuite (zone déjà explorée), on ne consomme pas de rang
-            k--; 
-        } else {
-            bestMissingTiles.forEach(tileKey => {
-                if (!targets.has(tileKey)) targets.set(tileKey, k);
+        // On assigne le niveau 'k' uniquement si on a besoin de nouvelles tuiles
+        if (bestCost !== Infinity && bestCost > 0) {
+            bestMissingTiles.forEach(t => {
+                if (!targets.has(t)) targets.set(t, k);
             });
         }
-
-        virtualSize = nextSize;
     }
+    
     return targets;
 }

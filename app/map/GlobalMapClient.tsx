@@ -58,6 +58,40 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
   return R * c;
 }
 
+function formatLastVisitDate(dateString?: string) {
+    if (!dateString) return '';
+    const d = new Date(dateString);
+    return new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }).format(d);
+}
+
+function getTimeSince(dateString?: string) {
+    if (!dateString) return '';
+    const now = new Date();
+    const past = new Date(dateString);
+
+    let years = now.getFullYear() - past.getFullYear();
+    let months = now.getMonth() - past.getMonth();
+    let days = now.getDate() - past.getDate();
+
+    if (days < 0) {
+        months--;
+        const prevMonth = new Date(now.getFullYear(), now.getMonth(), 0);
+        days += prevMonth.getDate();
+    }
+    if (months < 0) {
+        years--;
+        months += 12;
+    }
+
+    const parts: string[] = [];
+    if (years > 0) parts.push(`${years} an${years > 1 ? 's' : ''}`);
+    if (months > 0) parts.push(`${months} mois`);
+    if (days > 0) parts.push(`${days} jour${days > 1 ? 's' : ''}`);
+
+    if (parts.length === 0) return "Aujourd'hui";
+    return `Il y a ${parts.join(', ')}`;
+}
+
 
 // --- COMPOSANT : PINCEAU SYNCHRONE + MACHINE A ETATS MANUELLE + SHIFT CLIC ---
 const MapInteractionHandler = ({ 
@@ -400,27 +434,34 @@ export default function GlobalMapClient({
   }, [activities, selectedYear]);
 
   // --- CALCUL GEO SPATIAL ---
-  const { 
+ const { 
       visitedTilesSet, boundsArea, topSquares, totalArea, clusterSet, 
       squareTargetsMap, clusterTargetsMap, fillingTilesSet, coreTilesSet,    
       currentMaxSquareBounds, clusterBounds, tileVisitCounts,
-      topClusters, effectiveSquare // <-- AJOUT DES NOUVELLES VARIABLES ICI
+      topClusters, effectiveSquare, tileLastVisit // <-- AJOUTE tileLastVisit ICI
   } = useMemo(() => {
     const tiles = new Set<string>();
-    const tileCounts = new Map<string, number>(); // <-- AJOUT DE LA MAP DE COMPTAGES
+    const tileCounts = new Map<string, number>();
+    const lastVisitMap = new Map<string, string>(); // <-- NOUVELLE MAP
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
     filteredActivities.forEach(act => {
       if (act.polyline) {
         try {
            const actTiles = getTilesFromPolyline(act.polyline);
+           const actTimestamp = new Date(act.start_time).getTime(); // <-- LECTURE DU TEMPS
+
            actTiles.forEach(t => {
-             // Nettoyage automatique
              if (blacklistedTilesSet.has(t)) toggleBlacklistTile(t); 
 
              tiles.add(t);
-             // On incrémente le compteur de passages pour cette tuile
              tileCounts.set(t, (tileCounts.get(t) || 0) + 1);
+
+             // <-- AJOUT : STOCKER LA DATE LA PLUS RÉCENTE
+             const existingDate = lastVisitMap.get(t);
+             if (!existingDate || actTimestamp > new Date(existingDate).getTime()) {
+                 lastVisitMap.set(t, act.start_time);
+             }
 
              const [x, y] = t.split(',').map(Number);
              if (x < minX) minX = x; if (x > maxX) maxX = x;
@@ -555,13 +596,14 @@ export default function GlobalMapClient({
     }
 
     return { 
-        visitedTilesSet: tiles, boundsArea: globalBounds, topSquares: calculatedTopSquares, topClusters, // <-- Ajout de topClusters ici
+        visitedTilesSet: tiles, boundsArea: globalBounds, topSquares: calculatedTopSquares, topClusters,
         totalArea: area, clusterSet: clusterSet, squareTargetsMap: sqTargets, 
         clusterTargetsMap: clTargets, fillingTilesSet: fillingSet, coreTilesSet: coreSet,
         currentMaxSquareBounds: msBounds, clusterBounds: clBounds,
-        tileVisitCounts: tileCounts, effectiveSquare // <-- Ajout de effectiveSquare ici
+        tileVisitCounts: tileCounts, effectiveSquare,
+        tileLastVisit: lastVisitMap //
     };
-  }, [filteredActivities, activeSquareRank, activeClusterRank, customTargetSquare, blacklistedTilesSet]); // N'oublie pas d'ajouter les dépendances !
+  }, [filteredActivities, activeSquareRank, activeClusterRank, customTargetSquare, blacklistedTilesSet]);
 
     const handleViewportChange = React.useCallback((bounds: any) => {
       const currentTiles = getTilesInBounds(bounds, 14);
@@ -794,7 +836,8 @@ export default function GlobalMapClient({
       const isShiftStart = blacklistMode && shiftStartTile && shiftStartTile.x === x && shiftStartTile.y === y; 
       
       // --- RESTAURATION DU CIBLAGE MANUEL ---
-      const isMaxSquare = isVisited && showMaxSquare && effectiveSquare?.tilesSet.has(tileKey);
+      const isCustomSquare = customTargetSquare?.tilesSet.has(tileKey);
+      const isMaxSquare = !isCustomSquare && isVisited && showMaxSquare && effectiveSquare?.tilesSet.has(tileKey);
       const isManualStart = manualSquareStep === 'select-end' && manualStartTile?.x === x && manualStartTile?.y === y;
       const isPossibleTarget = manualSquareStep === 'select-end' && validDiagonalTargetsSet.has(tileKey); 
       const isManualStartOption = manualSquareStep === 'select-start' && validStartTilesSet.has(tileKey);
@@ -812,6 +855,9 @@ export default function GlobalMapClient({
           color = shiftStartTile.action === 'delete' ? '#ffffff' : '#ff0055'; 
           weight = 3; className = 'tile-shift-start'; fillOpacity = 0.5; opacity = 1;
       }
+      else if (isCustomSquare) { 
+          color = '#39ff14'; weight = 3; className = 'tile-custom-square'; fillOpacity = 0.4; opacity = 1;
+      }
       // RESTAURATION DES COULEURS VERTES
       else if (isManualStartOption || isPossibleTarget) { 
           color = '#39ff14'; weight = 3; className = 'tile-possible-target'; fillOpacity = 0.5; opacity = 1; 
@@ -819,6 +865,7 @@ export default function GlobalMapClient({
       else if (isManualStart) { 
           color = '#39ff14'; weight = 2; className = 'tile-manual-start'; fillOpacity = 0.8; opacity = 1; 
       }
+
       else if (isGlobalGridOnly) { color = '#ffffff'; weight = 1; className = 'tile-global-grid'; fillOpacity = 0.02; opacity = 0.15; }
       else if (isFilling) { color = '#f97316'; weight = 2; className = 'tile-glitch'; fillOpacity = 0.4; opacity = 1; }
       else if (isTargetVisible && targetLevel) { color = TARGET_COLORS[Math.min(Math.max(targetLevel - 1, 0), 9)]; weight = targetLevel === 1 ? 2 : 1; className = targetLevel === 1 ? 'tile-target-urgent' : 'tile-neon'; fillOpacity = 0.4; opacity = 0.9; }
@@ -1074,7 +1121,7 @@ export default function GlobalMapClient({
 
                     <div className="flex items-center gap-2">
                         <button onClick={() => setShowTargets(!showTargets)} className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider border transition-all flex items-center justify-center gap-2 ${showTargets ? 'bg-blue-500/20 border-blue-500/50 text-blue-400' : 'bg-transparent border-white/10 text-gray-500 hover:bg-white/5 hover:text-white'}`}>
-                            <Target size={14} /> {showTargets ? 'Extension ACTIVE' : 'Activer Cibles'}
+                            <Target size={14} /> {showTargets ? 'Extension ACTIVÉE' : 'Extension DESACTIVÉE'}
                         </button>
                     </div>
                     
@@ -1097,7 +1144,7 @@ export default function GlobalMapClient({
                     className={`w-full py-2.5 rounded-2xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border 
                         ${blacklistMode ? 'bg-red-500/20 border-red-500/50 text-red-400 shadow-[0_0_15px_rgba(255,0,85,0.2)]' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'}
                     `}>
-                    <ShieldAlert size={14} /> {blacklistMode ? 'Mode Peinture (Tactile ON)' : 'Pinceau Blacklist'}
+                    <ShieldAlert size={14} /> {blacklistMode ? 'Blacklist dactivé' : 'Blacklist désactivé'}
                 </button>
             </div>
 
@@ -1176,14 +1223,27 @@ export default function GlobalMapClient({
                     </div>
 
                     {visitedTilesSet.has(activeTilePopup.key) ? (
-                        <div className="space-y-1.5 mt-1">
+                        <div className="space-y-2 mt-1">
                             <div className="flex items-center justify-between">
                                 <span className="text-xs text-gray-400">Statut</span>
                                 <span className="text-xs font-semibold text-[#00f3ff]">Explorée</span>
                             </div>
                             <div className="flex items-center justify-between">
-                                <span className="text-xs text-gray-400">Passages</span>
+                                <span className="text-xs text-gray-400">Passages cumulés</span>
                                 <span className="text-sm font-black text-white">{tileVisitCounts.get(activeTilePopup.key) || 1}</span>
+                            </div>
+                            
+                            {/* --- NOUVEAU BLOC : DERNIER PASSAGE --- */}
+                            <div className="flex items-start justify-between border-t border-white/5 pt-2">
+                                <span className="text-xs text-gray-400">Dernier passage</span>
+                                <div className="flex flex-col items-end leading-none gap-1">
+                                    <span className="text-xs font-semibold text-white capitalize">
+                                        {formatLastVisitDate(tileLastVisit.get(activeTilePopup.key))}
+                                    </span>
+                                    <span className="text-[10px] text-gray-500 font-medium">
+                                        {getTimeSince(tileLastVisit.get(activeTilePopup.key))}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     ) : (
