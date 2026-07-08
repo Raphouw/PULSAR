@@ -800,8 +800,29 @@ export default function GlobalMapClient({
       return valid;
   }, [manualSquareStep, visitedTilesSet, blacklistedTilesSet]);
 
-  // --- RENDU RECTANGLES ---
-  // --- RENDU RECTANGLES ---
+
+const timeBounds = useMemo(() => {
+      if (!showTimeHeatmap || viewportTiles.length === 0) return { min: 0, max: 0, diff: 1 };
+      
+      let min = Infinity;
+      let max = -Infinity;
+      
+      viewportTiles.forEach(t => {
+          if (visitedTilesSet.has(t) && tileLastVisit.has(t)) {
+              const time = new Date(tileLastVisit.get(t)!).getTime();
+              if (time < min) min = time;
+              if (time > max) max = time;
+          }
+      });
+      
+      if (min === Infinity) return { min: 0, max: 0, diff: 1 };
+      
+      // Si toutes les tuiles ont la même date, diff = 1 pour éviter la division par zéro
+      return { min, max, diff: min === max ? 1 : max - min };
+  }, [showTimeHeatmap, viewportTiles, visitedTilesSet, tileLastVisit]);
+
+
+
   // --- RENDU RECTANGLES ---
   const gridRectangles = useMemo(() => {
     const ZOOM = 14;
@@ -867,21 +888,24 @@ export default function GlobalMapClient({
       // --- OVERRIDE TEMPOREL ---
       if (showTimeHeatmap && isVisited) {
           const time = new Date(tileLastVisit.get(tileKey)!).getTime();
-          let ratio = (time - minTime) / (maxTime - minTime);
-          ratio = Math.max(0, Math.min(1, ratio)); // Clamp entre 0 et 1 pour les tuiles hors écran
+          let ratio = (time - timeBounds.min) / timeBounds.diff;
+          ratio = Math.max(0, Math.min(1, ratio)); 
 
-          // Dégradé Cyberpunk :
-          // Ratio 0 (Vieux) = Violet foncé (Teinte 280, Luminosité 25%)
-          // Ratio 1 (Récent) = Cyan/Vert clair (Teinte 160, Luminosité 70%)
           const hue = 280 - (ratio * 120); 
           const lightness = 25 + (ratio * 45);
           
           color = `hsl(${hue}, 100%, ${lightness}%)`;
           weight = 1;
           className = 'tile-time';
-          fillOpacity = 0.75; // Très opaque pour bien voir la chaleur
+          fillOpacity = 0.75; 
           opacity = 0.8;
-      } 
+
+          // Surlignage des extrêmes (si on a plus d'une seule date à l'écran)
+          if (timeBounds.diff > 1) {
+              if (time === timeBounds.max) className = 'tile-time-newest';
+              else if (time === timeBounds.min) className = 'tile-time-oldest';
+          }
+      }
       // --- STYLES NORMAUX ---
       else if (isBlacklisted) { color = '#000000'; weight = 1; className = 'tile-blacklisted'; fillOpacity = 0.6; opacity = 0.8; }
       else if (isShiftStart) { color = shiftStartTile.action === 'delete' ? '#ffffff' : '#ff0055'; weight = 3; className = 'tile-shift-start'; fillOpacity = 0.5; opacity = 1; }
@@ -949,6 +973,9 @@ export default function GlobalMapClient({
         .tile-interactive-grid:hover { fill-opacity: 0.1 !important; stroke: #ff0055 !important; stroke-opacity: 0.8 !important; }
         .tile-core { stroke: #fff !important; stroke-width: 2px !important; fill: #fff !important; fill-opacity: 0.8 !important; z-index: 200 !important; }
         .tile-shift-start { stroke: #ff0055 !important; stroke-dasharray: 4 4; animation: flash-red 1s infinite alternate; z-index: 400 !important; }
+        .tile-time-newest { stroke: #ffffff !important; stroke-width: 3px !important; animation: pulse-white 1.5s infinite alternate; z-index: 500 !important; }
+        .tile-time-oldest { stroke: #ff003c !important; stroke-width: 3px !important; stroke-dasharray: 4 4; z-index: 400 !important; }
+        @keyframes pulse-white { from { stroke-opacity: 0.4; } to { stroke-opacity: 1; filter: drop-shadow(0 0 4px #fff); } }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .tile-custom-square { stroke: #39ff14 !important; animation: pulse-green 3s infinite alternate; z-index: 50; }
@@ -1189,7 +1216,35 @@ export default function GlobalMapClient({
         </div>
       </div>
 
-      {/* --- CARTE LEAFLET --- */}
+      {showTimeHeatmap && timeBounds.min > 0 && (
+          <div className="absolute bottom-6 right-6 z-[1000] bg-[#121217]/90 backdrop-blur-xl border border-white/10 p-3 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] pointer-events-none animate-in fade-in slide-in-from-bottom-4 duration-500 w-[280px] hidden md:block">
+              <div className="flex items-center gap-2 mb-2.5">
+                  <Calendar size={14} className="text-emerald-400" />
+                  <span className="text-xs font-bold text-white tracking-wide uppercase">Usure Temporelle</span>
+              </div>
+              
+              {/* Barre de dégradé */}
+              <div className="h-2 w-full rounded-full mb-2" style={{ background: 'linear-gradient(to right, hsl(280, 100%, 25%), hsl(160, 100%, 70%))' }} />
+              
+              {/* Dates extrêmes */}
+              <div className="flex justify-between items-end">
+                  <div className="flex flex-col">
+                      <span className="text-[9px] text-[#ff003c] uppercase font-black tracking-wider flex items-center gap-1">
+                          <div className="w-1.5 h-1.5 rounded-full bg-[#ff003c] animate-pulse" /> Plus ancien
+                      </span>
+                      <span className="text-[10px] text-white font-medium">{formatLastVisitDate(new Date(timeBounds.min).toISOString())}</span>
+                  </div>
+                  <div className="flex flex-col text-right">
+                      <span className="text-[9px] text-white uppercase font-black tracking-wider flex items-center justify-end gap-1">
+                          Plus récent <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shadow-[0_0_5px_#fff]" />
+                      </span>
+                      <span className="text-[10px] text-white font-medium">{formatLastVisitDate(new Date(timeBounds.max).toISOString())}</span>
+                  </div>
+              </div>
+          </div>
+      )}
+
+
       {/* --- CARTE LEAFLET --- */}
       <MapContainer center={[46.603354, 1.888334]} zoom={6} className="w-full h-full z-0 bg-[#050505]" zoomControl={false} preferCanvas={true} attributionControl={false}>
         <TileLayer url="https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png" />
