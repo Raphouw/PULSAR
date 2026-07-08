@@ -137,19 +137,15 @@ function getExpansionCost(tilesSet: Set<string>, blacklistSet: Set<string>, newT
     return missingCount;
 }
 
-function getMissingTilesForConfig(oldTLX: number, oldTLY: number, oldSize: number, newTLX: number, newTLY: number, newSize: number): string[] {
-    const added: string[] = [];
+function getMissingTilesForConfig(tilesSet: Set<string>, newTopLeftX: number, newTopLeftY: number, newSize: number): string[] {
+    const missing: string[] = [];
     for (let dx = 0; dx < newSize; dx++) {
         for (let dy = 0; dy < newSize; dy++) {
-            const nx = newTLX + dx;
-            const ny = newTLY + dy;
-            // Si la tuile est en dehors de l'ancien carré, c'est une tuile d'extension
-            if (nx < oldTLX || nx >= oldTLX + oldSize || ny < oldTLY || ny >= oldTLY + oldSize) {
-                added.push(`${nx},${ny}`);
-            }
+            const key = `${newTopLeftX + dx},${newTopLeftY + dy}`;
+            if (!tilesSet.has(key)) missing.push(key);
         }
     }
-    return added;
+    return missing;
 }
 
 
@@ -210,17 +206,16 @@ export function getFutureTargets(tilesSet: Set<string>, blacklistSet: Set<string
 
         let bestMissingTiles: string[] = [];
 
-        // On passe les coordonnées de l'ANCIEN carré et du NOUVEAU carré pour déduire la différence exacte
         if (costBR === minCost) {
-            bestMissingTiles = getMissingTilesForConfig(virtualTLX, virtualTLY, virtualSize, virtualTLX, virtualTLY, nextSize);
+            bestMissingTiles = getMissingTilesForConfig(tilesSet, virtualTLX, virtualTLY, nextSize);
         } else if (costBL === minCost) {
-            bestMissingTiles = getMissingTilesForConfig(virtualTLX, virtualTLY, virtualSize, virtualTLX - 1, virtualTLY, nextSize);
+            bestMissingTiles = getMissingTilesForConfig(tilesSet, virtualTLX - 1, virtualTLY, nextSize);
             virtualTLX -= 1;
         } else if (costTR === minCost) {
-            bestMissingTiles = getMissingTilesForConfig(virtualTLX, virtualTLY, virtualSize, virtualTLX, virtualTLY - 1, nextSize);
+            bestMissingTiles = getMissingTilesForConfig(tilesSet, virtualTLX, virtualTLY - 1, nextSize);
             virtualTLY -= 1;
         } else {
-            bestMissingTiles = getMissingTilesForConfig(virtualTLX, virtualTLY, virtualSize, virtualTLX - 1, virtualTLY - 1, nextSize);
+            bestMissingTiles = getMissingTilesForConfig(tilesSet, virtualTLX - 1, virtualTLY - 1, nextSize);
             virtualTLX -= 1;
             virtualTLY -= 1;
         }

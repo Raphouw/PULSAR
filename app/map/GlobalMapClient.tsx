@@ -63,23 +63,27 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number) {
 const MapInteractionHandler = ({ 
     blacklistMode, manualSquareStep, manualStartTile, setManualSquareStep, setManualStartTile, 
     setCustomTargetSquare, setTargetMode, setShowTargets,
-    visitedTilesSet, blacklistedTilesSet, setBlacklistedTilesSet, toggleBlacklistTile, handleBatchBlacklist,
-    setManualError 
+    visitedTilesSet, blacklistedTilesSet, setBlacklistedTilesSet, handleBatchBlacklist,
+    setManualError, shiftStartTile, setShiftStartTile
 }: any) => {
-    const paintedTilesRef = React.useRef<Set<string>>(new Set());
-    const [shiftStartTile, setShiftStartTile] = React.useState<{x: number, y: number} | null>(null);
     const map = useMap();
+    const isPaintingRef = React.useRef<boolean>(false);
+    const isErasingRef = React.useRef<boolean>(false);
+    const paintedTilesRef = React.useRef<Set<string>>(new Set());
 
     React.useEffect(() => {
         if (blacklistMode) { map.dragging.disable(); map.touchZoom.disable(); } 
         else { map.dragging.enable(); map.touchZoom.enable(); }
         
         const handleRelease = () => {
+            isPaintingRef.current = false;
             if (paintedTilesRef.current.size > 0) {
                 const tilesToFlush = Array.from(paintedTilesRef.current);
-                handleBatchBlacklist(tilesToFlush, 'add');
+                const action = isErasingRef.current ? 'delete' : 'add';
+                handleBatchBlacklist(tilesToFlush, action);
                 paintedTilesRef.current.clear();
             }
+            isErasingRef.current = false;
         };
 
         window.addEventListener('mouseup', handleRelease);
@@ -88,13 +92,14 @@ const MapInteractionHandler = ({
     }, [blacklistMode, map, handleBatchBlacklist]);
 
     useMapEvents({
-        click(e) {
+        mousedown(e) {
+            const original = e.originalEvent as any;
             const x = lon2tile(e.latlng.lng, 14);
             const y = lat2tile(e.latlng.lat, 14);
             const tileKey = `${x},${y}`;
 
-            // PRIORITÉ 1 : SÉLECTION DE ZONE SHIFT + CLIC (Si Blacklist active)
-            if (blacklistMode && e.originalEvent.shiftKey) {
+            // PRIORITÉ 1 : SÉLECTION DE ZONE SHIFT + CLIC
+            if (blacklistMode && original.shiftKey) {
                 if (!shiftStartTile) {
                     setShiftStartTile({ x, y });
                     if (setManualError) {
@@ -116,7 +121,14 @@ const MapInteractionHandler = ({
                             }
                         }
                     }
-                    if (tilesToAdd.length > 0) handleBatchBlacklist(tilesToAdd, 'add');
+                    if (tilesToAdd.length > 0) {
+                        setBlacklistedTilesSet((prev: Set<string>) => {
+                            const next = new Set(prev);
+                            tilesToAdd.forEach(t => next.add(t));
+                            return next;
+                        });
+                        handleBatchBlacklist(tilesToAdd, 'add');
+                    }
                     setShiftStartTile(null);
                     if (setManualError) setManualError(null);
                 }
@@ -168,26 +180,35 @@ const MapInteractionHandler = ({
                 return; 
             }
 
-            // PRIORITÉ 4 : BLACKLIST CLASSIQUE
-            if (!blacklistMode) return;
-            if (!visitedTilesSet.has(tileKey)) toggleBlacklistTile(tileKey);
+            // PRIORITÉ 4 : BLACKLIST PINCEAU / GOMME
+            if (blacklistMode && manualSquareStep === 'off' && !visitedTilesSet.has(tileKey)) {
+                isPaintingRef.current = true;
+                isErasingRef.current = blacklistedTilesSet.has(tileKey);
+                
+                paintedTilesRef.current.add(tileKey);
+                setBlacklistedTilesSet((prev: Set<string>) => {
+                    const next = new Set(prev);
+                    if (isErasingRef.current) next.delete(tileKey);
+                    else next.add(tileKey);
+                    return next;
+                });
+            }
         },
         mousemove(e) {
-            if (!blacklistMode || manualSquareStep !== 'off') return; 
+            if (!blacklistMode || manualSquareStep !== 'off' || !isPaintingRef.current) return; 
             
-            const original = e.originalEvent as any;
-            const isTouch = original.touches && original.touches.length > 0;
-            const isMouse = original.buttons === 1;
+            const x = lon2tile(e.latlng.lng, 14);
+            const y = lat2tile(e.latlng.lat, 14);
+            const tileKey = `${x},${y}`;
             
-            if (isMouse || isTouch) {
-                const x = lon2tile(e.latlng.lng, 14);
-                const y = lat2tile(e.latlng.lat, 14);
-                const tileKey = `${x},${y}`;
-                
-                if (!visitedTilesSet.has(tileKey) && !blacklistedTilesSet.has(tileKey) && !paintedTilesRef.current.has(tileKey)) {
-                    paintedTilesRef.current.add(tileKey); 
-                    // ZÉRO LATENCE : Mise à jour de l'état local synchrone sans requête
-                    setBlacklistedTilesSet((prev: Set<string>) => new Set(prev).add(tileKey));
+            if (!visitedTilesSet.has(tileKey) && !paintedTilesRef.current.has(tileKey)) {
+                const currentlyBlacklisted = blacklistedTilesSet.has(tileKey);
+                if (isErasingRef.current && currentlyBlacklisted) {
+                    paintedTilesRef.current.add(tileKey);
+                    setBlacklistedTilesSet((prev: Set<string>) => { const next = new Set(prev); next.delete(tileKey); return next; });
+                } else if (!isErasingRef.current && !currentlyBlacklisted) {
+                    paintedTilesRef.current.add(tileKey);
+                    setBlacklistedTilesSet((prev: Set<string>) => { const next = new Set(prev); next.add(tileKey); return next; });
                 }
             }
         }
@@ -277,7 +298,8 @@ export default function GlobalMapClient({
   const [manualStartTile, setManualStartTile] = useState<{x: number, y: number} | null>(null);
   const [customTargetSquare, setCustomTargetSquare] = useState<{topLeft: any, maxSquare: number, tilesSet: Set<string>} | null>(null);
   const [customSquareMode, setCustomSquareMode] = useState(false);
-  const [manualError, setManualError] = useState<string | null>(null); 
+  const [shiftStartTile, setShiftStartTile] = useState<{x: number, y: number} | null>(null);
+  const [manualError, setManualError] = useState<string | null>(null);
 
 
 
@@ -703,7 +725,8 @@ export default function GlobalMapClient({
         ...Array.from(currentTargetsMap.keys()),
         ...(showFilling && targetMode === 'cluster' ? Array.from(fillingTilesSet) : []),
         ...Array.from(blacklistedTilesSet),
-        ...(showGlobalGrid ? viewportTiles : []) // Ajout des tuiles globales
+        ...(showGlobalGrid ? viewportTiles : []),
+        ...(shiftStartTile ? [`${shiftStartTile.x},${shiftStartTile.y}`] : []) // <-- AJOUT ICI
     ]);
 
     return Array.from(allKeysToRender).map(tileKey => {
@@ -715,10 +738,12 @@ export default function GlobalMapClient({
       const isFilling = showFilling && fillingTilesSet.has(tileKey) && targetMode === 'cluster';
       const isGlobalGridOnly = showGlobalGrid && !isVisited && !isTargetVisible && !isFilling && !isBlacklisted;
 
+
       // On bloque l'affichage si ce n'est rien de tout ça
       if ((!isVisited || !showGrid) && !isTargetVisible && !isFilling && !isBlacklisted && !isGlobalGridOnly) return null;
 
       const [x, y] = tileKey.split(',').map(Number);
+      const isShiftStart = shiftStartTile && shiftStartTile.x === x && shiftStartTile.y === y; // <-- AJOUT ICI
       const bounds = getTileBounds(x, y, ZOOM);
       
       const isMaxSquare = isVisited && showMaxSquare && effectiveSquare?.tilesSet.has(tileKey); // CORRECTION ICI
@@ -730,6 +755,9 @@ export default function GlobalMapClient({
 
       if (isBlacklisted) {
           color = '#000000'; weight = 1; className = 'tile-blacklisted'; fillOpacity = 0.6; opacity = 0.8;
+      }
+      else if (isShiftStart) { // <-- NOUVEAU BLOC
+          color = '#ff0055'; weight = 3; className = 'tile-shift-start'; fillOpacity = 0.5; opacity = 1;
       }
       else if (isManualStart) {
           color = '#39ff14'; weight = 2; className = 'tile-manual-start'; fillOpacity = 0.5; opacity = 1;
@@ -768,7 +796,7 @@ export default function GlobalMapClient({
         />
       );
     });
-  }, [visitedTilesSet, blacklistedTilesSet, squareTargetsMap, clusterTargetsMap, fillingTilesSet, coreTilesSet, showGrid, showMaxSquare, showCluster, showFilling, showCore, showTargets, activeTargetLevels, targetMode, currentMaxSquare, blacklistMode, showGlobalGrid, viewportTiles]);
+  }, [visitedTilesSet, blacklistedTilesSet, squareTargetsMap, clusterTargetsMap, fillingTilesSet, coreTilesSet, showGrid, showMaxSquare, showCluster, showFilling, showCore, showTargets, activeTargetLevels, targetMode, currentMaxSquare, blacklistMode, showGlobalGrid, viewportTiles, shiftStartTile]);
 
   if (!isMounted) return <div className="h-screen bg-[#050505] flex items-center justify-center text-[#d04fd7] animate-pulse font-sans tracking-widest text-xl">Chargement de la map ..</div>;
 
@@ -805,6 +833,7 @@ export default function GlobalMapClient({
         .tile-interactive-grid { stroke-dasharray: 2 4; transition: all 0.2s; }
         .tile-interactive-grid:hover { fill-opacity: 0.1 !important; stroke: #ff0055 !important; stroke-opacity: 0.8 !important; }
         .tile-core { stroke: #fff !important; stroke-width: 2px !important; fill: #fff !important; fill-opacity: 0.8 !important; z-index: 200 !important; }
+        .tile-shift-start { stroke: #ff0055 !important; stroke-dasharray: 4 4; animation: flash-red 1s infinite alternate; z-index: 400 !important; }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .tile-manual-start { stroke-dasharray: 4 4; animation: flash-green 1s infinite alternate; z-index: 100; }
@@ -1048,9 +1077,11 @@ export default function GlobalMapClient({
             setShowTargets={setShowTargets}
             visitedTilesSet={visitedTilesSet} 
             blacklistedTilesSet={blacklistedTilesSet}
-            toggleBlacklistTile={toggleBlacklistTile} 
+            setBlacklistedTilesSet={setBlacklistedTilesSet} // N'oublie pas celle-ci !
             handleBatchBlacklist={handleBatchBlacklist}
             setManualError={setManualError}
+            shiftStartTile={shiftStartTile}
+            setShiftStartTile={setShiftStartTile}
         />
 
         {boundsArea && (
