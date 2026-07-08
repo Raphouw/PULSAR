@@ -185,7 +185,7 @@ export function getValidDiagonalTargets(
     return targets;
 }
 
-export function getFutureTargets(tilesSet: Set<string>, blacklistSet: Set<string>, topLeft: TileCoord | null, currentSize: number, depth: number = 10): Map<string, number> {
+export function getFutureTargets(tilesSet: Set<string>, blacklistSet: Set<string>, topLeft: TileCoord | null, currentSize: number, depth: number = 10, isCustom: boolean = false): Map<string, number> {
     if (!topLeft || currentSize <= 0) return new Map();
     const targets = new Map<string, number>();
     
@@ -201,7 +201,17 @@ export function getFutureTargets(tilesSet: Set<string>, blacklistSet: Set<string
         const costTR = getExpansionCost(tilesSet, blacklistSet, virtualTLX, virtualTLY - 1, nextSize);
         const costTL = getExpansionCost(tilesSet, blacklistSet, virtualTLX - 1, virtualTLY - 1, nextSize);
 
-        const minCost = Math.min(costBR, costBL, costTR, costTL);
+        const costs = [costBR, costBL, costTR, costTL];
+        let minCost = Infinity;
+
+        if (isCustom) {
+            const nonZeroCosts = costs.filter(c => c > 0);
+            if (nonZeroCosts.length > 0) minCost = Math.min(...nonZeroCosts);
+            else minCost = Math.min(...costs);
+        } else {
+            minCost = Math.min(...costs);
+        }
+
         if (minCost === Infinity) break;
 
         let bestMissingTiles: string[] = [];

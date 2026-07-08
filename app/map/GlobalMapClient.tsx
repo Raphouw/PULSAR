@@ -64,7 +64,7 @@ const MapInteractionHandler = ({
     blacklistMode, manualSquareStep, manualStartTile, setManualSquareStep, setManualStartTile, 
     setCustomTargetSquare, setTargetMode, setShowTargets,
     visitedTilesSet, blacklistedTilesSet, setBlacklistedTilesSet, handleBatchBlacklist,
-    setManualError, shiftStartTile, setShiftStartTile
+    setManualError, shiftStartTile, setShiftStartTile, setActiveTilePopup
 }: any) => {
     const map = useMap();
     const isPaintingRef = React.useRef<boolean>(false);
@@ -72,8 +72,15 @@ const MapInteractionHandler = ({
     const paintedTilesRef = React.useRef<Set<string>>(new Set());
 
     React.useEffect(() => {
-        if (blacklistMode) { map.dragging.disable(); map.touchZoom.disable(); } 
-        else { map.dragging.enable(); map.touchZoom.enable(); }
+        if (blacklistMode) { 
+            map.dragging.disable(); 
+            map.touchZoom.disable(); 
+            if (map.boxZoom) map.boxZoom.disable(); // Désactive le conflit Shift+Drag Leaflet
+        } else { 
+            map.dragging.enable(); 
+            map.touchZoom.enable(); 
+            if (map.boxZoom) map.boxZoom.enable(); 
+        }
         
         const handleRelease = () => {
             isPaintingRef.current = false;
@@ -92,14 +99,15 @@ const MapInteractionHandler = ({
     }, [blacklistMode, map, handleBatchBlacklist]);
 
     useMapEvents({
-        mousedown(e) {
-            const original = e.originalEvent as any;
+        click(e) {
+            const original = e.originalEvent as MouseEvent;
             const x = lon2tile(e.latlng.lng, 14);
             const y = lat2tile(e.latlng.lat, 14);
             const tileKey = `${x},${y}`;
 
             // PRIORITÉ 1 : SÉLECTION DE ZONE SHIFT + CLIC
-            if (blacklistMode && original.shiftKey) {
+            // Le 2e clic n'a plus besoin du shift enfoncé si le 1er a été enregistré
+            if (blacklistMode && (original.shiftKey || shiftStartTile)) {
                 if (!shiftStartTile) {
                     setShiftStartTile({ x, y });
                     if (setManualError) {
@@ -180,8 +188,20 @@ const MapInteractionHandler = ({
                 return; 
             }
 
-            // PRIORITÉ 4 : BLACKLIST PINCEAU / GOMME
-            if (blacklistMode && manualSquareStep === 'off' && !visitedTilesSet.has(tileKey)) {
+            // PRIORITÉ 4 : OUVERTURE POPUP (En mode normal uniquement)
+            if (!blacklistMode && manualSquareStep === 'off') {
+                const bounds = getTileBounds(x, y, 14);
+                const center = getTileCenter(x, y, 14);
+                setActiveTilePopup({ key: tileKey, bounds, position: center as LatLngTuple });
+            }
+        },
+        mousedown(e) {
+            const x = lon2tile(e.latlng.lng, 14);
+            const y = lat2tile(e.latlng.lat, 14);
+            const tileKey = `${x},${y}`;
+
+            // PINCEAU / GOMME : Uniquement si on ne fait pas un Shift+Clic
+            if (blacklistMode && manualSquareStep === 'off' && !shiftStartTile && !visitedTilesSet.has(tileKey)) {
                 isPaintingRef.current = true;
                 isErasingRef.current = blacklistedTilesSet.has(tileKey);
                 
@@ -510,7 +530,7 @@ export default function GlobalMapClient({
 
     // 4. CIBLES 
     const sqTargets = effectiveSquare && effectiveSquare.topLeft 
-        ? getFutureTargets(tiles, blacklistedTilesSet, effectiveSquare.topLeft, effectiveSquare.maxSquare, 10) 
+        ? getFutureTargets(tiles, blacklistedTilesSet, effectiveSquare.topLeft, effectiveSquare.maxSquare, 10, !!customTargetSquare) 
         : new Map();
 
     const clTargets = new Map<string, number>();
@@ -789,10 +809,6 @@ export default function GlobalMapClient({
           key={tileKey} 
           bounds={bounds} 
           pathOptions={{ color, weight, opacity, fillColor: color, fillOpacity, className }}
-          interactive={true} // Rendu cliquable pour TOUTES les tuiles, même de fond
-          eventHandlers={{
-            click: () => handleTileInteraction(tileKey, isVisited, bounds)
-          }}
         />
       );
     });
@@ -1077,11 +1093,12 @@ export default function GlobalMapClient({
             setShowTargets={setShowTargets}
             visitedTilesSet={visitedTilesSet} 
             blacklistedTilesSet={blacklistedTilesSet}
-            setBlacklistedTilesSet={setBlacklistedTilesSet} // N'oublie pas celle-ci !
+            setBlacklistedTilesSet={setBlacklistedTilesSet}
             handleBatchBlacklist={handleBatchBlacklist}
             setManualError={setManualError}
             shiftStartTile={shiftStartTile}
             setShiftStartTile={setShiftStartTile}
+            setActiveTilePopup={setActiveTilePopup} 
         />
 
         {boundsArea && (
