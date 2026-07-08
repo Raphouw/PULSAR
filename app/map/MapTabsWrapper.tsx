@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Play, Map as MapIcon } from 'lucide-react';
 import GlobalMapClient from './GlobalMapClient';
-import ReplayMapClient from './MapTabsWrapper'; // Nous allons le créer juste après
+import ReplayMapClient from './ReplayMapClient'; 
 
 export default function MapTabsWrapper({ activities, initialBlacklist, userId }: any) {
     const [activeMode, setActiveMode] = useState<'explore' | 'replay'>('explore');
@@ -13,6 +13,7 @@ export default function MapTabsWrapper({ activities, initialBlacklist, userId }:
             {/* BOUTONS DE NAVIGATION FLOTTANTS EN HAUT AU CENTRE */}
             <div className="absolute top-6 left-1/2 -translate-x-1/2 z-[2000] flex bg-[#121217]/90 backdrop-blur-xl p-1.5 rounded-2xl border border-white/10 shadow-2xl">
                 <button 
+                    type="button" // <-- LE CORRECTIF EST ICI ! Empêche le rechargement de page
                     onClick={() => setActiveMode('explore')}
                     className={`flex items-center gap-2 px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
                         activeMode === 'explore' 
@@ -20,9 +21,10 @@ export default function MapTabsWrapper({ activities, initialBlacklist, userId }:
                         : 'text-gray-400 hover:text-white hover:bg-white/5'
                     }`}
                 >
-                    <MapIcon size={14} /> Tactique
+                    <MapIcon size={14} /> Heatmap
                 </button>
                 <button 
+                    type="button" // <-- LE CORRECTIF EST ICI !
                     onClick={() => setActiveMode('replay')}
                     className={`flex items-center gap-2 px-6 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
                         activeMode === 'replay' 

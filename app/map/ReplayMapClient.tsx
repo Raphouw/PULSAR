@@ -3,10 +3,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { getTilesFromPolyline, getTileBounds } from '../../lib/mapUtils';
-import { Play, Pause, FastForward, Rewind, Activity, Target } from 'lucide-react';
+import { Play, Pause, FastForward, Rewind, Activity } from 'lucide-react';
 import { useMap } from 'react-leaflet';
+import { LatLngBoundsExpression } from 'leaflet'; // Indispensable pour TypeScript
 import 'leaflet/dist/leaflet.css';
-import { LatLngBoundsExpression } from 'leaflet';
 
 // IMPORTS DYNAMIQUES
 const MapContainer = dynamic(() => import('react-leaflet').then(mod => mod.MapContainer), { ssr: false });
@@ -14,11 +14,10 @@ const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLaye
 const Rectangle = dynamic(() => import('react-leaflet').then(mod => mod.Rectangle), { ssr: false });
 
 // --- AUTO-ZOOM CONTROLLER ---
-const CameraController = ({ bounds }: { bounds: any }) => {
+const CameraController = ({ bounds }: { bounds: LatLngBoundsExpression | null }) => {
     const map = useMap();
     useEffect(() => {
         if (bounds) {
-            // Un flyTo très doux pour le mode cinéma
             map.flyToBounds(bounds, { padding: [100, 100], duration: 2, easeLinearity: 0.1 });
         }
     }, [bounds, map]);
@@ -44,7 +43,7 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
     // 2. ÉTAT DU LECTEUR
     const [currentTime, setCurrentTime] = useState(globalStartTime);
     const [isPlaying, setIsPlaying] = useState(false);
-    const [playbackSpeed, setPlaybackSpeed] = useState(15); // Jours par seconde (réelle)
+    const [playbackSpeed, setPlaybackSpeed] = useState(15); 
     const animationRef = useRef<number | null>(null);
     const lastTickRef = useRef<number>(0);
 
@@ -57,17 +56,16 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
 
         const playLoop = (timestamp: number) => {
             if (!lastTickRef.current) lastTickRef.current = timestamp;
-            const deltaMs = timestamp - lastTickRef.current; // Temps réel écoulé
+            const deltaMs = timestamp - lastTickRef.current; 
             lastTickRef.current = timestamp;
 
-            // Conversion : 1 seconde réelle = X jours virtuels (1 jour = 86400000 ms)
             const virtualDelta = (deltaMs / 1000) * playbackSpeed * 86400000;
 
             setCurrentTime(prev => {
                 const nextTime = prev + virtualDelta;
                 if (nextTime >= globalEndTime) {
                     setIsPlaying(false);
-                    return globalEndTime; // Stop à la fin
+                    return globalEndTime; 
                 }
                 return nextTime;
             });
@@ -81,15 +79,13 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
         return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); };
     }, [isPlaying, playbackSpeed, globalEndTime]);
 
-
     // 4. CALCUL DE L'ÉTAT DE LA CARTE À L'INSTANT T
     const { activeTilesMap, currentBounds, stats } = useMemo(() => {
         const tileData = new Map<string, { firstVisit: number, count: number }>();
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
         
-        // On ne regarde que les activités passées par rapport au curseur de lecture
         for (const act of sortedActivities) {
-            if (act.time > currentTime) break; // Fin de l'histoire pour ce frame
+            if (act.time > currentTime) break; 
 
             act.tiles.forEach((t: string) => {
                 const existing = tileData.get(t);
@@ -129,21 +125,18 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
             let color, weight, fillOpacity, opacity, className = '';
 
             if (isRecent) {
-                // TUILE FRAÎCHE (< 30 jours) : Vert Fluo qui "brûle"
                 color = '#39ff14';
                 weight = 2;
                 fillOpacity = 0.6;
                 opacity = 1;
                 className = 'animate-pulse';
             } else {
-                // TUILE ANCIENNE (Heatmap cumulative)
-                // Échelle : 1 passage = Bleu nuit, 2 = Violet, 5 = Rouge, 10+ = Or
                 const count = data.count;
-                if (count >= 10) { color = '#ffd700'; fillOpacity = 0.8; } // Or
-                else if (count >= 5) { color = '#ff003c'; fillOpacity = 0.6; } // Rouge
-                else if (count >= 3) { color = '#d04fd7'; fillOpacity = 0.4; } // Fuchsia
-                else if (count >= 2) { color = '#6b21a8'; fillOpacity = 0.3; } // Violet
-                else { color = '#1e3a8a'; fillOpacity = 0.2; } // Bleu sombre (1 seul passage)
+                if (count >= 10) { color = '#ffd700'; fillOpacity = 0.8; } 
+                else if (count >= 5) { color = '#ff003c'; fillOpacity = 0.6; } 
+                else if (count >= 3) { color = '#d04fd7'; fillOpacity = 0.4; } 
+                else if (count >= 2) { color = '#6b21a8'; fillOpacity = 0.3; } 
+                else { color = '#1e3a8a'; fillOpacity = 0.2; } 
                 
                 weight = 1;
                 opacity = 0.5;
@@ -186,14 +179,12 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
 
             {/* --- BARRE DE CONTRÔLE (TIMELINE) --- */}
             <div className="absolute bottom-8 left-1/2 -translate-x-1/2 w-[90%] max-w-3xl z-[1000] bg-[#121217]/90 backdrop-blur-xl p-4 rounded-3xl border border-white/10 shadow-[0_20px_50px_rgba(0,0,0,0.8)]">
-                {/* Date Actuelle */}
                 <div className="text-center mb-3">
                     <span className="text-lg font-black text-white tracking-widest uppercase drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">
                         {new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(currentTime))}
                     </span>
                 </div>
 
-                {/* Slider */}
                 <input 
                     type="range" 
                     min={globalStartTime} 
@@ -206,11 +197,11 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
                     className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-[#00f3ff] mb-4"
                 />
 
-                {/* Contrôles */}
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <button onClick={() => setCurrentTime(globalStartTime)} className="text-gray-400 hover:text-white transition-colors"><Rewind size={20} /></button>
+                        <button type="button" onClick={() => setCurrentTime(globalStartTime)} className="text-gray-400 hover:text-white transition-colors"><Rewind size={20} /></button>
                         <button 
+                            type="button"
                             onClick={() => {
                                 if (currentTime >= globalEndTime) setCurrentTime(globalStartTime);
                                 setIsPlaying(!isPlaying);
@@ -219,12 +210,13 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
                         >
                             {isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" className="ml-1" />}
                         </button>
-                        <button onClick={() => setCurrentTime(globalEndTime)} className="text-gray-400 hover:text-white transition-colors"><FastForward size={20} /></button>
+                        <button type="button" onClick={() => setCurrentTime(globalEndTime)} className="text-gray-400 hover:text-white transition-colors"><FastForward size={20} /></button>
                     </div>
 
                     <div className="flex items-center gap-2 bg-black/40 p-1.5 rounded-xl border border-white/5">
                         {[1, 5, 15, 30].map(speed => (
                             <button 
+                                type="button"
                                 key={speed}
                                 onClick={() => setPlaybackSpeed(speed)}
                                 className={`px-3 py-1 rounded-lg text-xs font-bold transition-all ${
