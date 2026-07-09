@@ -1,3 +1,4 @@
+// Fichier : app/actions/getLegendsList.ts
 'use server';
 
 import { supabaseAdmin } from '@/lib/supabaseAdminClient';
@@ -5,22 +6,21 @@ import { unstable_noStore as noStore } from 'next/cache';
 
 export async function getLegendsList() {
   try {
-    noStore(); 
+    noStore(); // Désactivation du cache pour avoir le classement en temps réel
 
-    // On interroge directement la nouvelle vue SQL et on trie nativement
+    // ÉTAPE 4 : Appel direct à ta vue SQL optimisée
     const { data, error } = await supabaseAdmin
       .from('leaderboard_legends')
-      .select('*')
-      .order('count_koms', { ascending: false })
-      .order('count_top10', { ascending: false })
-      .order('total_segments', { ascending: false });
+      .select('*');
 
-    if (error) throw error;
+    if (error) {
+      console.error("[LEGENDS] Erreur lors de la récupération de la vue:", error);
+      return [];
+    }
 
     return data || [];
-
-  } catch (err) {
-    console.error("Erreur getLegendsList:", err);
+  } catch (error) {
+    console.error("[LEGENDS] Crash dans getLegendsList:", error);
     return [];
   }
 }

@@ -13,22 +13,9 @@ export async function refreshHallOfRecords(
 ) {
   try {
     noStore();
-    let startDate = cursorDate;
     
-    // 1. Si pas de curseur, on cherche la dernière activité ANALYSÉE
-    if (!startDate) {
-        const { data: lastEntryData } = await supabaseAdmin
-            .from('hall_of_records')
-            .select('date_recorded')
-            .eq('user_id', Number(userId)) // ⚡ FIX ID
-            .order('date_recorded', { ascending: false })
-            .limit(1)
-            .single();
-        
-        // ⚡ FIX CAST
-        const lastEntry = lastEntryData as any;
-        startDate = lastEntry?.date_recorded || '1970-01-01T00:00:00Z';
-    }
+    // 1. Début au "Big Bang" si pas de curseur (réglé à l'étape 1)
+    const startDate = cursorDate || '1970-01-01T00:00:00Z';
 
     console.log(`[SCANNER] Recherche activités après : ${startDate} (User: ${userId})`);
 
@@ -46,7 +33,6 @@ export async function refreshHallOfRecords(
         throw error;
     }
 
-    // ⚡ FIX CAST ARRAY
     const activities = (activitiesData || []) as any[];
 
     if (!activities || activities.length === 0) {
@@ -56,31 +42,40 @@ export async function refreshHallOfRecords(
 
     console.log(`[SCANNER] ${activities.length} activités trouvées. Analyse en cours...`);
 
-    // 3. Traitement
+    // 3. Traitement et formattage strict pour la table 'records'
     const rowsToInsert: any[] = [];
     const lastActivityDate = activities[activities.length - 1].start_time;
 
     for (const act of activities) {
-        // On passe 'act' tel quel, supposant que la fonction analyze gère le any
         const actRows = analyzeActivityForHallOfFame(act);
+        
         if (actRows.length > 0) {
-            rowsToInsert.push(...actRows);
+            // ÉTAPE 2 : On s'assure que les clés correspondent EXACTEMENT au schéma de 'records'
+            const formattedRows = actRows.map((row: any) => ({
+                user_id: Number(userId),
+                activity_id: act.id,
+                type: row.type || row.metric_id, // Fallback au cas où le scanner utilise l'ancienne clé
+                value: row.value,
+                duration_s: row.duration_s || 0,
+                date_recorded: act.start_time
+            }));
+            rowsToInsert.push(...formattedRows);
         }
     }
 
     console.log(`[SCANNER] ${rowsToInsert.length} records générés prêts à l'insertion.`);
 
-    // 4. Insertion
+    // 4. Insertion dans la bonne table 'records'
     if (rowsToInsert.length > 0) {
-        // ⚡ FIX CAST UPSERT
+        // Ajout de 'as any' pour forcer le typage et bypasser l'erreur TS
         const { error: insertErr } = await supabaseAdmin
-            .from('hall_of_records')
-            .upsert(rowsToInsert as any, { onConflict: 'activity_id, metric_id' });
+            .from('records')
+            .upsert(rowsToInsert as any, { onConflict: 'activity_id, type' });
         
         if (insertErr) {
             console.error("[SCANNER] ERREUR INSERTION CRITIQUE:", insertErr);
         } else {
-            console.log("[SCANNER] Insertion réussie.");
+            console.log("[SCANNER] Insertion réussie dans 'records'.");
         }
     }
 

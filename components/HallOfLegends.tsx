@@ -1,3 +1,4 @@
+// Fichier : components/HallOfLegends.tsx
 'use client';
 
 import React, { useState, useMemo } from 'react';
@@ -100,7 +101,8 @@ const LegendRow = ({ legend, rank, onOpenDetails }: { legend: any, rank: number,
 };
 
 export default function HallOfLegends({ legends }: { legends: any[] }) {
-    const [filter, setFilter] = useState<'ALL' | 'M' | 'F'>('ALL');
+    // ÉTAPE 4 : Extension du filtre pour inclure les profils indéfinis
+    const [filter, setFilter] = useState<'ALL' | 'M' | 'F' | 'UNKNOWN'>('ALL');
     const [modalOpen, setModalOpen] = useState(false);
     const [loadingDetails, setLoadingDetails] = useState(false);
     const [detailsData, setDetailsData] = useState<any[]>([]);
@@ -127,11 +129,13 @@ export default function HallOfLegends({ legends }: { legends: any[] }) {
         }
     };
 
-    // ⚡ Filtrage dynamique
+    // ÉTAPE 4 : Gestion propre et résiliente des genres indéfinis ou 'UNKNOWN'
     const filteredLegends = useMemo(() => {
         if (!legends) return [];
         if (filter === 'ALL') return legends;
-        // On suppose que M et F sont les valeurs dans ta BDD pour le sexe
+        if (filter === 'UNKNOWN') {
+            return legends.filter(l => !l.gender || l.gender === 'UNKNOWN' || (l.gender !== 'M' && l.gender !== 'F'));
+        }
         return legends.filter(l => l.gender === filter); 
     }, [legends, filter]);
 
@@ -148,32 +152,38 @@ export default function HallOfLegends({ legends }: { legends: any[] }) {
     return (
         <div className="flex flex-col gap-8 animate-in fade-in duration-500">
             
-            {/* ⚡ NOUVEAU : Boutons de filtre */}
+            {/* ÉTAPE 4 : Ajout du bouton de filtre pour les profils non spécifiés */}
             <div className="flex justify-center mb-2">
-                <div className="bg-[#141419] border border-white/5 rounded-full p-1 flex items-center">
+                <div className="bg-[#141419] border border-white/5 rounded-full p-1 flex items-center gap-1 overflow-x-auto max-w-full hide-scrollbar">
                     <button 
                         onClick={() => setFilter('ALL')}
-                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${filter === 'ALL' ? 'bg-white text-black' : 'text-gray-400 hover:text-white'}`}
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors whitespace-nowrap ${filter === 'ALL' ? 'bg-white text-black shadow-md' : 'text-gray-400 hover:text-white'}`}
                     >
                         TOP-ALL
                     </button>
                     <button 
                         onClick={() => setFilter('M')}
-                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${filter === 'M' ? 'bg-blue-500 text-white' : 'text-gray-400 hover:text-white'}`}
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors whitespace-nowrap ${filter === 'M' ? 'bg-blue-500 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}
                     >
                         HOMMES
                     </button>
                     <button 
                         onClick={() => setFilter('F')}
-                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors ${filter === 'F' ? 'bg-pink-500 text-white' : 'text-gray-400 hover:text-white'}`}
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors whitespace-nowrap ${filter === 'F' ? 'bg-pink-500 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}
                     >
                         FEMMES
+                    </button>
+                    <button 
+                        onClick={() => setFilter('UNKNOWN')}
+                        className={`px-4 py-1.5 rounded-full text-xs font-bold transition-colors whitespace-nowrap ${filter === 'UNKNOWN' ? 'bg-purple-500 text-white shadow-md' : 'text-gray-400 hover:text-white'}`}
+                    >
+                        N/C
                     </button>
                 </div>
             </div>
 
             {filteredLegends.length === 0 && (
-                 <div className="text-center py-10 text-gray-500">Aucun athlète dans cette catégorie.</div>
+                 <div className="text-center py-10 text-gray-500 bg-[#0a0a0c] rounded-2xl border border-white/5">Aucun athlète dans cette catégorie.</div>
             )}
 
             {/* PODIUM */}
@@ -192,7 +202,7 @@ export default function HallOfLegends({ legends }: { legends: any[] }) {
                         <Users size={12} /> Poursuivants
                     </div>
                     {others.map((legend, index) => (
-                        <LegendRow key={legend.user_id} legend={legend} rank={index + 4} onOpenDetails={handleOpenDetails} />
+                        <LegendRow key={legend.user_id || legend.id} legend={legend} rank={index + 4} onOpenDetails={handleOpenDetails} />
                     ))}
                 </div>
             )}

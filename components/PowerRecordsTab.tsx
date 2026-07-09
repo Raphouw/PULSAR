@@ -1,3 +1,4 @@
+// Fichier : components/PowerRecordsTab.tsx
 'use client';
 
 import React, { useState, useMemo } from 'react';
@@ -9,16 +10,22 @@ export default function PowerRecordsTab({ rawRecords, userWeight = 68 }: { rawRe
     const [expandedKey, setExpandedKey] = useState<string | null>(null);
     const [powerMode, setPowerMode] = useState<'power_elapsed' | 'power_moving' | 'power_np'>('power_elapsed');
 
+    // ÉTAPE 3 : Correction majeure du filtrage (la colonne category n'existait pas)
     const safeRecords = useMemo(() => {
         if (!rawRecords) return [];
-        const targetCategory = powerMode === 'power_elapsed' ? 'power' : powerMode;
         
         return rawRecords
-            .filter(r => r.category === targetCategory)
             .map(r => ({
                 ...r,
                 safeKey: (r.type || r.metric_id || '').toLowerCase()
-            }));
+            }))
+            .filter(r => {
+                const k = r.safeKey;
+                if (powerMode === 'power_elapsed') return k.startsWith('pe_') || k.match(/^p\d/) || k === 'p_avg';
+                if (powerMode === 'power_moving') return k.startsWith('pm_') || k === 'pm_avg';
+                if (powerMode === 'power_np') return k.startsWith('np_') || k === 'np_avg';
+                return false;
+            });
     }, [rawRecords, powerMode]);
 
     const powerKeys = useMemo(() => {
@@ -28,7 +35,6 @@ export default function PowerRecordsTab({ rawRecords, userWeight = 68 }: { rawRe
             const key = r.safeKey;
             if (!key || map.has(key)) return;
 
-            // P-AVG est l'ID technique utilisé dans la DB
             if (key === 'p_avg' || key === 'pm_avg' || key === 'np_avg') {
                 map.set(key, { id: key, label: 'P-MOY MAX', seconds: 999999 });
                 return;

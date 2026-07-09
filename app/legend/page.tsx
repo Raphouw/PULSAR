@@ -1,3 +1,4 @@
+// Fichier : page.tsx
 import React, { Suspense } from 'react';
 import { getServerSession } from 'next-auth'; 
 import { authOptions } from '../../lib/auth'; 
@@ -6,6 +7,7 @@ import LegendTabs from './LegendTabs';
 import { Shield, Loader2 } from 'lucide-react'; 
 import { getHallData } from '@/app/actions/getHallData';
 import { getLegendsList } from '@/app/actions/getLegendsList';
+import { getUserRecords } from '@/app/actions/getRecord'; // NOUVEL IMPORT
 import HallOfRecords from '../../components/HallOfRecords';
 import HallOfLegends from '../../components/HallOfLegends';
 import PowerRecordsTab from '../../components/PowerRecordsTab';
@@ -13,7 +15,7 @@ import PowerRecordsTab from '../../components/PowerRecordsTab';
 export const dynamic = 'force-dynamic';
 
 // ----------------------------------------------------------------------
-// Composants Asynchrones d'Encapsulation (Résolvent les promesses)
+// Composants Asynchrones d'Encapsulation
 // ----------------------------------------------------------------------
 
 async function AsyncHallOfLegends({ legendsPromise }: { legendsPromise: Promise<any> }) {
@@ -26,8 +28,9 @@ async function AsyncHallOfRecords({ recordsPromise, userWeight }: { recordsPromi
     return <HallOfRecords rawRecords={records} userWeight={userWeight} />;
 }
 
-async function AsyncPowerRecords({ recordsPromise, userWeight }: { recordsPromise: Promise<any>, userWeight: number }) {
-    const records = await recordsPromise;
+// ÉTAPE 3 : Remplacement de recordsPromise par powerPromise
+async function AsyncPowerRecords({ powerPromise, userWeight }: { powerPromise: Promise<any>, userWeight: number }) {
+    const records = await powerPromise;
     return <PowerRecordsTab rawRecords={records} userWeight={userWeight} />;
 }
 
@@ -44,15 +47,16 @@ const LoadingState = () => (
 // ----------------------------------------------------------------------
 
 export default async function LegendPage() {
-    // 1. Appel indépendant de la session pour ne pas bloquer les requêtes de données
     const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
-    const userWeight = session?.user ? (session.user as any).weight || 75 : 75;
+    const userWeight = session?.user ? (session.user as any).weight || 68 : 68;
 
-    // 2. Déclenchement simultané des requêtes SANS await bloquant.
-    // Les promesses sont passées directement aux sous-composants.
+    // Déclenchement simultané des requêtes
     const legendsPromise = getLegendsList();
     const recordsPromise = userId ? getHallData(userId) : null;
+    
+    // ÉTAPE 3 : Appel indépendant pour les records de puissance
+    const powerPromise = userId ? getUserRecords(userId) : null;
 
     return (
         <div className="min-h-screen bg-[#050505] text-white font-sans pb-20 pt-24">
@@ -86,9 +90,10 @@ export default async function LegendPage() {
                         )
                     }
                     powerComponent={
-                        userId && recordsPromise ? (
+                        userId && powerPromise ? (
                             <Suspense fallback={<LoadingState />}>
-                                <AsyncPowerRecords recordsPromise={recordsPromise} userWeight={userWeight} />
+                                {/* ÉTAPE 3 : On passe powerPromise ici */}
+                                <AsyncPowerRecords powerPromise={powerPromise} userWeight={userWeight} />
                             </Suspense>
                         ) : (
                             <div className="text-center py-20 text-gray-500 bg-white/5 rounded-2xl border border-white/10">
