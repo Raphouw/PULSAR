@@ -14,10 +14,25 @@ export async function refreshHallOfRecords(
   try {
     noStore();
     
-    // 1. Début au "Big Bang" si pas de curseur (réglé à l'étape 1)
-    const startDate = cursorDate || '1970-01-01T00:00:00Z';
+    let startDate = cursorDate;
+
+    // CORRECTION : Si pas de curseur, on cherche la date du dernier record inséré
+    if (!startDate) {
+        const { data: lastEntryData } = await supabaseAdmin
+            .from('records') // On regarde dans la bonne table !
+            .select('date_recorded')
+            .eq('user_id', Number(userId))
+            .order('date_recorded', { ascending: false })
+            .limit(1)
+            .single();
+        
+        startDate = (lastEntryData as any)?.date_recorded || '1970-01-01T00:00:00Z';
+    }
 
     console.log(`[SCANNER] Recherche activités après : ${startDate} (User: ${userId})`);
+
+    // ... (GARDE TOUT LE RESTE DU FICHIER INTACT À PARTIR D'ICI)
+    // 2. Récupération des activités brutes (Batch)
 
     // 2. Récupération des activités brutes (Batch)
     const { data: activitiesData, error } = await supabaseAdmin
