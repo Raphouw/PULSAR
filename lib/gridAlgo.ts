@@ -230,15 +230,11 @@ export function getFutureTargets(
                     if (!isValid) break;
                 }
 
-                if (isValid) {
-                    if (cost < bestCost) {
-                        bestCost = cost;
-                        bestMissingTiles = new Set(missing);
-                    } else if (cost === bestCost) {
-                        // En cas d'égalité (plusieurs chemins optimaux), on fusionne les tuiles
-                        // Cela crée de belles extensions symétriques pour le joueur
-                        missing.forEach(t => bestMissingTiles.add(t));
-                    }
+                // C'est ici que la logique change : on ne garde strictement que le meilleur coût.
+                // S'il y a égalité, on l'ignore pour éviter le dédoublement visuel des cibles.
+                if (isValid && cost < bestCost) {
+                    bestCost = cost;
+                    bestMissingTiles = new Set(missing);
                 }
             }
         }
