@@ -1028,197 +1028,194 @@ const timeBounds = useMemo(() => {
         @keyframes hatch-red { 0% { fill-opacity: 0.3; stroke-opacity: 0.6; } 50% { fill-opacity: 0.5; stroke-opacity: 1; } 100% { fill-opacity: 0.3; stroke-opacity: 0.6; } }
       `}</style>
 
-      {/* --- HUD RESPONSIVE : FLOATING ISLANDS & BOTTOM DRAWER --- */}
-      <div className={`absolute z-[1000] flex flex-col gap-4 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]
-          md:top-6 md:left-6 md:w-[320px] md:bottom-auto md:translate-y-0
+      {/* --- HUD RESPONSIVE : PANNEAU LATÉRAL UNIQUE --- */}
+      <div className={`absolute z-[1000] flex flex-col transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]
+          md:top-[72px] md:left-6 md:w-[280px] md:bottom-auto md:translate-y-0
           left-0 right-0 bottom-0 w-full ${hudOpen ? 'translate-y-0' : 'translate-y-[calc(100%-40px)] md:translate-y-0'}
-          max-h-[calc(100vh-2rem)] md:pointer-events-none`}>
+          max-h-[calc(100vh-5.5rem)] pointer-events-none`}>
         
         {/* Mobile Swipe Handle */}
         <div 
             onClick={() => setHudOpen(!hudOpen)} 
-            className="md:hidden w-full flex justify-center pb-3 pt-5 bg-gradient-to-t from-[#121217]/90 to-transparent pointer-events-auto cursor-pointer"
+            className="md:hidden w-full flex justify-center pb-2 pt-4 bg-gradient-to-t from-[#121217]/90 to-transparent pointer-events-auto cursor-pointer"
         >
-            <div className="w-12 h-1.5 bg-white/30 rounded-full shadow-lg"></div>
+            <div className="w-10 h-1 bg-white/30 rounded-full shadow-lg"></div>
         </div>
 
-        <div className="overflow-y-auto no-scrollbar pointer-events-none space-y-4 px-4 md:px-0 pb-6 md:pb-0">
+        {/* CONTENEUR PRINCIPAL MONOLITHIQUE */}
+        <div className="flex flex-col gap-2.5 bg-[#121217]/80 backdrop-blur-2xl border border-white/10 p-3 md:rounded-2xl rounded-t-2xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto overflow-y-auto no-scrollbar max-h-full">
             
-            {/* PANEL 1 : STATS & SCORE */}
-            <div className="bg-[#121217]/70 backdrop-blur-2xl border border-white/10 p-4 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto transition-all">
-                <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 rounded-xl bg-[#d04fd7]/10 border border-[#d04fd7]/20 text-[#d04fd7]">
-                            <Grid size={18} />
-                        </div>
-                        <h2 className="text-sm font-semibold text-white tracking-wide">PULSAR STATS</h2>
+            {/* --- SECTION 1 : STATS & SCORE --- */}
+            <div>
+                <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center gap-1.5">
+                        <div className="p-1 rounded-md bg-[#d04fd7]/10 border border-[#d04fd7]/20 text-[#d04fd7]"><Grid size={12} /></div>
+                        <h2 className="text-[11px] font-bold text-white tracking-wide">PULSAR STATS</h2>
                     </div>
-                    {/* LE SCORE DE LA ZONE ICI */}
-                    <div className="flex flex-col items-end">
-                        <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Score Zone</span>
-                        <span className="text-sm font-black text-[#00f3ff]">
-                            {viewportTiles.length > 0 ? `${viewportScore.toFixed(1)}%` : 'ZOOMEZ +'}
+                    <div className="flex flex-col items-end leading-none">
+                        <span className="text-[8px] text-gray-400 font-medium uppercase tracking-wider">Score Zone</span>
+                        <span className="text-xs font-black text-[#00f3ff]">
+                            {viewportTiles.length > 0 ? `${viewportScore.toFixed(1)}%` : '---'}
                         </span>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2">
-                    <StatBox label="Exploration" value={visitedTilesSet.size} potentialLabel={selectionStats.count > 0 ? `(+${selectionStats.count})` : null} color="cyan" icon={<CheckSquare size={12}/>} />
+                <div className="grid grid-cols-2 gap-1.5">
+                    <StatBox label="Exploration" value={visitedTilesSet.size} potentialLabel={selectionStats.count > 0 ? `(+${selectionStats.count})` : null} color="cyan" icon={<CheckSquare size={10}/>} />
                     
-                    {/* Max Square avec Override Custom */}
-                    <div onClick={() => currentMaxSquareBounds && triggerZoom(currentMaxSquareBounds)} className={`p-2.5 rounded-2xl border flex flex-col justify-between h-[55px] cursor-pointer transition-colors group relative ${customTargetSquare ? 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20' : 'bg-white/5 border-yellow-500/10 hover:bg-white/10'}`}>
-                        <div className="text-[15px] font-black tabular-nums leading-none tracking-tight text-white flex justify-between items-center">
-                            <span className="flex items-center gap-1">
+                    {/* Max Square avec Override Custom Densifié */}
+                    <div onClick={() => currentMaxSquareBounds && triggerZoom(currentMaxSquareBounds)} className={`p-1.5 rounded-xl border flex flex-col justify-between h-[42px] cursor-pointer transition-colors group relative ${customTargetSquare ? 'bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20' : 'bg-white/5 border-yellow-500/10 hover:bg-white/10'}`}>
+                        <div className="text-sm font-black tabular-nums leading-none tracking-tight text-white flex justify-between items-center">
+                            <span className="flex items-center gap-0.5">
                                 {effectiveSquare?.maxSquare || 0}x{effectiveSquare?.maxSquare || 0}
                                 {targetMode === 'square' && selectionStats.count > 0 && (
-                                    <span className="text-[10px] text-gray-400 font-normal ml-1">
-                                        ({(effectiveSquare?.maxSquare || 0) + Math.max(0, ...Array.from(activeTargetLevels))}x{(effectiveSquare?.maxSquare || 0) + Math.max(0, ...Array.from(activeTargetLevels))})
+                                    <span className="text-[9px] text-gray-400 font-normal ml-0.5">
+                                        ({(effectiveSquare?.maxSquare || 0) + Math.max(0, ...Array.from(activeTargetLevels))}²)
                                     </span>
                                 )}
                             </span>
                             
                             {manualSquareStep !== 'off' || customTargetSquare ? (
-                                <button onClick={(e) => { e.stopPropagation(); cancelManualMode(); }} className="p-1 -m-1 text-emerald-400 hover:text-white transition-colors z-10" title="Annuler ciblage manuel"><X size={16} /></button>
+                                <button onClick={(e) => { e.stopPropagation(); cancelManualMode(); }} className="p-0.5 -m-0.5 text-emerald-400 hover:text-white transition-colors z-10" title="Annuler ciblage manuel"><X size={12} /></button>
                             ) : (
-                                <div className="flex gap-1.5 p-1 -m-1 items-center z-10">
-                                    <button onClick={(e) => cycleSquareRank(e, 'prev')} className="hover:text-white text-gray-500 transition-colors"><ChevronLeft size={14}/></button>
-                                    <div className="flex gap-0.5 cursor-alias hover:scale-110 transition-transform">
-                                        {[0,1,2,3,4].map(i => <div key={i} onClick={(e) => cycleSquareRank(e, i)} className={`w-1.5 h-1.5 rounded-full ${activeSquareRank === i ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]' : 'bg-gray-600'}`} />)}
+                                <div className="flex gap-0.5 p-0.5 -m-0.5 items-center z-10">
+                                    <button onClick={(e) => cycleSquareRank(e, 'prev')} className="hover:text-white text-gray-500 transition-colors"><ChevronLeft size={10}/></button>
+                                    <div className="flex gap-[2px] cursor-alias hover:scale-110 transition-transform">
+                                        {[0,1,2,3,4].map(i => <div key={i} onClick={(e) => cycleSquareRank(e, i)} className={`w-1 h-1 rounded-full ${activeSquareRank === i ? 'bg-yellow-500 shadow-[0_0_8px_rgba(234,179,8,0.6)]' : 'bg-gray-600'}`} />)}
                                     </div>
-                                    <button onClick={(e) => cycleSquareRank(e, 'next')} className="hover:text-white text-gray-500 transition-colors"><ChevronRight size={14}/></button>
+                                    <button onClick={(e) => cycleSquareRank(e, 'next')} className="hover:text-white text-gray-500 transition-colors"><ChevronRight size={10}/></button>
                                 </div>
                             )}
                         </div>
-                        <div className={`flex items-center justify-between text-[9px] font-bold uppercase tracking-widest ${customTargetSquare ? 'text-emerald-400' : 'text-yellow-500/80'}`}>
-                            <div className="flex items-center gap-1.5"><Maximize size={10} /> {customTargetSquare ? 'CARRÉ CIBLÉ' : (manualSquareStep !== 'off' ? 'CIBLAGE...' : 'MAX SQ')}</div>
+                        <div className={`flex items-center justify-between text-[8px] font-bold uppercase tracking-widest ${customTargetSquare ? 'text-emerald-400' : 'text-yellow-500/80'}`}>
+                            <div className="flex items-center gap-1"><Maximize size={8} /> {customTargetSquare ? 'CIBLÉ' : (manualSquareStep !== 'off' ? 'CIBLAGE...' : 'MAX SQ')}</div>
                             {!customTargetSquare && manualSquareStep === 'off' && <span className="text-gray-500">#{activeSquareRank + 1}</span>}
                         </div>
                     </div>
                     
-                    {/* Cluster avec Pagination */}
-                    <div onClick={() => clusterBounds && triggerZoom(clusterBounds)} className="bg-white/5 p-2.5 rounded-2xl border border-[#d04fd7]/10 flex flex-col justify-between h-[55px] cursor-pointer hover:bg-white/10 transition-colors group relative">
-                        <div className="text-[15px] font-black tabular-nums leading-none tracking-tight text-white flex justify-between items-center">
+                    {/* Cluster Densifié */}
+                    <div onClick={() => clusterBounds && triggerZoom(clusterBounds)} className="bg-white/5 p-1.5 rounded-xl border border-[#d04fd7]/10 flex flex-col justify-between h-[42px] cursor-pointer hover:bg-white/10 transition-colors group relative">
+                        <div className="text-sm font-black tabular-nums leading-none tracking-tight text-white flex justify-between items-center">
                             <span className="flex items-center gap-1">
                                 {clusterSet.size}
-                                {targetMode === 'cluster' && selectionStats.count > 0 && <span className="text-[10px] text-gray-400 font-normal ml-1">(+{selectionStats.count})</span>}
+                                {targetMode === 'cluster' && selectionStats.count > 0 && <span className="text-[9px] text-gray-400 font-normal ml-0.5">(+{selectionStats.count})</span>}
                             </span>
-                            <div className="flex gap-1.5 p-1 -m-1 items-center z-10">
-                                <button onClick={(e) => cycleClusterRank(e, 'prev')} className="hover:text-white text-gray-500 transition-colors"><ChevronLeft size={14}/></button>
-                                <div className="flex gap-0.5 cursor-alias hover:scale-110 transition-transform">
-                                    {topClusters.map((_, i) => <div key={i} onClick={(e) => cycleClusterRank(e, i)} className={`w-1.5 h-1.5 rounded-full ${activeClusterRank === i ? 'bg-[#d04fd7] shadow-[0_0_8px_rgba(208,79,215,0.6)]' : 'bg-gray-600'}`} />)}
+                            <div className="flex gap-0.5 p-0.5 -m-0.5 items-center z-10">
+                                <button onClick={(e) => cycleClusterRank(e, 'prev')} className="hover:text-white text-gray-500 transition-colors"><ChevronLeft size={10}/></button>
+                                <div className="flex gap-[2px] cursor-alias hover:scale-110 transition-transform">
+                                    {topClusters.map((_, i) => <div key={i} onClick={(e) => cycleClusterRank(e, i)} className={`w-1 h-1 rounded-full ${activeClusterRank === i ? 'bg-[#d04fd7] shadow-[0_0_8px_rgba(208,79,215,0.6)]' : 'bg-gray-600'}`} />)}
                                 </div>
-                                <button onClick={(e) => cycleClusterRank(e, 'next')} className="hover:text-white text-gray-500 transition-colors"><ChevronRight size={14}/></button>
+                                <button onClick={(e) => cycleClusterRank(e, 'next')} className="hover:text-white text-gray-500 transition-colors"><ChevronRight size={10}/></button>
                             </div>
                         </div>
-                        <div className="flex items-center justify-between text-[9px] font-bold uppercase tracking-widest text-[#d04fd7]/80">
-                            <div className="flex items-center gap-1.5"><Activity size={10} /> CLUSTER</div>
+                        <div className="flex items-center justify-between text-[8px] font-bold uppercase tracking-widest text-[#d04fd7]/80">
+                            <div className="flex items-center gap-1"><Activity size={8} /> CLUSTER</div>
                             <span className="text-gray-500">#{activeClusterRank + 1}</span>
                         </div>
                     </div>
 
-                    {/* LA STATBOX MANQUANTE ET LES DIV DE FERMETURE ONT ÉTÉ REMISES ICI */}
-                    <StatBox label="Zone (km²)" value={Number(totalArea).toFixed(0)} potentialLabel={selectionStats.count > 0 ? `(+${selectionStats.areaKm2.toFixed(1)})` : null} color="emerald" icon={<MapIcon size={12}/>} />
+                    <StatBox label="Zone (km²)" value={Number(totalArea).toFixed(0)} potentialLabel={selectionStats.count > 0 ? `(+${selectionStats.areaKm2.toFixed(1)})` : null} color="emerald" icon={<MapIcon size={10}/>} />
                 </div>
             </div>
 
-            {/* PANEL 2 : CONTRÔLES TACTIQUES */}
-            <div className="bg-[#121217]/70 backdrop-blur-2xl border border-white/10 p-4 rounded-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] pointer-events-auto space-y-3">
+            <hr className="border-white/5 border-t border-dashed" />
+
+            {/* --- SECTION 2 : CONTRÔLES TACTIQUES --- */}
+            <div className="space-y-1.5">
                 <div className="relative">
-                    <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none"><Calendar size={14} className="text-[#00f3ff]" /></div>
-                    <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-2xl py-2 pl-10 pr-4 text-xs font-medium text-white outline-none focus:border-[#00f3ff]/50 transition-all appearance-none cursor-pointer hover:bg-white/10">
+                    <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none"><Calendar size={12} className="text-[#00f3ff]" /></div>
+                    <select value={selectedYear} onChange={(e) => setSelectedYear(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-xl py-1.5 pl-8 pr-3 text-[10px] font-medium text-white outline-none focus:border-[#00f3ff]/50 transition-all appearance-none cursor-pointer hover:bg-white/10">
                       <option value="all">HISTORIQUE COMPLET</option>
                       {years.map(y => <option key={y} value={y}>ANNÉE {y}</option>)}
                     </select>
                 </div>
 
-               <div className="grid grid-cols-2 gap-2">
-                    <ToggleButton isActive={showGrid} onClick={() => setShowGrid(!showGrid)} label="Grille" color="cyan" icon={Grid} />
-                    <ToggleButton isActive={showGlobalGrid} onClick={() => setShowGlobalGrid(!showGlobalGrid)} label="Monde" color="white" icon={MapIcon} />
-                    <ToggleButton isActive={showMaxSquare} onClick={toggleMaxSquare} label="Max Sq." color="yellow" icon={Maximize} />
-                    <ToggleButton isActive={showCluster} onClick={toggleCluster} label="Cluster" color="purple" icon={Activity} />
+               <div className="grid grid-cols-4 gap-1.5">
+                    {/* Utilisation stricte des icônes pour économiser de la place (4 colonnes) */}
+                    <ToggleButton isActive={showGrid} onClick={() => setShowGrid(!showGrid)} title="Afficher la Grille" color="cyan" icon={Grid} />
+                    <ToggleButton isActive={showGlobalGrid} onClick={() => setShowGlobalGrid(!showGlobalGrid)} title="Grille Mondiale" color="white" icon={MapIcon} />
+                    <ToggleButton isActive={showMaxSquare} onClick={toggleMaxSquare} title="Highlight Max Square" color="yellow" icon={Maximize} />
+                    <ToggleButton isActive={showCluster} onClick={toggleCluster} title="Highlight Cluster" color="purple" icon={Activity} />
+                    
+                    <ToggleButton isActive={showHeatmap} onClick={() => setShowHeatmap(!showHeatmap)} title="Tracés d'activités" color="fuchsia" icon={Layers} />
+                    <ToggleButton isActive={showTimeHeatmap} onClick={() => { setShowTimeHeatmap(!showTimeHeatmap); if(!showTimeHeatmap) setDimMap(true); }} title="Heatmap Temporelle" color="emerald" icon={Calendar} />
+                    <ToggleButton isActive={showFilling} onClick={toggleFilling} title="Tuiles de Remplissage" color="orange" icon={Crosshair} disabled={isFillingDisabled} />
+                    <ToggleButton isActive={showCore} onClick={() => setShowCore(!showCore)} title="Afficher les Noyaux" color="white" icon={Focus} />
                 </div>
 
-                {/* LES 4 BOUTONS RESTAURÉS ICI */}
-                <div className="grid grid-cols-2 gap-2">
-                    <ToggleButton isActive={showHeatmap} onClick={() => setShowHeatmap(!showHeatmap)} label="Tracés" color="fuchsia" icon={Layers} />
-                    <ToggleButton isActive={showTimeHeatmap} onClick={() => { setShowTimeHeatmap(!showTimeHeatmap); if(!showTimeHeatmap) setDimMap(true); }} label="Usure (Temps)" color="emerald" icon={Calendar} />
-                    <ToggleButton isActive={showFilling} onClick={toggleFilling} label="Remplissage" color="orange" icon={Crosshair} disabled={isFillingDisabled} />
-                    <ToggleButton isActive={showCore} onClick={() => setShowCore(!showCore)} label="Noyau" color="white" icon={Focus} />
-                    <ToggleButton isActive={dimMap} onClick={() => setDimMap(!dimMap)} label="Immersion" color="cyan" icon={Eye} />
-                </div>
-
-                <div className="bg-black/20 rounded-2xl p-2 border border-white/5 space-y-2">
-                    {/* TOGGLE SÉLECTION MANUELLE */}
+                <div className="grid grid-cols-2 gap-1.5 mt-1">
+                    <div className="flex bg-black/40 rounded-lg p-0.5 border border-white/5 col-span-2">
+                        <button onClick={() => handleModeSwitch('square')} className={`flex-1 py-1 text-[9px] font-bold uppercase tracking-wider rounded-md transition-all flex items-center justify-center gap-1.5 ${targetMode === 'square' ? 'bg-yellow-500 text-black shadow-md' : 'text-gray-500 hover:text-white'}`}><Maximize size={10} /> Sq.</button>
+                        <button onClick={() => handleModeSwitch('cluster')} className={`flex-1 py-1 text-[9px] font-bold uppercase tracking-wider rounded-md transition-all flex items-center justify-center gap-1.5 ${targetMode === 'cluster' ? 'bg-[#d04fd7] text-white shadow-md' : 'text-gray-500 hover:text-white'}`}><Activity size={10} /> Cl.</button>
+                    </div>
+                    
                     {manualSquareStep !== 'off' && (
-                        <div className={`text-[9px] uppercase font-bold p-1.5 rounded-lg mb-2 text-center animate-pulse tracking-wide border ${manualError ? 'bg-red-500/10 border-red-500/30 text-red-400' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
-                            {manualError ? manualError : (manualSquareStep === 'select-start' ? "Sélectionnez un départ (vert)" : "Sélectionnez la diagonale (verte)")}
+                        <div className={`col-span-2 text-[9px] uppercase font-bold p-1.5 rounded-md text-center animate-pulse tracking-wide border ${manualError ? 'bg-red-500/10 border-red-500/30 text-red-400' : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'}`}>
+                            {manualError ? manualError : (manualSquareStep === 'select-start' ? "Sélectionnez Départ (vert)" : "Sélectionnez Diagonale (verte)")}
                         </div>
                     )}
+                </div>
+
+                <div className="flex items-center justify-between gap-1.5">
+                    <button onClick={() => setShowTargets(!showTargets)} className={`flex-1 py-1.5 rounded-xl text-[9px] font-bold uppercase tracking-wider border transition-all flex items-center justify-center gap-1.5 ${showTargets ? 'bg-blue-500/20 border-blue-500/50 text-blue-400' : 'bg-transparent border-white/10 text-gray-500 hover:bg-white/5 hover:text-white'}`}>
+                        <Target size={12} /> {showTargets ? 'Ext. ON' : 'Ext. OFF'}
+                    </button>
+                    <ToggleButton isActive={dimMap} onClick={() => setDimMap(!dimMap)} title="Mode Immersion" color="cyan" icon={Eye} />
+                </div>
+                
+                {showTargets && (
+                    <div className="grid grid-cols-5 gap-1 animate-in fade-in duration-300 bg-black/20 p-1.5 rounded-lg border border-white/5">
+                        {Array.from({length: 10}).map((_, i) => {
+                            const level = i + 1; const isActive = activeTargetLevels.has(level); const color = TARGET_COLORS[i];
+                            return (
+                                <button key={level} onClick={() => handleTargetRange(level)} className={`h-6 rounded-md text-[9px] font-bold transition-all duration-200 border flex items-center justify-center ${isActive ? 'text-black shadow-[0_0_8px_rgba(255,255,255,0.2)]' : 'bg-transparent text-gray-500 border-white/5 hover:bg-white/5 hover:text-white'}`} style={{ backgroundColor: isActive ? color : 'transparent', borderColor: isActive ? color : undefined }}>
+                                    N+{level}
+                                </button>
+                            )
+                        })}
+                    </div>
+                )}
+
+                {/* Toolbar Principale (Ciblage Manuel & Blacklist) */}
+                <div className="flex gap-1.5 pt-1">
                     <button 
                         onClick={() => { 
                             if (manualSquareStep === 'off') {
-                                setManualSquareStep('select-start'); 
-                                setBlacklistMode(false);
-                                setShowTargets(false); // Désactive les cibles pour y voir clair
-                            } else {
-                                cancelManualMode();
-                            }
+                                setManualSquareStep('select-start'); setBlacklistMode(false); setShowTargets(false);
+                            } else { cancelManualMode(); }
                         }}
-                        className={`w-full py-2 mb-2 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border 
-                            ${manualSquareStep !== 'off' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-[0_0_15px_rgba(16,185,129,0.2)]' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'}
+                        className={`flex-1 py-1.5 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border 
+                            ${manualSquareStep !== 'off' ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400 shadow-[0_0_10px_rgba(16,185,129,0.2)]' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'}
                         `}>
-                        <CheckSquare size={14} /> {manualSquareStep !== 'off' ? 'Annuler Ciblage' : 'Sélec. carré perso.'}
+                        <CheckSquare size={12} /> {manualSquareStep !== 'off' ? 'Annuler' : 'Ciblage'}
                     </button>
-
-                    <div className="flex bg-black/40 rounded-xl p-1 border border-white/5">
-                        <button onClick={() => handleModeSwitch('square')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 ${targetMode === 'square' ? 'bg-yellow-500 text-black shadow-md' : 'text-gray-500 hover:text-white'}`}><Maximize size={12} /> Carré</button>
-                        <button onClick={() => handleModeSwitch('cluster')} className={`flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg transition-all flex items-center justify-center gap-2 ${targetMode === 'cluster' ? 'bg-[#d04fd7] text-white shadow-md' : 'text-gray-500 hover:text-white'}`}><Activity size={12} /> Cluster</button>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => setShowTargets(!showTargets)} className={`flex-1 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider border transition-all flex items-center justify-center gap-2 ${showTargets ? 'bg-blue-500/20 border-blue-500/50 text-blue-400' : 'bg-transparent border-white/10 text-gray-500 hover:bg-white/5 hover:text-white'}`}>
-                            <Target size={14} /> {showTargets ? 'Extension ACTIVÉE' : 'Extension DESACTIVÉE'}
-                        </button>
-                    </div>
-                    
-                    {showTargets && (
-                        <div className="grid grid-cols-5 gap-1.5 animate-in fade-in duration-300">
-                            {Array.from({length: 10}).map((_, i) => {
-                                const level = i + 1; const isActive = activeTargetLevels.has(level); const color = TARGET_COLORS[i];
-                                return (
-                                    <button key={level} onClick={() => handleTargetRange(level)} className={`h-7 rounded-lg text-[10px] font-bold transition-all duration-200 border flex items-center justify-center ${isActive ? 'text-black shadow-[0_0_10px_rgba(255,255,255,0.2)]' : 'bg-transparent text-gray-500 border-white/5 hover:bg-white/5 hover:text-white'}`} style={{ backgroundColor: isActive ? color : 'transparent', borderColor: isActive ? color : undefined }}>
-                                        N+{level}
-                                    </button>
-                                )
-                            })}
-                        </div>
-                    )}
+                    <button 
+                        onClick={() => setBlacklistMode(!blacklistMode)}
+                        className={`flex-1 py-1.5 rounded-xl text-[9px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-1.5 border 
+                            ${blacklistMode ? 'bg-red-500/20 border-red-500/50 text-red-400 shadow-[0_0_10px_rgba(255,0,85,0.2)]' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'}
+                        `}>
+                        <ShieldAlert size={12} /> Blacklist
+                    </button>
                 </div>
-
-                <button 
-                    onClick={() => setBlacklistMode(!blacklistMode)}
-                    className={`w-full py-2.5 rounded-2xl text-[10px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 border 
-                        ${blacklistMode ? 'bg-red-500/20 border-red-500/50 text-red-400 shadow-[0_0_15px_rgba(255,0,85,0.2)]' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'}
-                    `}>
-                    <ShieldAlert size={14} /> {blacklistMode ? 'Blacklist dactivé' : 'Blacklist désactivé'}
-                </button>
             </div>
 
-            {/* PANEL 3 : DONNÉES TACTIQUES */}
+            {/* --- SECTION 3 : DONNÉES TACTIQUES (Conditionnelle) --- */}
             {(selectionStats.count > 0) && (
-                <div className="bg-[#121217]/90 backdrop-blur-xl border border-white/10 p-3 rounded-2xl shadow-2xl pointer-events-auto transition-all animate-in fade-in slide-in-from-bottom-4 duration-500">
-                    <div className="flex items-center gap-3 mb-2">
-                        <div className="p-1.5 rounded-lg bg-[#d04fd7]/10 border border-[#d04fd7]/30 text-[#d04fd7]"><Scan size={16} /></div>
-                        <div><h2 className="text-sm font-bold text-white tracking-wide leading-none">CIBLES</h2></div>
+                <>
+                    <hr className="border-white/5 border-t border-dashed my-1" />
+                    <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div className="flex items-center gap-1.5 mb-1.5">
+                            <div className="p-1 rounded-md bg-[#d04fd7]/10 text-[#d04fd7]"><Scan size={10} /></div>
+                            <h2 className="text-[10px] font-bold text-white tracking-wide leading-none">CIBLES TACTIQUES</h2>
+                        </div>
+                        <div className="grid grid-cols-2 gap-1.5">
+                            <StatBox label="Carré(s)" value={selectionStats.count} color="cyan" icon={<Target size={10}/>} />
+                            <StatBox label="Gain" value={`+${selectionStats.areaKm2.toFixed(1)}`} color="emerald" icon={<ArrowUpRight size={10}/>} />
+                            <StatBox label="Largeur" value={`${selectionStats.widthKm.toFixed(1)} km`} color="yellow" icon={<ArrowRightLeft size={10}/>} />
+                            <StatBox label="Hauteur" value={`${selectionStats.heightKm.toFixed(1)} km`} color="purple" icon={<MoveVertical size={10}/>} />
+                        </div>
                     </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                        <StatBox label="Carré(s)" value={selectionStats.count} color="cyan" icon={<Target size={12}/>} />
-                        <StatBox label="Gain (km²)" value={`+${selectionStats.areaKm2.toFixed(1)}`} color="emerald" icon={<ArrowUpRight size={12}/>} />
-                        <StatBox label="Largeur" value={`${selectionStats.widthKm.toFixed(1)} km`} color="yellow" icon={<ArrowRightLeft size={12}/>} />
-                        <StatBox label="Hauteur" value={`${selectionStats.heightKm.toFixed(1)} km`} color="purple" icon={<MoveVertical size={12}/>} />
-                    </div>
-                </div>
+                </>
             )}
         </div>
       </div>
@@ -1227,7 +1224,7 @@ const timeBounds = useMemo(() => {
           <div className="absolute bottom-6 right-6 z-[1000] bg-[#121217]/90 backdrop-blur-xl border border-white/10 p-3 rounded-2xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] pointer-events-none animate-in fade-in slide-in-from-bottom-4 duration-500 w-[280px] hidden md:block">
               <div className="flex items-center gap-2 mb-2.5">
                   <Calendar size={14} className="text-emerald-400" />
-                  <span className="text-xs font-bold text-white tracking-wide uppercase">Usure Temporelle</span>
+                  <span className="text-xs font-bold text-white tracking-wide uppercase">Plage de dates</span>
               </div>
               
               {/* Barre de dégradé */}
@@ -1367,24 +1364,29 @@ const timeBounds = useMemo(() => {
 const StatBox = ({ label, value, potentialLabel, color, icon, onClick, isInteractive }: any) => {
     const colorClasses: any = { cyan: 'text-cyan-400 border-cyan-500/10', yellow: 'text-yellow-400 border-yellow-500/10', purple: 'text-[#d04fd7] border-[#d04fd7]/10', emerald: 'text-emerald-400 border-emerald-500/10', };
     return (
-        <div onClick={onClick} className={`bg-[#1a1a20] p-2 rounded-xl border ${colorClasses[color]} flex flex-col justify-between h-[50px] ${isInteractive ? 'cursor-pointer hover:bg-[#202028] transition-colors group' : ''}`}>
-            <div className="text-base font-bold tabular-nums leading-none tracking-tight text-white flex justify-between items-center">
+        <div onClick={onClick} className={`bg-[#1a1a20] p-1.5 rounded-xl border ${colorClasses[color]} flex flex-col justify-between h-[42px] ${isInteractive ? 'cursor-pointer hover:bg-[#202028] transition-colors group' : ''}`}>
+            <div className="text-sm font-bold tabular-nums leading-none tracking-tight text-white flex justify-between items-center">
                 <span className="flex items-center gap-1">
                     {value}
-                    {potentialLabel && <span className="text-[10px] text-gray-400 font-normal">{potentialLabel}</span>}
+                    {potentialLabel && <span className="text-[9px] text-gray-400 font-normal">{potentialLabel}</span>}
                 </span>
-                {isInteractive && <Focus size={10} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400" />}
+                {isInteractive && <Focus size={8} className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400" />}
             </div>
-            <div className={`flex items-center gap-1.5 text-[8px] font-bold uppercase tracking-wide ${colorClasses[color].split(' ')[0]}`}>{icon} {label}</div>
+            <div className={`flex items-center gap-1 text-[8px] font-bold uppercase tracking-wide ${colorClasses[color].split(' ')[0]}`}>{icon} {label}</div>
         </div>
     );
 };
 
-const ToggleButton = ({ isActive, onClick, label, color, icon: Icon, disabled }: any) => {
-    const activeClass = { cyan: 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400', yellow: 'bg-yellow-500/10 border-yellow-500/50 text-yellow-400', purple: 'bg-[#d04fd7]/10 border-[#d04fd7]/50 text-[#d04fd7]', fuchsia: 'bg-[#d04fd7]/10 border-[#d04fd7]/50 text-[#d04fd7]', orange: 'bg-orange-500/10 border-orange-500/50 text-orange-400', white: 'bg-white/10 border-white/50 text-white', red: 'bg-red-500/10 border-red-500/50 text-red-400', }[color as string];
+const ToggleButton = ({ isActive, onClick, label, title, color, icon: Icon, disabled }: any) => {
+    const activeClass = { cyan: 'bg-cyan-500/10 border-cyan-500/50 text-cyan-400', yellow: 'bg-yellow-500/10 border-yellow-500/50 text-yellow-400', purple: 'bg-[#d04fd7]/10 border-[#d04fd7]/50 text-[#d04fd7]', fuchsia: 'bg-[#d04fd7]/10 border-[#d04fd7]/50 text-[#d04fd7]', orange: 'bg-orange-500/10 border-orange-500/50 text-orange-400', white: 'bg-white/10 border-white/50 text-white', emerald: 'bg-emerald-500/10 border-emerald-500/50 text-emerald-400', red: 'bg-red-500/10 border-red-500/50 text-red-400', }[color as string];
     return (
-        <button onClick={!disabled ? onClick : undefined} className={`cursor-pointer flex items-center justify-center gap-2 py-1.5 rounded-xl text-[10px] font-bold transition-all duration-200 border uppercase ${disabled ? 'opacity-40 cursor-not-allowed bg-transparent border-white/5 text-gray-600' : isActive ? activeClass : 'bg-transparent border-white/5 text-gray-500 hover:border-white/20 hover:text-white'}`}>
-            <Icon size={12} /> {label}
+        <button 
+            title={title || label} 
+            onClick={!disabled ? onClick : undefined} 
+            className={`cursor-pointer flex items-center justify-center py-1.5 rounded-xl transition-all duration-200 border ${disabled ? 'opacity-40 cursor-not-allowed bg-transparent border-white/5 text-gray-600' : isActive ? activeClass : 'bg-transparent border-white/5 text-gray-500 hover:border-white/20 hover:text-white'}`}
+        >
+            <Icon size={14} />
+            {label && <span className="ml-1.5 text-[9px] font-bold uppercase">{label}</span>}
         </button>
     );
 };

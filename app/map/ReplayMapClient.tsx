@@ -3,8 +3,9 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { getTilesFromPolyline, getTileBounds } from '../../lib/mapUtils';
-import { Play, Pause, FastForward, Rewind, Activity } from 'lucide-react';
-import { useMap } from 'react-leaflet';
+import { calculateMaxSquare } from '../../lib/gridAlgo';
+import { Play, Pause, FastForward, Rewind, Activity, Target, TimerOff } from 'lucide-react'; 
+import { useMap, useMapEvents } from 'react-leaflet';
 import { LatLngBoundsExpression } from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -13,14 +14,29 @@ const TileLayer = dynamic(() => import('react-leaflet').then(mod => mod.TileLaye
 const Rectangle = dynamic(() => import('react-leaflet').then(mod => mod.Rectangle), { ssr: false });
 
 // --- AUTO-ZOOM CONTROLLER ---
-const CameraController = ({ bounds }: { bounds: LatLngBoundsExpression | null }) => {
+const CameraController = ({ bounds, autoZoomActive }: { bounds: any, autoZoomActive: boolean }) => {
     const map = useMap();
     useEffect(() => {
-        if (bounds) {
-            // maxZoom empêche d'être trop près du sol (11 ou 12 est idéal pour voir les tuiles)
-            map.flyToBounds(bounds, { padding: [50, 50], duration: 1.5, maxZoom: 11, easeLinearity: 0.25 });
+        if (bounds && autoZoomActive) {
+            const currentBounds = map.getBounds();
+            // On extrait les coins Nord-Ouest et Sud-Est de la nouvelle cible
+            const nw: [number, number] = [bounds[0][0], bounds[0][1]];
+            const se: [number, number] = [bounds[1][0], bounds[1][1]];
+            
+            // La caméra ne bouge QUE si la nouvelle activité sort du champ visuel actuel
+            if (!currentBounds.contains(nw) || !currentBounds.contains(se)) {
+                map.flyToBounds(bounds, { padding: [50, 50], duration: 1.5, maxZoom: 11, easeLinearity: 0.25 });
+            }
         }
-    }, [bounds, map]);
+    }, [bounds, map, autoZoomActive]);
+    return null;
+};
+
+const MapInteractionListener = ({ setAutoZoomActive }: { setAutoZoomActive: (val: boolean) => void }) => {
+    useMapEvents({
+        dragstart: () => setAutoZoomActive(false), // Désactive l'auto-zoom dès qu'on glisse la carte
+        zoomstart: () => setAutoZoomActive(false)  // Idem si on scrolle
+    });
     return null;
 };
 
@@ -41,10 +57,12 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
     const globalStartTime = sortedActivities.length > 0 ? sortedActivities[0].time : Date.now();
     const globalEndTime = sortedActivities.length > 0 ? sortedActivities[sortedActivities.length - 1].time : Date.now();
 
-    // 2. ÉTAT DU LECTEUR
-    const [currentTime, setCurrentTime] = useState(globalStartTime);
+    // 2. ÉTAT DU LECTEUR ET DE LA CAMÉRA
+   const [currentTime, setCurrentTime] = useState(globalStartTime);
     const [isPlaying, setIsPlaying] = useState(false);
     const [playbackSpeed, setPlaybackSpeed] = useState(15); 
+    const [autoZoomActive, setAutoZoomActive] = useState(true);
+    const [skipInactivity, setSkipInactivity] = useState(true); 
     const animationRef = useRef<number | null>(null);
     const lastTickRef = useRef<number>(0);
 
@@ -60,10 +78,28 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
             const deltaMs = timestamp - lastTickRef.current; 
             lastTickRef.current = timestamp;
 
+            // Avancée virtuelle normale (linéaire)
             const virtualDelta = (deltaMs / 1000) * playbackSpeed * 86400000;
 
             setCurrentTime(prev => {
-                const nextTime = prev + virtualDelta;
+                let nextTime = prev + virtualDelta;
+
+                // --- ALGORITHME DE SAUT D'INACTIVITÉ ---
+                if (skipInactivity) {
+                    const nextActivity = sortedActivities.find(act => act.time > prev);
+                    
+                    if (nextActivity) {
+                        const ONE_DAY_MS = 86400000;
+                        const ONE_HOUR_MS = 3600000;
+                        
+                        // Si l'écart entre le temps de la frame actuelle et la prochaine activité dépasse 24h
+                        if (nextActivity.time - nextTime > ONE_DAY_MS) {
+                            // On "téléporte" le lecteur 1 heure avant la reprise pour un effet smooth
+                            nextTime = nextActivity.time - ONE_HOUR_MS;
+                        }
+                    }
+                }
+
                 if (nextTime >= globalEndTime) {
                     setIsPlaying(false);
                     return globalEndTime; 
@@ -78,7 +114,7 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
         animationRef.current = requestAnimationFrame(playLoop);
 
         return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); };
-    }, [isPlaying, playbackSpeed, globalEndTime]);
+    }, [isPlaying, playbackSpeed, globalEndTime, skipInactivity, sortedActivities]);
 
     // 4. CALCUL DE L'ÉTAT ET DE LA CAMÉRA
     const { activeTilesMap, stats, lastActivityId, lastActivityTiles } = useMemo(() => {
@@ -103,9 +139,17 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
             });
         }
 
+        // --- CALCUL ALGORITHMIQUE DU CARRÉ MAX CUMULÉ ---
+        const activeTilesSet = new Set(tileData.keys());
+        const { maxSquare } = calculateMaxSquare(activeTilesSet, new Set()); // Sans blacklist pour l'historique pur
+
         return { 
             activeTilesMap: tileData, 
-            stats: { count: tileData.size, area: (tileData.size * 0.36).toFixed(1) },
+            stats: { 
+                count: tileData.size, 
+                area: (tileData.size * 0.36).toFixed(1),
+                maxSquareSize: maxSquare // Injection dans le payload
+            },
             lastActivityId: currentActId,
             lastActivityTiles: currentActTiles
         };
@@ -167,7 +211,6 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
 
     return (
         <div className="w-full h-full relative bg-[#050505]">
-            {/* Suppression du filtre "dimmed-mode" qui blanchissait la carte CartoDB */}
 
             <div className="absolute top-24 left-6 z-[1000] bg-[#121217]/90 backdrop-blur-xl border border-white/10 p-5 rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.8)] pointer-events-none w-[280px]">
                 <div className="flex items-center gap-2 mb-4">
@@ -183,6 +226,10 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
                     <div className="flex justify-between items-end border-b border-white/5 pb-2">
                         <span className="text-xs text-gray-400 font-medium uppercase tracking-wider">Territoire (km²)</span>
                         <span className="text-xl font-bold text-emerald-400 tabular-nums">{stats.area}</span>
+                    </div>
+                    <div className="flex justify-between items-end pt-1">
+                        <span className="text-xs text-gray-400 font-medium uppercase tracking-wider">Carré Max atteint</span>
+                        <span className="text-xl font-black text-yellow-500 tabular-nums">{stats.maxSquareSize}x{stats.maxSquareSize}</span>
                     </div>
                 </div>
             </div>
@@ -207,7 +254,7 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
                 />
 
                 <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 sm:gap-4">
                         <button type="button" onClick={() => setCurrentTime(globalStartTime)} className="text-gray-400 hover:text-white transition-colors"><Rewind size={20} /></button>
                         <button 
                             type="button"
@@ -215,11 +262,43 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
                                 if (currentTime >= globalEndTime) setCurrentTime(globalStartTime);
                                 setIsPlaying(!isPlaying);
                             }} 
-                            className="bg-[#00f3ff] text-black p-3 rounded-full hover:scale-105 transition-transform shadow-[0_0_15px_rgba(0,243,255,0.5)]"
+                            className="bg-[#00f3ff] text-black p-3 rounded-full hover:scale-105 transition-transform shadow-[0_0_15px_rgba(0,243,255,0.5)] mx-2"
                         >
                             {isPlaying ? <Pause size={24} fill="currentColor" /> : <Play size={24} fill="currentColor" className="ml-1" />}
                         </button>
                         <button type="button" onClick={() => setCurrentTime(globalEndTime)} className="text-gray-400 hover:text-white transition-colors"><FastForward size={20} /></button>
+                        
+                        {/* SECTION TOGGLES TACTIQUES */}
+                        <div className="h-6 w-px bg-white/10 mx-1 hidden sm:block"></div>
+                        
+                        {/* Toggle Auto-Zoom existant */}
+                        <button 
+                            type="button"
+                            onClick={() => setAutoZoomActive(!autoZoomActive)}
+                            title={autoZoomActive ? "Auto-Zoom Actif (Suivi)" : "Auto-Zoom Suspendu (Caméra Libre)"}
+                            className={`p-2 rounded-xl transition-all border ${
+                                autoZoomActive 
+                                ? 'bg-[#00f3ff]/20 border-[#00f3ff]/50 text-[#00f3ff] shadow-[0_0_10px_rgba(0,243,255,0.2)]' 
+                                : 'bg-transparent border-white/10 text-gray-500 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            <Target size={18} className={autoZoomActive ? 'animate-pulse' : ''} />
+                        </button>
+
+                        {/* NOUVEAU : Toggle Saut d'Inactivité */}
+                        <button 
+                            type="button"
+                            onClick={() => setSkipInactivity(!skipInactivity)}
+                            title={skipInactivity ? "Saut d'inactivité activé" : "Temps linéaire (Saut désactivé)"}
+                            className={`flex items-center gap-1.5 p-2 md:px-3 md:py-2 rounded-xl transition-all border ${
+                                skipInactivity 
+                                ? 'bg-[#d04fd7]/20 border-[#d04fd7]/50 text-[#d04fd7] shadow-[0_0_10px_rgba(208,79,215,0.2)]' 
+                                : 'bg-transparent border-white/10 text-gray-500 hover:text-white hover:bg-white/5'
+                            }`}
+                        >
+                            <TimerOff size={16} className={skipInactivity ? 'animate-pulse' : ''} />
+                            <span className="hidden md:inline text-[10px] font-bold uppercase tracking-wider">Sauter l'attente</span>
+                        </button>
                     </div>
 
                     <div className="flex items-center gap-2 bg-black/40 p-1.5 rounded-xl border border-white/5">
@@ -239,9 +318,16 @@ export default function ReplayMapClient({ activities }: { activities: any[] }) {
                 </div>
             </div>
 
-            <MapContainer center={[46.603354, 1.888334]} zoom={6} className="w-full h-full z-0 bg-[#050505]" zoomControl={false} preferCanvas={true} attributionControl={false}>
-                <TileLayer url="https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png" />
-                <CameraController bounds={currentBounds} />
+           <MapContainer center={[46.603354, 1.888334]} zoom={6} className="w-full h-full z-0 bg-[#050505]" zoomControl={false} preferCanvas={true} attributionControl={false}>
+                {/* FIX CARTE : Utilisation de CyclOSM avec mise en cache optimisée */}
+                <TileLayer 
+                    url="https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png" 
+                    keepBuffer={8}
+                    updateWhenIdle={false}
+                />
+                {/* Injection du moteur de caméra et de l'écouteur */}
+                <CameraController bounds={currentBounds} autoZoomActive={autoZoomActive} />
+                <MapInteractionListener setAutoZoomActive={setAutoZoomActive} />
                 {gridRectangles}
             </MapContainer>
         </div>
