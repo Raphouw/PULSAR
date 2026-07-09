@@ -1,31 +1,58 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { getServerSession } from 'next-auth'; 
 import { authOptions } from '../../lib/auth'; 
 import AutoScanner from './AutoScanner';
 import LegendTabs from './LegendTabs';
-import { Shield } from 'lucide-react';
+import { Shield, Loader2 } from 'lucide-react'; 
 import { getHallData } from '@/app/actions/getHallData';
 import { getLegendsList } from '@/app/actions/getLegendsList';
 import HallOfRecords from '../../components/HallOfRecords';
 import HallOfLegends from '../../components/HallOfLegends';
-import PowerRecordsTab from '../../components/PowerRecordsTab'; // ⚡ AJOUT DE L'IMPORT
+import PowerRecordsTab from '../../components/PowerRecordsTab';
 
 export const dynamic = 'force-dynamic';
 
-export default async function LegendPage() {
-    // 🚀 OPTIMISATION : Parallélisation Racine
-    // La liste globale des légendes ne dépend pas de l'utilisateur. 
-    // On la charge EN MÊME TEMPS que la vérification de session pour éliminer le waterfall.
-    const [session, legends] = await Promise.all([
-        getServerSession(authOptions),
-        getLegendsList()
-    ]);
+// ----------------------------------------------------------------------
+// Composants Asynchrones d'Encapsulation (Résolvent les promesses)
+// ----------------------------------------------------------------------
 
+async function AsyncHallOfLegends({ legendsPromise }: { legendsPromise: Promise<any> }) {
+    const legends = await legendsPromise;
+    return <HallOfLegends legends={legends} />;
+}
+
+async function AsyncHallOfRecords({ recordsPromise, userWeight }: { recordsPromise: Promise<any>, userWeight: number }) {
+    const records = await recordsPromise;
+    return <HallOfRecords rawRecords={records} userWeight={userWeight} />;
+}
+
+async function AsyncPowerRecords({ recordsPromise, userWeight }: { recordsPromise: Promise<any>, userWeight: number }) {
+    const records = await recordsPromise;
+    return <PowerRecordsTab rawRecords={records} userWeight={userWeight} />;
+}
+
+// État de chargement élégant pour le Suspense
+const LoadingState = () => (
+    <div className="flex flex-col items-center justify-center py-20 text-gray-400 bg-white/5 rounded-2xl border border-white/10">
+        <Loader2 className="w-8 h-8 animate-spin mb-4 text-purple-500" />
+        <p>Récupération des performances historiques...</p>
+    </div>
+);
+
+// ----------------------------------------------------------------------
+// Page Principale
+// ----------------------------------------------------------------------
+
+export default async function LegendPage() {
+    // 1. Appel indépendant de la session pour ne pas bloquer les requêtes de données
+    const session = await getServerSession(authOptions);
     const userId = session?.user?.id;
     const userWeight = session?.user ? (session.user as any).weight || 75 : 75;
 
-    // ⚡ Les records personnels nécessitent le userId, on les récupère donc dans un second temps
-    const records = userId ? await getHallData(userId) : [];
+    // 2. Déclenchement simultané des requêtes SANS await bloquant.
+    // Les promesses sont passées directement aux sous-composants.
+    const legendsPromise = getLegendsList();
+    const recordsPromise = userId ? getHallData(userId) : null;
 
     return (
         <div className="min-h-screen bg-[#050505] text-white font-sans pb-20 pt-24">
@@ -42,20 +69,27 @@ export default async function LegendPage() {
                 </div>
 
                 <LegendTabs 
-                    legendsComponent={<HallOfLegends legends={legends} />} 
+                    legendsComponent={
+                        <Suspense fallback={<LoadingState />}>
+                            <AsyncHallOfLegends legendsPromise={legendsPromise} />
+                        </Suspense>
+                    } 
                     recordsComponent={
-                        userId ? (
-                            <HallOfRecords rawRecords={records} userWeight={userWeight} />                        
+                        userId && recordsPromise ? (
+                            <Suspense fallback={<LoadingState />}>
+                                <AsyncHallOfRecords recordsPromise={recordsPromise} userWeight={userWeight} />
+                            </Suspense>
                         ) : (
                             <div className="text-center py-20 text-gray-500 bg-white/5 rounded-2xl border border-white/10">
                                 <p>Connecte-toi pour voir tes records personnels.</p>
                             </div>
                         )
                     }
-                    // ⚡ AJOUT DU 3ème COMPOSANT ICI
                     powerComponent={
-                        userId ? (
-                            <PowerRecordsTab rawRecords={records} userWeight={userWeight} />
+                        userId && recordsPromise ? (
+                            <Suspense fallback={<LoadingState />}>
+                                <AsyncPowerRecords recordsPromise={recordsPromise} userWeight={userWeight} />
+                            </Suspense>
                         ) : (
                             <div className="text-center py-20 text-gray-500 bg-white/5 rounded-2xl border border-white/10">
                                 <p>Connecte-toi pour voir tes records de puissance.</p>
