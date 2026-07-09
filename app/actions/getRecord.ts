@@ -1,49 +1,77 @@
 // Fichier : app/actions/getRecord.ts
 'use server';
 
-import { supabaseAdmin } from '../../lib/supabaseAdminClient';
+import { supabaseAdmin } from '@/lib/supabaseAdminClient';
 
 export async function getUserRecords(userId: string | number) {
   try {
-    // 🔥 FIX 1: Conversion stricte en nombre pour Supabase
     const uid = Number(userId);
     if (isNaN(uid)) throw new Error("Invalid User ID");
 
-    // 1. Récupérer les Records de Puissance/Cardio (Table 'records')
-    const { data: intervalRecords, error: recordsError } = await supabaseAdmin
-      .from('records')
-      .select(`
-        *,
-        activities (
-          id,
-          name,
-          start_time
-        )
-      `)
-      .eq('user_id', uid) // Utilisation de l'ID converti
-      .order('date_recorded', { ascending: false });
+    const pageSize = 1000;
 
-    if (recordsError) throw recordsError;
+    // 1. Récupérer TOUS les Records (Pagination pour contourner la limite de 1000)
+    let intervalRecords: any[] = [];
+    let hasMoreRecords = true;
+    let recordPage = 0;
 
-    // 2. Récupérer les Stats Physiques depuis les Activités (Table 'activities')
-    const { data: activitiesData, error: activitiesError } = await supabaseAdmin
-      .from('activities')
-      .select('id, name, start_time, distance_km, elevation_gain_m, duration_s, max_speed_kmh, avg_speed_kmh, calories_kcal')
-      .eq('user_id', uid)
-      .order('start_time', { ascending: false });
+    while (hasMoreRecords) {
+      const { data, error } = await supabaseAdmin
+        .from('records')
+        .select(`
+          *,
+          activities (
+            id,
+            name,
+            start_time
+          )
+        `)
+        .eq('user_id', uid)
+        .order('date_recorded', { ascending: false })
+        .range(recordPage * pageSize, (recordPage + 1) * pageSize - 1);
 
-    if (activitiesError) throw activitiesError;
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        intervalRecords = [...intervalRecords, ...data];
+        if (data.length < pageSize) hasMoreRecords = false;
+        else recordPage++;
+      } else {
+        hasMoreRecords = false;
+      }
+    }
+
+    // 2. Récupérer TOUTES les Stats Physiques (Pagination également)
+    let allActivities: any[] = [];
+    let hasMoreAct = true;
+    let actPage = 0;
+
+    while (hasMoreAct) {
+      const { data: actData, error: actErr } = await supabaseAdmin
+        .from('activities')
+        .select('id, name, start_time, distance_km, elevation_gain_m, duration_s, max_speed_kmh, avg_speed_kmh, calories_kcal')
+        .eq('user_id', uid)
+        .order('start_time', { ascending: false })
+        .range(actPage * pageSize, (actPage + 1) * pageSize - 1);
+
+      if (actErr) throw actErr;
+
+      if (actData && actData.length > 0) {
+        allActivities = [...allActivities, ...actData];
+        if (actData.length < pageSize) hasMoreAct = false;
+        else actPage++;
+      } else {
+        hasMoreAct = false;
+      }
+    }
 
     // 3. Transformer les activités en format "Record" pour l'UI
     const physicalRecords: any[] = [];
 
-    // 🔥 FIX 2: On cast 'activitiesData' en any[] pour contourner l'erreur "never" si elle persiste
-    const activities = activitiesData as any[]; 
-
-    if (activities && activities.length > 0) {
-      for (const act of activities) {
+    if (allActivities.length > 0) {
+      for (const act of allActivities) {
         const baseRecord = {
-          id: `act-${act.id}`, // Faux ID unique
+          id: `act-${act.id}`,
           user_id: uid,
           date_recorded: act.start_time,
           activity_id: act.id,
@@ -54,7 +82,6 @@ export async function getUserRecords(userId: string | number) {
           }
         };
 
-        // 🔥 FIX 3: Gestion des NULLs avec (?? 0)
         const distance = act.distance_km ?? 0;
         const elevation = act.elevation_gain_m ?? 0;
         const duration = act.duration_s ?? 0;
@@ -62,32 +89,18 @@ export async function getUserRecords(userId: string | number) {
         const avgSpeed = act.avg_speed_kmh ?? 0;
         const calories = act.calories_kcal ?? 0;
 
-        // On crée une ligne de record pour chaque métrique physique si elle existe
-        if (distance > 0) {
-          physicalRecords.push({ ...baseRecord, type: 'physical_distance', value: distance, duration_s: 0 });
-        }
-        if (elevation > 0) {
-          physicalRecords.push({ ...baseRecord, type: 'physical_elevation', value: elevation, duration_s: 0 });
-        }
-        if (duration > 0) {
-          physicalRecords.push({ ...baseRecord, type: 'physical_duration', value: duration, duration_s: 0 });
-        }
-        if (maxSpeed > 0) {
-          physicalRecords.push({ ...baseRecord, type: 'physical_speed_max', value: maxSpeed, duration_s: 0 });
-        }
-        if (avgSpeed > 0) {
-          physicalRecords.push({ ...baseRecord, type: 'physical_speed_avg', value: avgSpeed, duration_s: 0 });
-        }
-        if (calories > 0) {
-          physicalRecords.push({ ...baseRecord, type: 'physical_calories', value: calories, duration_s: 0 });
-        }
+        if (distance > 0) physicalRecords.push({ ...baseRecord, type: 'physical_distance', value: distance, duration_s: 0 });
+        if (elevation > 0) physicalRecords.push({ ...baseRecord, type: 'physical_elevation', value: elevation, duration_s: 0 });
+        if (duration > 0) physicalRecords.push({ ...baseRecord, type: 'physical_duration', value: duration, duration_s: 0 });
+        if (maxSpeed > 0) physicalRecords.push({ ...baseRecord, type: 'physical_speed_max', value: maxSpeed, duration_s: 0 });
+        if (avgSpeed > 0) physicalRecords.push({ ...baseRecord, type: 'physical_speed_avg', value: avgSpeed, duration_s: 0 });
+        if (calories > 0) physicalRecords.push({ ...baseRecord, type: 'physical_calories', value: calories, duration_s: 0 });
       }
     }
 
     // 4. Fusionner les deux listes
-    const allRecords = [...(intervalRecords || []), ...physicalRecords];
+    const allRecords = [...intervalRecords, ...physicalRecords];
 
-    // Conversion JSON pour Next.js (Server Action serialization)
     return JSON.parse(JSON.stringify(allRecords));
 
   } catch (error) {
