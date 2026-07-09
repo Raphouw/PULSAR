@@ -13,15 +13,19 @@ import PowerRecordsTab from '../../components/PowerRecordsTab'; // ⚡ AJOUT DE 
 export const dynamic = 'force-dynamic';
 
 export default async function LegendPage() {
-    const session = await getServerSession(authOptions);
+    // 🚀 OPTIMISATION : Parallélisation Racine
+    // La liste globale des légendes ne dépend pas de l'utilisateur. 
+    // On la charge EN MÊME TEMPS que la vérification de session pour éliminer le waterfall.
+    const [session, legends] = await Promise.all([
+        getServerSession(authOptions),
+        getLegendsList()
+    ]);
+
     const userId = session?.user?.id;
     const userWeight = session?.user ? (session.user as any).weight || 75 : 75;
 
-    // Chargement parallèle des données
-    const [records, legends] = await Promise.all([
-        userId ? getHallData(userId) : Promise.resolve([]),
-        getLegendsList()
-    ]);
+    // ⚡ Les records personnels nécessitent le userId, on les récupère donc dans un second temps
+    const records = userId ? await getHallData(userId) : [];
 
     return (
         <div className="min-h-screen bg-[#050505] text-white font-sans pb-20 pt-24">

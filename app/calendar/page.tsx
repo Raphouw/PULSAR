@@ -23,30 +23,30 @@ export default async function CalendarPage() {
   // ⚡ FIX: Conversion de l'ID en nombre pour la cohérence BDD
   const userId = Number(session.user.id);
 
-  // 1. RÉCUPÉRATION DES ACTIVITÉS
-  const { data: activitiesData } = await supabaseAdmin
-    .from('activities')
-    .select('id, strava_id, name, start_time, distance_km, avg_speed_kmh, elevation_gain_m, duration_s, tss, type, avg_power_w, avg_heartrate, polyline, weather_code, temp_min, temp_max, temp_avg') 
-    .eq('user_id', userId)
-    .order('start_time', { ascending: true });
+  // 🚀 OPTIMISATION 1 : Parallélisation des lectures (Le Fix du Waterfall)
+  const [
+    { data: activitiesData },
+    { data: purchasesData },
+    { data: settingsData }
+  ] = await Promise.all([
+    supabaseAdmin
+      .from('activities')
+      .select('id, strava_id, name, start_time, distance_km, avg_speed_kmh, elevation_gain_m, duration_s, tss, type, avg_power_w, avg_heartrate, polyline, weather_code, temp_min, temp_max, temp_avg') 
+      .eq('user_id', userId)
+      .order('start_time', { ascending: true }),
+    supabaseAdmin
+      .from('shop_purchases')
+      .select('effect_id')
+      .eq('user_id', userId),
+    supabaseAdmin
+      .from('user_settings')
+      .select('equipped_loadout')
+      .eq('user_id', userId)
+      .maybeSingle()
+  ]);
 
   const activities = (activitiesData || []) as any[];
-
-  // 2. RÉCUPÉRATION DE L'INVENTAIRE (Achats réels)
-  const { data: purchasesData } = await supabaseAdmin
-    .from('shop_purchases')
-    .select('effect_id')
-    .eq('user_id', userId);
-
   const purchases = (purchasesData || []) as any[];
-
-  // 3. RÉCUPÉRATION DU LOADOUT (Équipement)
-  const { data: settingsData } = await supabaseAdmin
-    .from('user_settings')
-    .select('equipped_loadout')
-    .eq('user_id', userId)
-    .maybeSingle(); // maybeSingle évite l'erreur si l'utilisateur n'a pas encore de settings
-
   const settings = settingsData as any;
 
   // ----------------------------------------------------
@@ -69,13 +69,14 @@ export default async function CalendarPage() {
   const finalWalletBalance = Math.max(0, totalGrossTSS - actualSpentTSS); 
 
   // D. MISE À JOUR DU SOLDE EN BASE DE DONNÉES (Source de vérité)
-  // ⚡ FIX: Cast builder en any pour l'update
-  await (supabaseAdmin.from('users') as any)
+  // 🚀 OPTIMISATION 2 : Élimination du blocage d'écriture (Fire and Forget)
+  (supabaseAdmin.from('users') as any)
     .update({ 
         wallet_balance: finalWalletBalance,
         spent_tss: actualSpentTSS 
     })
-    .eq('id', userId);
+    .eq('id', userId)
+    .catch((err: any) => console.error("Erreur critique lors de la sauvegarde du portefeuille en arrière-plan :", err));
   
   // ----------------------------------------------------
 

@@ -183,31 +183,40 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
   if(isNaN(uid)) throw new Error('ID invalide');
 
   const fetchLimitDate = getISODateXDaysAgo(180); 
+  const twoWeeksAgoISO = getISODateXDaysAgo(14);
 
   try {
-    // 0. 🔥 PROFIL UTILISATEUR
-    const { data: userProfileData } = await supabaseAdmin
-        .from('users')
-        .select('w_prime, ftp, updated_at')
-        .eq('id', uid)
-        .single();
-    
-    const userProfile = userProfileData as any; // ⚡ FIX CAST
-
-    // 1. Récupérer toutes les activités
-    const { data: activitiesData, error: activitiesError } = await supabaseAdmin
-      .from('activities')
-      .select('id, name, distance_km, elevation_gain_m, start_time, duration_s, tss, avg_power_w, type, avg_speed_kmh')
-      .eq('user_id', uid)
-      .gte('start_time', fetchLimitDate)
-      .order('start_time', { ascending: false });
+    // 🚀 OPTIMISATION 1 : Parallélisation massive (Le Fix du Waterfall Supabase)
+    const [
+      { data: userProfileData },
+      { data: activitiesData, error: activitiesError },
+      { data: recordsData },
+      { data: allStatsData },
+      { data: recentActivitiesData },
+      { data: graphdata }
+    ] = await Promise.all([
+      // 0. Profil Utilisateur
+      supabaseAdmin.from('users').select('w_prime, ftp, updated_at').eq('id', uid).single(),
+      // 1. Activités (180j)
+      supabaseAdmin.from('activities').select('id, name, distance_km, elevation_gain_m, start_time, duration_s, tss, avg_power_w, type, avg_speed_kmh').eq('user_id', uid).gte('start_time', fetchLimitDate).order('start_time', { ascending: false }),
+      // 3. Records (90j)
+      supabaseAdmin.from('records').select('type, duration_s, value').eq('user_id', uid).gte('date_recorded', getISODateXDaysAgo(90)),
+      // 4. Stats globales (All-time)
+      supabaseAdmin.from('activities').select('distance_km, elevation_gain_m, duration_s, avg_power_w, tss').eq('user_id', uid),
+      // 7. Activités Récentes (14j)
+      supabaseAdmin.from("activities").select(`id, name, distance_km, elevation_gain_m, start_time, avg_speed_kmh, avg_power_w, tss, polyline, duration_s, type`).eq("user_id", uid).gte("start_time", twoWeeksAgoISO).order("start_time", { ascending: false }).limit(20),
+      // 8. Historique fitness
+      supabaseAdmin.from("user_fitness_history").select(`id, user_id, date_calculated, ftp_value, w_prime_value, cp3_value, cp12_value, vo2max_value, tte_value, source_activity_id, model_cp3, model_cp12`).eq("user_id", uid).order("date_calculated", { ascending: false })
+    ]);
 
     if (activitiesError) {
       console.error("Erreur récupération activités:", activitiesError);
       return getEmptyDashboardData();
     }
 
+    const userProfile = userProfileData as any; // ⚡ FIX CAST
     const allActivities: any[] = activitiesData || [];
+    const records: any[] = recordsData || []; 
 
     // 2. FITNESS & TSS
     const tssMap = new Map<string, number>();
@@ -237,21 +246,7 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
     const fitnessData = calculateStressBalance(dailyTSSArray);
     const dailyTSS = dailyTSSArray.slice(-8);
 
-    // 3. Records (90j glissants)
-    const { data: recordsData } = await supabaseAdmin
-      .from('records')
-      .select('type, duration_s, value')
-      .eq('user_id', uid)
-      .gte('date_recorded', getISODateXDaysAgo(90));
-    
-    const records: any[] = recordsData || []; 
-
-    // 4. STATS GLOBALES
-    const { data: allStatsData } = await supabaseAdmin
-      .from('activities')
-      .select('distance_km, elevation_gain_m, duration_s, avg_power_w, tss') 
-      .eq('user_id', uid);
-
+    // 4. STATS GLOBALES (calcul en mémoire)
     const allTimeStats = calculateStats((allStatsData as any[]) || []);
     
     // 5. FILTRAGE TEMPOREL
@@ -312,10 +307,11 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
 
     // CAS 1 : PROGRESSION
     if (calcWPrime > dbWPrime + 100) {
-        // ⚡ FIX: On cast le builder en any pour éviter le blocage 'never' sur l'update
-        await (supabaseAdmin.from('users') as any)
+        // 🚀 OPTIMISATION 2 : Élimination du blocage d'écriture (Fire and Forget)
+        (supabaseAdmin.from('users') as any)
             .update({ w_prime: calcWPrime, updated_at: new Date().toISOString() }) 
-            .eq('id', uid);
+            .eq('id', uid)
+            .catch((err: any) => console.error("Erreur màj w_prime:", err));
         finalWPrime = calcWPrime;
     }
     // CAS 2 : ÉROSION
@@ -330,10 +326,11 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
             const decayedWPrime = Math.max(calcWPrime, dbWPrime - decayAmount);
 
             if (decayedWPrime < dbWPrime) {
-                // ⚡ FIX: On cast le builder en any pour éviter le blocage 'never' sur l'update
-                await (supabaseAdmin.from('users') as any)
+                // 🚀 OPTIMISATION 2 : Élimination du blocage d'écriture (Fire and Forget)
+                (supabaseAdmin.from('users') as any)
                     .update({ w_prime: decayedWPrime, updated_at: new Date().toISOString() })
-                    .eq('id', uid);
+                    .eq('id', uid)
+                    .catch((err: any) => console.error("Erreur màj w_prime:", err));
                 finalWPrime = decayedWPrime;
             }
         }
@@ -361,28 +358,12 @@ async function getDashboardData(userId: string): Promise<DashboardData> {
         };
     });
 
-    // 7. Activités Récentes (14j)
-    const twoWeeksAgoISO = getISODateXDaysAgo(14);
-    const { data: recentActivitiesData } = await supabaseAdmin
-      .from("activities")
-      .select(`id, name, distance_km, elevation_gain_m, start_time, avg_speed_kmh, avg_power_w, tss, polyline, duration_s, type`)
-      .eq("user_id", uid)
-      .gte("start_time", twoWeeksAgoISO)
-      .order("start_time", { ascending: false })
-      .limit(20);
-
     // 8. Scores
     const score7j = computePeriodScore(processedStats.last7, processedStats.prev7);
     const scoreMonth = computePeriodScore(processedStats.month, processedStats.prevMonth);
     const score30j = computePeriodScore(processedStats.last30, processedStats.prev30);
     const score90j = computePeriodScore(processedStats.last90, processedStats.prev90);
     const globalScore = (1*score7j + 1*scoreMonth + 4*score30j + 12*score90j) / 18;
-
-    const { data: graphdata } = await supabaseAdmin
-      .from("user_fitness_history")
-      .select(`id, user_id, date_calculated, ftp_value, w_prime_value, cp3_value, cp12_value, vo2max_value, tte_value, source_activity_id, model_cp3, model_cp12`)
-      .eq("user_id", uid)
-      .order("date_calculated", { ascending: false });
 
     return {
       allTimeStats,
@@ -428,8 +409,12 @@ export default async function DashboardPage() {
   let data: DashboardData;
 
   try {
-    hasStrava = await checkStravaConnection(userId);
-    data = await getDashboardData(userId);
+    // 🚀 OPTIMISATION 3 : Parallélisation Racine 
+    // On lance la verif Strava et le calcul massif du dashboard en même temps
+    [hasStrava, data] = await Promise.all([
+      checkStravaConnection(userId),
+      getDashboardData(userId)
+    ]);
   } catch (error) {
     console.error('Erreur récupération données:', error);
     data = getEmptyDashboardData();

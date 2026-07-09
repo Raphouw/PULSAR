@@ -9,25 +9,26 @@ import { ActivityCardData } from '../../types/next-auth.d';
 
 const ACTIVITIES_PER_PAGE = 50000;
 
-async function getActivities(userId: string, page: number): Promise<{ activities: ActivityCardData[], totalActivities: number }> {
+async function getActivities(userId: string | number, page: number): Promise<{ activities: ActivityCardData[], totalActivities: number }> {
   const startIndex = (page - 1) * ACTIVITIES_PER_PAGE;
   const endIndex = startIndex + ACTIVITIES_PER_PAGE - 1;
+  
+  // ⚡ FIX: Conversion de l'ID en nombre pour la cohérence BDD
+  const dbUserId = Number(userId);
 
-  const activitiesPromise = supabaseAdmin
-    .from("activities")
-    .select(
-      "id, name, distance_km, elevation_gain_m, start_time, avg_speed_kmh, avg_power_w, tss, polyline, duration_s, type"
-    )
-    .eq("user_id", userId)
-    .order("start_time", { ascending: false })
-    .range(startIndex, endIndex);
-
-  const countPromise = supabaseAdmin
-    .from("activities")
-    .select('id', { count: 'exact', head: true })
-    .eq('user_id', userId);
-
-  const [activitiesRes, countRes] = await Promise.all([activitiesPromise, countPromise]);
+  // 🚀 OPTIMISATION : Syntaxe Promise.all plus directe et propre
+  const [activitiesRes, countRes] = await Promise.all([
+    supabaseAdmin
+      .from("activities")
+      .select("id, name, distance_km, elevation_gain_m, start_time, avg_speed_kmh, avg_power_w, tss, polyline, duration_s, type")
+      .eq("user_id", dbUserId)
+      .order("start_time", { ascending: false })
+      .range(startIndex, endIndex),
+    supabaseAdmin
+      .from("activities")
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', dbUserId)
+  ]);
 
   if (activitiesRes.error) {
     console.error("Erreur de récupération des activités:", activitiesRes.error.message);
@@ -44,20 +45,37 @@ async function getActivities(userId: string, page: number): Promise<{ activities
 export default async function ActivitiesPage(props: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>
 }) {
-  const { searchParams } = props;
+  // 🚀 OPTIMISATION : Parallélisation racine (Session + SearchParams)
+  const [resolvedParams, session] = await Promise.all([
+    props.searchParams,
+    getServerSession(authOptions)
+  ]);
 
-  const resolved = await searchParams;
-  const pageParam = resolved.page;
-  const currentPage = parseInt(pageParam as string) || 1;
-
-  const session = await getServerSession(authOptions);
-  
-  // 🔥 CORRECTION ICI : Rediriger vers /auth/signin au lieu de "/"
-  if (!session || !session.user?.id) {
+  if (!session) {
     redirect("/auth/signin");
   }
 
-  const { activities, totalActivities } = await getActivities(session.user.id, currentPage);
+  // ⚡ FIX : Fallback email cohérent avec le reste de l'application
+  let userId: string | number | undefined = session.user?.id;
+  
+  if (!userId && session.user?.email) {
+    const { data: userData } = await supabaseAdmin
+        .from('users')
+        .select('id')
+        .eq('email', session.user.email)
+        .single();
+    if (userData) userId = (userData as any).id;
+  }
+
+  // 🔥 CORRECTION ICI : Rediriger vers /auth/signin au lieu de "/"
+  if (!userId) {
+    redirect("/auth/signin");
+  }
+
+  const pageParam = resolvedParams.page;
+  const currentPage = parseInt(pageParam as string) || 1;
+
+  const { activities, totalActivities } = await getActivities(userId, currentPage);
   const totalPages = Math.ceil(totalActivities / ACTIVITIES_PER_PAGE);
 
   return (

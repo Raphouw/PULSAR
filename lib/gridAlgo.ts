@@ -196,18 +196,24 @@ export function getFutureTargets(
     if (!topLeft || currentSize <= 0) return new Map();
     const targets = new Map<string, number>();
     
-    // Pour chaque niveau de profondeur (N+1, N+2, etc.)
+    // On crée un état virtuel pour avancer couche par couche (Algorithme Glouton)
+    const virtualTopLeft = { ...topLeft };
+    let virtualSize = currentSize;
+    const virtualTiles = new Set(tilesSet); // Simulation des acquis pour ne pas recompter
+    
     for (let k = 1; k <= depth; k++) {
-        const targetSize = currentSize + k;
+        const targetSize = virtualSize + 1; // On n'augmente que d'une ligne/colonne à la fois
         let bestCost = Infinity;
-        let bestMissingTiles = new Set<string>();
+        let bestMissingTiles: string[] = [];
+        let bestDx = 0;
+        let bestDy = 0;
 
-        // On évalue tous les carrés de taille (targetSize) qui ENGLOBENT le carré initial
-        // dx et dy représentent le décalage du coin supérieur gauche
-        for (let dx = 0; dx <= k; dx++) {
-            for (let dy = 0; dy <= k; dy++) {
-                const cx = topLeft.x - dx;
-                const cy = topLeft.y - dy;
+        // Pour s'agrandir d'exactement +1, le point d'ancrage Nord-Ouest 
+        // ne peut que rester sur place (0) ou reculer d'une case (1) vers le Nord/Ouest.
+        for (let dx = 0; dx <= 1; dx++) {
+            for (let dy = 0; dy <= 1; dy++) {
+                const cx = virtualTopLeft.x - dx;
+                const cy = virtualTopLeft.y - dy;
                 
                 let cost = 0;
                 let isValid = true;
@@ -222,7 +228,8 @@ export function getFutureTargets(
                             isValid = false;
                             break;
                         }
-                        if (!tilesSet.has(tileKey)) {
+                        // On vérifie contre les tuiles virtuelles (historique + niveaux précédents validés)
+                        if (!virtualTiles.has(tileKey)) {
                             missing.push(tileKey);
                             cost++;
                         }
@@ -230,20 +237,30 @@ export function getFutureTargets(
                     if (!isValid) break;
                 }
 
-                // C'est ici que la logique change : on ne garde strictement que le meilleur coût.
-                // S'il y a égalité, on l'ignore pour éviter le dédoublement visuel des cibles.
+                // On garde strictement le meilleur chemin local (sans fusion d'égalité)
                 if (isValid && cost < bestCost) {
                     bestCost = cost;
-                    bestMissingTiles = new Set(missing);
+                    bestMissingTiles = missing;
+                    bestDx = dx;
+                    bestDy = dy;
                 }
             }
         }
 
-        // On assigne le niveau 'k' uniquement si on a besoin de nouvelles tuiles
-        if (bestCost !== Infinity && bestCost > 0) {
+        // Si une expansion valide a été trouvée
+        if (bestCost !== Infinity) {
             bestMissingTiles.forEach(t => {
                 if (!targets.has(t)) targets.set(t, k);
+                virtualTiles.add(t); // On valide ces tuiles pour l'itération k+1
             });
+
+            // On verrouille la nouvelle position d'ancrage pour la prochaine couche
+            virtualTopLeft.x -= bestDx;
+            virtualTopLeft.y -= bestDy;
+            virtualSize++;
+        } else {
+            // Expansion bloquée (par la blacklist ou un cul-de-sac), on stoppe la recherche
+            break;
         }
     }
     

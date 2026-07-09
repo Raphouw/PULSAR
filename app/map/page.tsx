@@ -35,17 +35,26 @@ export default async function MapPage() {
 
   const dbUserId = Number(userId);
 
-  // Récupération Optimisée et filtrée
-  const { data: activitiesData, error } = await supabaseAdmin
-    .from('activities')
-    .select('id, name, type, start_time, polyline')
-    .eq('user_id', dbUserId)
-    .not('polyline', 'is', null) 
-    .neq('type', 'VirtualRide') // Maintien strict de la précision outdoor
-    .order('start_time', { ascending: false });
+  // 🚀 OPTIMISATION : Parallélisation des requêtes (Activités + Blacklist)
+  const [
+    { data: activitiesData, error: activitiesError },
+    { data: blacklistData, error: blacklistError }
+  ] = await Promise.all([
+    supabaseAdmin
+      .from('activities')
+      .select('id, name, type, start_time, polyline')
+      .eq('user_id', dbUserId)
+      .not('polyline', 'is', null) 
+      .neq('type', 'VirtualRide') // Maintien strict de la précision outdoor
+      .order('start_time', { ascending: false }),
+    supabaseAdmin
+      .from('blacklisted_tiles')
+      .select('tile_key')
+      .eq('user_id', dbUserId)
+  ]);
 
-  if (error) {
-    console.error("❌ ERREUR MAP DATA:", error);
+  if (activitiesError) {
+    console.error("❌ ERREUR MAP DATA:", activitiesError);
     return (
         <div className="flex flex-col items-center justify-center h-screen bg-[#050505] text-red-500 font-mono gap-4">
             <div className="text-4xl font-black tracking-tighter">ERREUR SYSTÈME</div>
@@ -53,12 +62,6 @@ export default async function MapPage() {
         </div>
     );
   }
-
-  // Récupération de la Blacklist
-  const { data: blacklistData, error: blacklistError } = await supabaseAdmin
-    .from('blacklisted_tiles')
-    .select('tile_key')
-    .eq('user_id', dbUserId);
 
   if (blacklistError) console.error("❌ ERREUR BLACKLIST:", blacklistError);
 
